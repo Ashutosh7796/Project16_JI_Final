@@ -275,15 +275,24 @@ public class JwtServiceImpl implements JwtService {
     
     @Override
     public boolean isValidToken(String token, String deviceFingerprint) {
+        Claims claims;
         try {
-            if (isBlacklisted(token)) {
+            claims = extractAllClaims(token);
+        } catch (Exception e) {
+            log.debug("Token validation failed: unable to parse token - {}", e.getMessage());
+            return false;
+        }
+
+        try {
+            String tokenId = claims.getId();
+            if (tokenId != null && tokenBlacklistService.isBlacklisted(tokenId)) {
                 log.warn("Token is blacklisted");
                 return false;
             }
+
+            final String username = claims.getSubject();
             
-            final String username = extractUsername(token);
-            
-            if (StringUtils.isEmpty(username)) {
+            if (!StringUtils.hasText(username)) {
                 log.debug("Token validation failed: empty username");
                 return false;
             }
@@ -295,8 +304,6 @@ public class JwtServiceImpl implements JwtService {
                 return false;
             }
 
-            Claims claims = extractAllClaims(token);
-
             Date nbf = claims.getNotBefore();
             if (nbf != null && nbf.after(new Date())) {
                 log.debug("Token not yet valid. Current time: {}, Not before: {}", 
@@ -305,7 +312,6 @@ public class JwtServiceImpl implements JwtService {
             }
             if (jwtConfig.isDeviceFingerprintingEnabled()) {
                 String tokenDeviceFingerprint = claims.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class);
-                // If request supplied a fingerprint, enforce it matches the token's fingerprint
                 if (StringUtils.hasText(deviceFingerprint) && StringUtils.hasText(tokenDeviceFingerprint)
                         && !tokenDeviceFingerprint.equals(deviceFingerprint)) {
                     log.warn("Device fingerprint mismatch: token={}, request={}",
@@ -313,24 +319,9 @@ public class JwtServiceImpl implements JwtService {
                             deviceFingerprint.substring(0, 8) + "...");
                     return false;
                 }
-
-                // Enforce single active session: token fingerprint must match the one stored for the user
-//                try {
-//                    var user = userRepository.findByEmail(username);
-//                    if (user != null && StringUtils.hasText(user.getDeviceFingerprint())
-//                            && StringUtils.hasText(tokenDeviceFingerprint)
-//                            && !user.getDeviceFingerprint().equals(tokenDeviceFingerprint)) {
-//                        log.warn("Token fingerprint is no longer current for user: {}", username);
-//                        return false;
-//                    }
-//                } catch (Exception e) {
-//                    log.warn("Could not verify user's current device fingerprint: {}", e.getMessage());
-//                }
             }
             
-            // Enforce single active session
             try {
-                String tokenId = claims.getId();
                 String tokenType = claims.get(CLAIM_KEY_TOKEN_TYPE, String.class);
                 
                 if (StringUtils.hasText(tokenId)) {

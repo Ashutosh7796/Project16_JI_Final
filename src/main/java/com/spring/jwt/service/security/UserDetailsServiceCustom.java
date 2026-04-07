@@ -54,18 +54,15 @@ public class UserDetailsServiceCustom implements UserDetailsService {
                 })
                 .collect(Collectors.toList());
 
-        String firstName = null;
-        Long userId = null;
-        Integer userProfileId = null;
-        userId = user.getUserId();
-
+        Long userId = user.getUserId();
+        String firstName = user.getFirstName();
 
         return new UserDetailsCustom(
                 user.getEmail(),
                 user.getPassword(),
                 firstName,
                 userId,
-                userProfileId,
+                null,
                 authorities);
     }
 }

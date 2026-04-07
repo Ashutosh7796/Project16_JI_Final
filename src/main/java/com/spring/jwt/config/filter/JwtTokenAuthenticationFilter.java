@@ -144,11 +144,13 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
      */
     private String getSpecificInvalidReason(String token, HttpServletRequest request) {
         try {
-            if (jwtService.isBlacklisted(token)) {
-                return "Token is revoked";
+            Claims claims = jwtService.extractClaims(token);
+
+            String tokenId = claims.getId();
+            if (tokenId != null && jwtService.isBlacklisted(token)) {
+                return "Token is revoked. Please login again.";
             }
 
-            Claims claims = jwtService.extractClaims(token);
             String tokenDfp = claims.get("dfp", String.class);
             String reqDfp = jwtService.generateDeviceFingerprint(request);
 
@@ -158,14 +160,14 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
                 return "Device mismatch. Please login again.";
             }
 
-            return "Invalid or expired token";
+            return "Session is no longer active. Please login again.";
 
         } catch (ExpiredJwtException e) {
-            return "Expired token";
+            return "Token has expired. Please login again.";
         } catch (JwtException e) {
-            return "Malformed or invalid token";
+            return "Malformed or invalid token. Please clear your browser data and login again.";
         } catch (Exception e) {
-            return "Unauthorized";
+            return "Authentication failed. Please login again.";
         }
     }
 
