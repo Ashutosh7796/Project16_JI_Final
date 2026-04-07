@@ -1,0 +1,209 @@
+/* Custom Swagger UI Styling for Admin APIs */
+
+/* Admin API Group Styling */
+.swagger-ui .opblock.opblock-post[data-tag*="Admin"] {
+    border-left: 4px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+}
+
+.swagger-ui .opblock.opblock-get[data-tag*="Admin"] {
+    border-left: 4px solid #fd7e14 !important;
+    background-color: #fff8f0 !important;
+}
+
+.swagger-ui .opblock.opblock-put[data-tag*="Admin"] {
+    border-left: 4px solid #6f42c1 !important;
+    background-color: #f8f6ff !important;
+}
+
+.swagger-ui .opblock.opblock-patch[data-tag*="Admin"] {
+    border-left: 4px solid #20c997 !important;
+    background-color: #f0fdf9 !important;
+}
+
+.swagger-ui .opblock.opblock-delete[data-tag*="Admin"] {
+    border-left: 4px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+}
+
+/* Admin Tag Headers */
+.swagger-ui .opblock-tag[data-tag*="Admin"] {
+    background: linear-gradient(135deg, #dc3545, #fd7e14) !important;
+    color: white !important;
+    font-weight: bold !important;
+    border-radius: 8px !important;
+    padding: 10px 15px !important;
+    margin: 10px 0 !important;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2) !important;
+}
+
+.swagger-ui .opblock-tag[data-tag*="Admin"]:hover {
+    background: linear-gradient(135deg, #c82333, #e8650e) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+/* Admin API Operation Titles */
+.swagger-ui .opblock[data-tag*="Admin"] .opblock-summary-description {
+    font-weight: 600 !important;
+}
+
+.swagger-ui .opblock[data-tag*="Admin"] .opblock-summary::before {
+    content: "🔐 ";
+    font-size: 14px;
+    margin-right: 5px;
+}
+
+/* Admin Workflow Controller Special Styling */
+.swagger-ui .opblock[data-tag*="Admin Registration Workflow"] {
+    border: 2px solid #dc3545 !important;
+    border-radius: 8px !important;
+    margin: 10px 0 !important;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.15) !important;
+}
+
+.swagger-ui .opblock[data-tag*="Admin Registration Workflow"] .opblock-summary {
+    background: linear-gradient(135deg, #dc3545, #fd7e14) !important;
+    color: white !important;
+    font-weight: bold !important;
+}
+
+.swagger-ui .opblock[data-tag*="Admin Registration Workflow"] .opblock-summary::before {
+    content: "🚀 ";
+    font-size: 16px;
+}
+
+/* User API Group Styling */
+.swagger-ui .opblock-tag:not([data-tag*="Admin"]) {
+    background: linear-gradient(135deg, #007bff, #6610f2) !important;
+    color: white !important;
+    font-weight: bold !important;
+    border-radius: 8px !important;
+    padding: 10px 15px !important;
+    margin: 10px 0 !important;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2) !important;
+}
+
+.swagger-ui .opblock-tag:not([data-tag*="Admin"]):hover {
+    background: linear-gradient(135deg, #0056b3, #520dc2) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3) !important;
+}
+
+/* Group Selector Styling */
+.swagger-ui .scheme-container {
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 8px !important;
+    padding: 15px !important;
+    margin: 20px 0 !important;
+}
+
+/* Custom Info Section */
+.swagger-ui .info {
+    margin: 20px 0 !important;
+}
+
+.swagger-ui .info .title {
+    color: #dc3545 !important;
+    font-size: 2.5rem !important;
+    font-weight: bold !important;
+}
+
+/* Security Badge */
+.swagger-ui .auth-wrapper {
+    background: #fff3cd !important;
+    border: 1px solid #ffeaa7 !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    margin: 10px 0 !important;
+}
+
+/* Response Status Codes */
+.swagger-ui .responses-inner .response .response-col_status {
+    font-weight: bold !important;
+}
+
+.swagger-ui .response-col_status .response-undocumented {
+    color: #dc3545 !important;
+}
+
+/* Try it out button styling */
+.swagger-ui .btn.try-out__btn {
+    background: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+    font-weight: bold !important;
+    border-radius: 6px !important;
+}
+
+.swagger-ui .btn.try-out__btn:hover {
+    background: #218838 !important;
+    border-color: #1e7e34 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Execute button styling */
+.swagger-ui .btn.execute {
+    background: #007bff !important;
+    border-color: #007bff !important;
+    color: white !important;
+    font-weight: bold !important;
+    border-radius: 6px !important;
+}
+
+.swagger-ui .btn.execute:hover {
+    background: #0056b3 !important;
+    border-color: #004085 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Model section styling */
+.swagger-ui .model-box {
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 8px !important;
+}
+
+/* Parameter input styling */
+.swagger-ui .parameter__name {
+    font-weight: bold !important;
+    color: #495057 !important;
+}
+
+.swagger-ui .parameter__type {
+    color: #6c757d !important;
+    font-style: italic !important;
+}
+
+/* Custom scrollbar */
+.swagger-ui ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.swagger-ui ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb {
+    background: #dc3545;
+    border-radius: 4px;
+}
+
+.swagger-ui ::-webkit-scrollbar-thumb:hover {
+    background: #c82333;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .swagger-ui .opblock-tag {
+        padding: 8px 12px !important;
+        font-size: 14px !important;
+    }
+    
+    .swagger-ui .info .title {
+        font-size: 2rem !important;
+    }
+}
