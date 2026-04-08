@@ -254,14 +254,14 @@ private String passwordResetUrl;
     {
         User user = userRepository.findByEmail(email);
         if (user == null) {
-            log.warn("Attempt to update reset password for non-existent email: {}", email);
+            log.warn("Attempt to update reset password for non-existent email: {}", DataMaskingUtils.maskEmail(email));
             throw new UserNotFoundExceptions("User not found with email: " + email);
         }
 
         user.setResetPasswordToken(token);
         user.setResetPasswordTokenExpiry(LocalDateTime.now().plusMinutes(30));
         userRepository.save(user);
-        log.debug("Reset password token updated for user: {}", email);
+        log.debug("Reset password token updated for user: {}", DataMaskingUtils.maskEmail(email));
     }
 
     @Override
@@ -272,7 +272,7 @@ private String passwordResetUrl;
         if (user == null || user.getResetPasswordTokenExpiry() == null ||
                 LocalDateTime.now().isAfter(user.getResetPasswordTokenExpiry()))
         {
-            log.warn("Invalid or expired reset token used: {}", token);
+            log.warn("Invalid or expired reset token used");
             throw new UserNotFoundExceptions("Invalid or expired token");
         }
 
@@ -303,7 +303,7 @@ private String passwordResetUrl;
 
         if (!validateResetToken(request.getToken()))
         {
-            log.warn("Invalid token used in password reset: {}", request.getToken());
+            log.warn("Invalid token used in password reset");
             return new ResponseDto("Unsuccessful", "Invalid or expired token");
         }
 
@@ -333,7 +333,7 @@ private String passwordResetUrl;
 
         User user = userRepository.findByResetPasswordToken(token);
         if (user == null) {
-            log.debug("Reset token not found: {}", token);
+            log.debug("Reset token not found");
             return false;
         }
 
@@ -341,7 +341,7 @@ private String passwordResetUrl;
                 LocalDateTime.now().isBefore(user.getResetPasswordTokenExpiry());
 
         if (!isValid) {
-            log.debug("Expired reset token used: {}", token);
+            log.debug("Expired reset token used");
         }
 
         return isValid;

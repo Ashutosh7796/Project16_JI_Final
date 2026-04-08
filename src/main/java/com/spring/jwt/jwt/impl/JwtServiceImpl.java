@@ -106,7 +106,7 @@ public class JwtServiceImpl implements JwtService {
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toList());
 
-        log.info("Roles: {}", roles);
+        log.debug("Roles: {}", roles);
 
         Long userId = userDetailsCustom.getUserId();
 
@@ -404,7 +404,7 @@ public class JwtServiceImpl implements JwtService {
             Claims claims = extractClaims(token);
             return claims.getId();
         } catch (Exception e) {
-            log.error("Error extracting token ID: {}", e.getMessage());
+            log.warn("Error extracting token ID: {}", e.getMessage());
             return null;
         }
     }
@@ -415,7 +415,7 @@ public class JwtServiceImpl implements JwtService {
             String tokenId = extractTokenId(token);
             return tokenId != null && tokenBlacklistService.isBlacklisted(tokenId);
         } catch (Exception e) {
-            log.error("Error checking blacklist: {}", e.getMessage());
+            log.warn("Error checking blacklist: {}", e.getMessage());
             return false;
         }
     }

@@ -68,9 +68,9 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException, IOException, ServletException {
-        log.info("Start attempt to authentication");
+        log.debug("Start attempt to authentication");
         LoginRequest loginRequest = objectMapper.readValue(request.getInputStream(), LoginRequest.class);
-        log.info("End attempt to authentication");
+        log.debug("End attempt to authentication");
 
         return getAuthenticationManager()
                 .authenticate(new UsernamePasswordAuthenticationToken(

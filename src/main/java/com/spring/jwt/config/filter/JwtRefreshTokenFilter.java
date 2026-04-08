@@ -26,7 +26,6 @@ import org.springframework.security.web.authentication.AbstractAuthenticationPro
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -67,14 +66,14 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException, IOException, ServletException {
-        log.info("Start refresh token authentication");
+        log.debug("Start refresh token authentication");
 
         String refreshToken = null;
         
         try {
             refreshToken = getRefreshTokenFromCookie(request);
             if (refreshToken != null) {
-                log.info("Found refresh token in cookie");
+                log.debug("Found refresh token in cookie");
             }
 
             if (refreshToken == null) {
@@ -82,9 +81,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
                     if (request.getContentLength() > 0) {
                         RefreshTokenRequest refreshRequest = objectMapper.readValue(request.getInputStream(), RefreshTokenRequest.class);
                         refreshToken = refreshRequest.getRefreshToken();
-                        log.info("Found refresh token in request body");
-                    } else {
-                        log.info("Request body is empty");
+                        log.debug("Found refresh token in request body");
                     }
                 } catch (Exception e) {
                     log.debug("Failed to parse request body: {}", e.getMessage());
@@ -95,50 +92,30 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
                 String authHeader = request.getHeader("Authorization");
                 if (authHeader != null && authHeader.startsWith("Bearer ")) {
                     refreshToken = authHeader.substring(7);
-                    log.info("Found refresh token in Authorization header");
+                    log.debug("Found refresh token in Authorization header");
                 }
             }
 
             if (refreshToken == null) {
-                Cookie[] cookies = request.getCookies();
-                if (cookies != null) {
-                    log.info("Available cookies:");
-                    for (Cookie cookie : cookies) {
-                        log.info("Cookie: {} = {}, Path: {}, HttpOnly: {}", 
-                            cookie.getName(), 
-                            cookie.getValue().substring(0, Math.min(10, cookie.getValue().length())) + "...",
-                            cookie.getPath(),
-                            cookie.isHttpOnly());
-                    }
-                } else {
-                    log.info("No cookies found in request");
-                }
-
-                log.info("Available headers:");
-                Enumeration<String> headerNames = request.getHeaderNames();
-                while (headerNames.hasMoreElements()) {
-                    String headerName = headerNames.nextElement();
-                    log.info("Header: {} = {}", headerName, request.getHeader(headerName));
-                }
-                
+                log.debug("No refresh token found in cookie, body, or Authorization header");
                 throw new BadCredentialsException("No refresh token provided");
             }
 
-            log.info("Validating refresh token...");
+            log.debug("Validating refresh token...");
 
             try {
                 Claims claims = jwtService.extractClaims(refreshToken);
                 String tokenType = claims.get(CLAIM_KEY_TOKEN_TYPE, String.class);
                 
                 if (TOKEN_TYPE_ACCESS.equals(tokenType)) {
-                    log.error("Attempting to use an access token for refresh. Please use a refresh token instead.");
+                    log.warn("Attempting to use an access token for refresh");
                     Cookie invalidCookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, "");
                     invalidCookie.setMaxAge(0);
                     invalidCookie.setPath("/");
                     response.addCookie(invalidCookie);
                     throw new BadCredentialsException("Access token used for refresh. Please use a refresh token.");
                 } else if (!TOKEN_TYPE_REFRESH.equals(tokenType)) {
-                    log.error("Invalid token type - not a refresh token");
+                    log.warn("Invalid token type - not a refresh token");
                     throw new BadCredentialsException("Invalid token type - not a refresh token");
                 }
             } catch (BadCredentialsException e) {
@@ -150,13 +127,13 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
 
             String deviceFingerprint = jwtService.generateDeviceFingerprint(request);
             if (!jwtService.isValidToken(refreshToken, deviceFingerprint)) {
-                log.error("Expired or invalid refresh token");
+                log.warn("Expired or invalid refresh token");
                 throw new BadCredentialsException("Expired or invalid refresh token");
             }
 
             Claims claims = jwtService.extractClaims(refreshToken);
             String username = claims.getSubject();
-            log.info("Refresh token is valid for user: {}", username);
+            log.debug("Refresh token is valid for user: {}", username);
 
             RefreshTokenAuthentication auth = new RefreshTokenAuthentication(username, refreshToken);
             auth.setAuthenticated(true);
@@ -200,7 +177,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
     protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain,
                                            Authentication authResult) throws IOException, ServletException {
         try {
-            log.info("Processing successful refresh token authentication");
+            log.debug("Processing successful refresh token authentication");
             String username = authResult.getName();
             String refreshToken = ((RefreshTokenAuthentication) authResult).getRefreshToken();
 
@@ -238,7 +215,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
             String json = HelperUtils.JSON_WRITER.writeValueAsString(tokens);
             response.setContentType("application/json; charset=UTF-8");
             response.getWriter().write(json);
-            log.info("End successful refresh token authentication");
+            log.debug("End successful refresh token authentication");
         } catch (Exception ex) {
             log.error("Error during token refresh: {}", ex.getMessage());
             unsuccessfulAuthentication(request, response, new BadCredentialsException(ex.getMessage()));

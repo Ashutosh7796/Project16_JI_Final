@@ -32,7 +32,7 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
 
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
-        log.info("Start actual authentication");
+        log.debug("Start actual authentication");
 
         if (authentication instanceof JwtRefreshTokenFilter.RefreshTokenAuthentication) {
 
@@ -72,7 +72,7 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
 
         final Authentication auth = new UsernamePasswordAuthenticationToken(username, password, authorities);
 
-        log.info("End actual authentication");
+        log.debug("End actual authentication");
         return auth;
     }
     private boolean passwordMatches(String rawPassword, String encodedPassword) {

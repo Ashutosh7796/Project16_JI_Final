@@ -258,26 +258,17 @@ public class AppConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        return new CorsConfigurationSource() {
-            @Override
-            public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
-                log.debug("Request Method: {}", request.getMethod());
-                log.debug("Request URI: {}", request.getRequestURI());
-                log.debug("Origin: {}", request.getHeader("Origin"));
+        log.info("CORS configured - Allowed Origins: {}", allowedOrigins);
 
-                CorsConfiguration config = new CorsConfiguration();
-                config.setAllowedOrigins(allowedOrigins);
-                config.setAllowedHeaders(Arrays.asList("*"));
-                config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-                config.setAllowCredentials(true);
-                config.setExposedHeaders(Arrays.asList("Authorization"));
-                config.setMaxAge(3600L);
-                log.debug("CORS Config - Allowed Origins: {}", allowedOrigins);
-                log.debug("CORS Config - Allowed Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH");
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedHeaders(Arrays.asList("*"));
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        config.setAllowCredentials(true);
+        config.setExposedHeaders(Arrays.asList("Authorization"));
+        config.setMaxAge(3600L);
 
-                return config;
-            }
-        };
+        return (HttpServletRequest request) -> config;
     }
 
     @Bean

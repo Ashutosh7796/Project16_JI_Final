@@ -15,7 +15,7 @@ import java.util.List;
         indexes = {
                 @Index(name = "idx_emp_survey_form_number", columnList = "formNumber"),
                 @Index(name = "idx_emp_survey_mobile", columnList = "farmerMobile"),
-                @Index(name = "idx_emp_survey_employee_id", columnList = "employee_id"),
+                @Index(name = "idx_emp_survey_user_id", columnList = "user_id"),
                 @Index(name = "idx_emp_survey_district", columnList = "district")
         }
 )
