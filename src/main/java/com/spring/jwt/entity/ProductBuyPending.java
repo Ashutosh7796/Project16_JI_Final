@@ -1,5 +1,6 @@
 package com.spring.jwt.entity;
 
+import com.spring.jwt.Enums.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -14,7 +15,7 @@ public class ProductBuyPending {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long ProductBuyPendingId;
+    private Long productBuyPendingId;
 
     private Long userId;
 
@@ -24,7 +25,9 @@ public class ProductBuyPending {
 
     private Double totalAmount;
 
-    private String paymentStatus; // PENDING, FAILED, SUCCESS
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentStatus paymentStatus;
 
     private String paymentGatewayOrderId;
 
@@ -35,4 +38,7 @@ public class ProductBuyPending {
     private String customerName;
 
     private String contactNumber;
+
+    @Version
+    private Long version;
 }

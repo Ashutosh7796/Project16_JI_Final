@@ -25,7 +25,6 @@ public class ProductBuyPendingDto {
 
     private LocalDateTime createdAt;
 
-    // Delivery Info
     private String deliveryAddress;
     private String customerName;
     private String contactNumber;

@@ -13,8 +13,7 @@ public class CcAvenueConfig {
     private String accessCode;
     private String merchantId;
     private String statusApiUrl;
-
-    // optional but useful
     private String redirectUrl;
     private String cancelUrl;
+    private String paymentUrl;
 }

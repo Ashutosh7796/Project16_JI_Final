@@ -1,52 +1,87 @@
 package com.spring.jwt.Payment;
 
-import com.spring.jwt.entity.ProductBuyPending;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.text.DecimalFormat;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CcAvenuePaymentService {
 
     private final CcAvenueConfig config;
 
-    public String generatePaymentForm(ProductBuyPending order) {
+    private static final DecimalFormat AMOUNT_FORMAT = new DecimalFormat("0.00");
 
-        // 🔥 Format amount (CCAvenue requires 2 decimal)
-        String amount = new DecimalFormat("0.00")
-                .format(order.getTotalAmount());
+    @PostConstruct
+    void validateConfig() {
+        boolean valid = true;
+        if (isBlank(config.getWorkingKey())) { log.error("CCAvenue workingKey is EMPTY"); valid = false; }
+        if (isBlank(config.getAccessCode()))  { log.error("CCAvenue accessCode is EMPTY"); valid = false; }
+        if (isBlank(config.getMerchantId()))   { log.error("CCAvenue merchantId is EMPTY"); valid = false; }
+        if (isBlank(config.getPaymentUrl()))   { log.error("CCAvenue paymentUrl is EMPTY"); valid = false; }
+        if (isBlank(config.getRedirectUrl()))  { log.warn("CCAvenue redirectUrl is EMPTY");  }
+        if (isBlank(config.getCancelUrl()))    { log.warn("CCAvenue cancelUrl is EMPTY");    }
 
-        // 🔥 Build request safely
-        StringBuilder data = new StringBuilder();
-
-        data.append("merchant_id=").append(config.getMerchantId())
-                .append("&order_id=").append(order.getProductBuyPendingId())
-                .append("&currency=INR")
-                .append("&amount=").append(amount)
-                .append("&redirect_url=").append(config.getRedirectUrl())
-                .append("&cancel_url=").append(config.getCancelUrl())
-                .append("&language=EN")
-
-                // Billing (null-safe)
-                .append("&billing_name=").append(nullSafe(order.getCustomerName()))
-                .append("&billing_address=").append(nullSafe(order.getDeliveryAddress()))
-                .append("&billing_tel=").append(nullSafe(order.getContactNumber()));
-
-        // 🔐 Encrypt
-        String encrypted = CcAvenueUtil.encrypt(data.toString(), config.getWorkingKey());
-
-        // 🔥 Return auto-submit HTML form
-        return "<html><body onload='document.forms[0].submit()'>" +
-                "<form method='post' action='https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction'>" +
-                "<input type='hidden' name='encRequest' value='" + encrypted + "'/>" +
-                "<input type='hidden' name='access_code' value='" + config.getAccessCode() + "'/>" +
-                "</form></body></html>";
+        if (valid) {
+            log.info("CCAvenue config loaded: merchantId={}, accessCode={}..., paymentUrl={}, redirectUrl={}, cancelUrl={}",
+                    config.getMerchantId(),
+                    config.getAccessCode().substring(0, Math.min(4, config.getAccessCode().length())) + "****",
+                    config.getPaymentUrl(),
+                    config.getRedirectUrl(),
+                    config.getCancelUrl());
+        }
     }
 
-    // ✅ Null-safe helper
+    public String generatePaymentForm(CcAvenuePaymentRequest request) {
+        String amount = AMOUNT_FORMAT.format(request.getAmount());
+
+        String redirectUrl = request.getRedirectUrl() != null ? request.getRedirectUrl() : config.getRedirectUrl();
+        String cancelUrl = request.getCancelUrl() != null ? request.getCancelUrl() : config.getCancelUrl();
+
+        // CCAvenue expects plain-text key=value pairs separated by &
+        // Values must NOT be URL-encoded -- the entire string gets AES-encrypted
+        StringBuilder data = new StringBuilder();
+        data.append("merchant_id=").append(config.getMerchantId())
+                .append("&order_id=").append(sanitizeParam(request.getOrderId()))
+                .append("&currency=").append(request.getCurrency() != null ? request.getCurrency() : "INR")
+                .append("&amount=").append(amount)
+                .append("&redirect_url=").append(nullSafe(redirectUrl))
+                .append("&cancel_url=").append(nullSafe(cancelUrl))
+                .append("&language=EN")
+                .append("&billing_name=").append(nullSafe(request.getBillingName()))
+                .append("&billing_address=").append(nullSafe(request.getBillingAddress()))
+                .append("&billing_tel=").append(nullSafe(request.getBillingTel()));
+
+        if (request.getBillingEmail() != null && !request.getBillingEmail().isBlank()) {
+            data.append("&billing_email=").append(request.getBillingEmail());
+        }
+
+        log.debug("CCAvenue request data (pre-encrypt): merchant_id={}, order_id={}, amount={}, redirect_url={}",
+                config.getMerchantId(), request.getOrderId(), amount, redirectUrl);
+
+        String encrypted = CcAvenueUtil.encrypt(data.toString(), config.getWorkingKey());
+
+        return "<html><body onload='document.forms[0].submit()'>"
+                + "<form method='post' action='" + config.getPaymentUrl() + "'>"
+                + "<input type='hidden' name='encRequest' value='" + encrypted + "'/>"
+                + "<input type='hidden' name='access_code' value='" + config.getAccessCode() + "'/>"
+                + "</form></body></html>";
+    }
+
     private String nullSafe(String value) {
         return value != null ? value : "";
+    }
+
+    private String sanitizeParam(String value) {
+        if (value == null) return "";
+        return value.replaceAll("[^a-zA-Z0-9_\\-]", "");
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }

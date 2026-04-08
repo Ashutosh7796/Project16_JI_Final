@@ -1,8 +1,8 @@
 package com.spring.jwt.ProductBuyPending;
 
-import com.spring.jwt.Enums.DeliveryStatus;
+import com.spring.jwt.Enums.PaymentStatus;
+import com.spring.jwt.Payment.CcAvenuePaymentRequest;
 import com.spring.jwt.Payment.CcAvenuePaymentService;
-import com.spring.jwt.Payment.OrderHistoryRepository;
 import com.spring.jwt.Product.ProductRepository;
 import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedDto;
 import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedRepository;
@@ -10,69 +10,84 @@ import com.spring.jwt.entity.*;
 import com.spring.jwt.Enums.PaymentMode;
 import com.spring.jwt.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductBuyServiceImpl implements ProductBuyService {
 
     private final ProductRepository productRepo;
     private final ProductBuyPendingRepository pendingRepo;
     private final ProductBuyConfirmedRepository confirmedRepo;
     private final CcAvenuePaymentService ccAvenuePaymentService;
-    private final OrderHistoryRepository orderHistoryRepository;
 
-    // 🔥 CREATE ORDER + PAYMENT INIT
     @Override
+    @Transactional
     public ProductBuyPendingDto createPendingOrder(CreateOrderRequestDto dto) {
-
         Product product = productRepo.findById(dto.getProductId())
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
 
         if (!Boolean.TRUE.equals(product.getActive())) {
-            throw new RuntimeException("Product is not active");
+            throw new IllegalStateException("Product is not active");
         }
 
         double price = product.getPrice();
         double discount = product.getOffers() != null ? product.getOffers() : 0;
         double finalPrice = price - (price * discount / 100);
         double totalAmount = finalPrice * dto.getQuantity();
+
         ProductBuyPending pending = new ProductBuyPending();
         pending.setUserId(dto.getUserId());
         pending.setProductId(product.getProductId());
         pending.setQuantity(dto.getQuantity());
         pending.setTotalAmount(totalAmount);
-        pending.setPaymentStatus("PENDING");
-
+        pending.setPaymentStatus(PaymentStatus.PENDING);
         pending.setCustomerName(dto.getCustomerName());
         pending.setContactNumber(dto.getContactNumber());
         pending.setDeliveryAddress(dto.getDeliveryAddress());
 
         pendingRepo.save(pending);
 
-        // 🔥 5. Generate CCAvenue Payment Form
-        String paymentForm = ccAvenuePaymentService.generatePaymentForm(pending);
+        CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()
+                .orderId("PROD-" + pending.getProductBuyPendingId())
+                .amount(BigDecimal.valueOf(totalAmount))
+                .billingName(dto.getCustomerName())
+                .billingAddress(dto.getDeliveryAddress())
+                .billingTel(dto.getContactNumber())
+                .build();
+
+        String paymentForm = ccAvenuePaymentService.generatePaymentForm(paymentRequest);
+
+        pending.setPaymentGatewayOrderId("PROD-" + pending.getProductBuyPendingId());
+        pendingRepo.save(pending);
+
+        log.info("Created pending order {} for product {}", pending.getProductBuyPendingId(), product.getProductId());
 
         ProductBuyPendingDto response = mapToPendingDto(pending);
-        response.setPaymentGatewayOrderId(paymentForm); // HTML form
+        response.setPaymentGatewayOrderId(paymentForm);
 
         return response;
     }
 
-    // 🔥 AUTO CALLED AFTER PAYMENT SUCCESS
     @Override
+    @Transactional
     public ProductBuyConfirmedDto confirmPayment(PaymentVerifyDto dto) {
-
         ProductBuyPending pending = pendingRepo.findById(dto.getPendingOrderId())
                 .orElseThrow(() -> new ResourceNotFoundException("Pending order not found"));
 
-        if ("SUCCESS".equals(pending.getPaymentStatus())) {
-            throw new RuntimeException("Payment already processed");
+        if (PaymentStatus.SUCCESS.equals(pending.getPaymentStatus())) {
+            throw new IllegalStateException("Payment already processed");
         }
-        pending.setPaymentStatus("SUCCESS");
+
+        pending.setPaymentStatus(PaymentStatus.SUCCESS);
         pendingRepo.save(pending);
+
         ProductBuyConfirmed confirmed = new ProductBuyConfirmed();
         confirmed.setUserId(pending.getUserId());
         confirmed.setProductId(pending.getProductId());
@@ -86,60 +101,38 @@ public class ProductBuyServiceImpl implements ProductBuyService {
         confirmed.setDeliveryAddress(pending.getDeliveryAddress());
         confirmedRepo.save(confirmed);
 
+        log.info("Payment confirmed for order {}", pending.getProductBuyPendingId());
+
         return mapToConfirmedDto(confirmed);
     }
 
     @Override
+    @Transactional
     public void markPaymentFailed(Long pendingOrderId) {
-
         ProductBuyPending pending = pendingRepo.findById(pendingOrderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
-        pending.setPaymentStatus("FAILED");
+        pending.setPaymentStatus(PaymentStatus.FAILED);
         pendingRepo.save(pending);
-    }
-    private void createDelivery(ProductBuyConfirmed order) {
 
-        DeliveryTracking tracking = new DeliveryTracking();
-        tracking.setOrder(order);
-        tracking.setStatus(DeliveryStatus.ORDER_PLACED);
-        tracking.setCurrentLocation("Warehouse");
-
-        // save delivery
-        // deliveryRepo.save(tracking);
-
-        saveHistory(order.getId(), "SHIPPED", "Order ready for shipment");
+        log.info("Payment marked failed for order {}", pendingOrderId);
     }
 
-    // 🔁 HISTORY METHOD
-    private void saveHistory(Long orderId, String status, String msg) {
-        OrderHistory history = new OrderHistory();
-        history.setOrderId(orderId);
-        history.setStatus(status);
-        history.setDescription(msg);
-        orderHistoryRepository.save(history);
-    }
-    // 📦 GET CONFIRMED
     @Override
+    @Transactional(readOnly = true)
     public ProductBuyConfirmedDto getConfirmedOrder(Long id) {
-
         ProductBuyConfirmed confirmed = confirmedRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
-
         return mapToConfirmedDto(confirmed);
     }
 
-    // 📦 GET PENDING
     @Override
+    @Transactional(readOnly = true)
     public ProductBuyPendingDto getPendingOrder(Long id) {
-
         ProductBuyPending pending = pendingRepo.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pending order not found"));
-
         return mapToPendingDto(pending);
     }
-
-    // 🔁 MAPPERS
 
     private ProductBuyPendingDto mapToPendingDto(ProductBuyPending e) {
         return new ProductBuyPendingDto(
@@ -148,7 +141,7 @@ public class ProductBuyServiceImpl implements ProductBuyService {
                 e.getProductId(),
                 e.getQuantity(),
                 e.getTotalAmount(),
-                e.getPaymentStatus(),
+                e.getPaymentStatus() != null ? e.getPaymentStatus().name() : null,
                 e.getPaymentGatewayOrderId(),
                 e.getCreatedAt(),
                 e.getDeliveryAddress(),
@@ -158,9 +151,7 @@ public class ProductBuyServiceImpl implements ProductBuyService {
     }
 
     private ProductBuyConfirmedDto mapToConfirmedDto(ProductBuyConfirmed e) {
-
         ProductBuyConfirmedDto dto = new ProductBuyConfirmedDto();
-
         dto.setId(e.getId());
         dto.setUserId(e.getUserId());
         dto.setProductId(e.getProductId());
@@ -170,16 +161,13 @@ public class ProductBuyServiceImpl implements ProductBuyService {
         dto.setPaymentMode(e.getPaymentMode());
         dto.setPaymentDate(e.getPaymentDate());
         dto.setCreatedAt(e.getCreatedAt());
-
         dto.setCustomerName(e.getCustomerName());
         dto.setContactNumber(e.getContactNumber());
         dto.setDeliveryAddress(e.getDeliveryAddress());
         dto.setDeliveryCreated(e.getDeliveryCreated());
-
         if (e.getProduct() != null) {
             dto.setProductName(e.getProduct().getProductName());
         }
-
         return dto;
     }
 }

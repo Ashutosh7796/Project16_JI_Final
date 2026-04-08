@@ -1,7 +1,6 @@
 package com.spring.jwt.ProductBuyPending;
 
 import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedDto;
-import com.spring.jwt.dto.*;
 
 public interface ProductBuyService {
 

@@ -1,4 +1,4 @@
-package com.spring.jwt.Payment;
+package com.spring.jwt.ProductBuyPending;
 
 import com.spring.jwt.entity.OrderHistory;
 import org.springframework.data.jpa.repository.JpaRepository;

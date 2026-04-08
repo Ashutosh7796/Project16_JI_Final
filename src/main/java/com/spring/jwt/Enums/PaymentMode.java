@@ -4,5 +4,6 @@ public enum PaymentMode {
     UPI,
     CARD,
     NETBANKING,
-    WALLET
+    WALLET,
+    CCAVENUE
 }
