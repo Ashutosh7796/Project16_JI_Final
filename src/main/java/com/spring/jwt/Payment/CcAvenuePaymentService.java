@@ -42,28 +42,43 @@ public class CcAvenuePaymentService {
         String redirectUrl = request.getRedirectUrl() != null ? request.getRedirectUrl() : config.getRedirectUrl();
         String cancelUrl = request.getCancelUrl() != null ? request.getCancelUrl() : config.getCancelUrl();
 
-        // CCAvenue expects plain-text key=value pairs separated by &
-        // Values must NOT be URL-encoded -- the entire string gets AES-encrypted
         StringBuilder data = new StringBuilder();
         data.append("merchant_id=").append(config.getMerchantId())
-                .append("&order_id=").append(sanitizeParam(request.getOrderId()))
+                .append("&order_id=").append(sanitizeOrderId(request.getOrderId()))
                 .append("&currency=").append(request.getCurrency() != null ? request.getCurrency() : "INR")
                 .append("&amount=").append(amount)
                 .append("&redirect_url=").append(nullSafe(redirectUrl))
                 .append("&cancel_url=").append(nullSafe(cancelUrl))
                 .append("&language=EN")
-                .append("&billing_name=").append(nullSafe(request.getBillingName()))
-                .append("&billing_address=").append(nullSafe(request.getBillingAddress()))
-                .append("&billing_tel=").append(nullSafe(request.getBillingTel()));
+                .append("&billing_name=").append(sanitizeText(request.getBillingName()))
+                .append("&billing_address=").append(sanitizeText(request.getBillingAddress()))
+                .append("&billing_tel=").append(sanitizePhone(request.getBillingTel()));
 
         if (request.getBillingEmail() != null && !request.getBillingEmail().isBlank()) {
-            data.append("&billing_email=").append(request.getBillingEmail());
+            data.append("&billing_email=").append(sanitizeEmail(request.getBillingEmail()));
         }
 
-        log.debug("CCAvenue request data (pre-encrypt): merchant_id={}, order_id={}, amount={}, redirect_url={}",
-                config.getMerchantId(), request.getOrderId(), amount, redirectUrl);
+        String plainText = data.toString();
 
-        String encrypted = CcAvenueUtil.encrypt(data.toString(), config.getWorkingKey());
+        log.error("CCAvenue PLAIN TEXT request: {}", plainText);
+
+        String encrypted = CcAvenueUtil.encrypt(plainText, config.getWorkingKey());
+
+        log.error("CCAvenue ENCRYPTED request (encRequest): {}", encrypted);
+        log.error("CCAvenue access_code: {}", config.getAccessCode());
+        log.error("CCAvenue payment URL: {}", config.getPaymentUrl());
+
+        try {
+            String decrypted = CcAvenueUtil.decrypt(encrypted, config.getWorkingKey());
+            log.error("CCAvenue DECRYPT VERIFICATION: {}", decrypted);
+            if (!plainText.equals(decrypted)) {
+                log.error("CCAvenue DECRYPT MISMATCH! Original length={}, Decrypted length={}", plainText.length(), decrypted.length());
+            } else {
+                log.error("CCAvenue DECRYPT MATCH OK - encryption round-trip verified");
+            }
+        } catch (Exception e) {
+            log.error("CCAvenue DECRYPT VERIFICATION FAILED: {}", e.getMessage());
+        }
 
         return "<html><body onload='document.forms[0].submit()'>"
                 + "<form method='post' action='" + config.getPaymentUrl() + "'>"
@@ -72,13 +87,36 @@ public class CcAvenuePaymentService {
                 + "</form></body></html>";
     }
 
-    private String nullSafe(String value) {
-        return value != null ? value : "";
+    /**
+     * Strips characters that break CCAvenue's key=value&key=value format.
+     * Removes: & (param separator), = (kv separator), # and newlines/tabs.
+     * Keeps: letters, digits, spaces, commas, periods, hyphens, slashes, parentheses, etc.
+     */
+    private String sanitizeText(String value) {
+        if (value == null) return "";
+        return value.replaceAll("[&=#\r\n\t]", "").trim();
     }
 
-    private String sanitizeParam(String value) {
+    /** Order ID: alphanumeric, hyphens, underscores, dots only */
+    private String sanitizeOrderId(String value) {
         if (value == null) return "";
-        return value.replaceAll("[^a-zA-Z0-9_\\-]", "");
+        return value.replaceAll("[^a-zA-Z0-9_.\\-]", "");
+    }
+
+    /** Phone: digits, plus, hyphens, spaces only */
+    private String sanitizePhone(String value) {
+        if (value == null) return "";
+        return value.replaceAll("[^0-9+\\- ]", "").trim();
+    }
+
+    /** Email: standard email chars only */
+    private String sanitizeEmail(String value) {
+        if (value == null) return "";
+        return value.replaceAll("[^a-zA-Z0-9@.+_\\-]", "").trim();
+    }
+
+    private String nullSafe(String value) {
+        return value != null ? value : "";
     }
 
     private boolean isBlank(String s) {
