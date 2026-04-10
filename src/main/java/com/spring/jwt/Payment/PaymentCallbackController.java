@@ -26,7 +26,7 @@ public class PaymentCallbackController {
     private final FarmerPaymentService farmerPaymentService;
     private final PaymentAuditService auditService;
 
-    @Value("${app.url.frontend:http://localhost:5173}")
+    @Value("${app.url.frontend:https://jiojigreenindia.org}")
     private String frontendUrl;
 
     @PostMapping("/product/response")
@@ -85,6 +85,7 @@ public class PaymentCallbackController {
         }
     }
 
+
     @PostMapping("/product/cancel")
     public void handleProductCancel(@RequestParam(value = "encResp", required = false) String encResp,
                                     HttpServletRequest request,
@@ -136,7 +137,6 @@ public class PaymentCallbackController {
 
         try {
             farmerPaymentService.handleCallback(params, clientIp);
-
             if ("Success".equalsIgnoreCase(orderStatus)) {
                 response.sendRedirect(frontendUrl + "/farmer-payment/success?order=" + orderId);
             } else {
@@ -223,11 +223,13 @@ public class PaymentCallbackController {
         };
     }
 
-    private String getClientIp(HttpServletRequest request) {
+    private String getClientIp(HttpServletRequest request)
+    {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
         return request.getRemoteAddr();
     }
+
 }

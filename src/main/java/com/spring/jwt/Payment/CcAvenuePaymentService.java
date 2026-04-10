@@ -19,17 +19,25 @@ public class CcAvenuePaymentService {
     @PostConstruct
     void validateConfig() {
         boolean valid = true;
-        if (isBlank(config.getWorkingKey())) { log.error("CCAvenue workingKey is EMPTY"); valid = false; }
-        if (isBlank(config.getAccessCode()))  { log.error("CCAvenue accessCode is EMPTY"); valid = false; }
-        if (isBlank(config.getMerchantId()))   { log.error("CCAvenue merchantId is EMPTY"); valid = false; }
+        String workingKey = trimToEmpty(config.getWorkingKey());
+        String accessCode = trimToEmpty(config.getAccessCode());
+        String merchantId = trimToEmpty(config.getMerchantId());
+
+        if (isBlank(workingKey)) { log.error("CCAvenue workingKey is EMPTY"); valid = false; }
+        if (isBlank(accessCode))  { log.error("CCAvenue accessCode is EMPTY"); valid = false; }
+        if (isBlank(merchantId))   { log.error("CCAvenue merchantId is EMPTY"); valid = false; }
         if (isBlank(config.getPaymentUrl()))   { log.error("CCAvenue paymentUrl is EMPTY"); valid = false; }
         if (isBlank(config.getRedirectUrl()))  { log.warn("CCAvenue redirectUrl is EMPTY");  }
         if (isBlank(config.getCancelUrl()))    { log.warn("CCAvenue cancelUrl is EMPTY");    }
+        if (!workingKey.matches("^[A-Fa-f0-9]{32}$")) {
+            log.error("CCAvenue workingKey format invalid. Expected 32 hex characters, got length={}", workingKey.length());
+            valid = false;
+        }
 
         if (valid) {
             log.info("CCAvenue config loaded: merchantId={}, accessCode={}..., paymentUrl={}, redirectUrl={}, cancelUrl={}",
-                    config.getMerchantId(),
-                    config.getAccessCode().substring(0, Math.min(4, config.getAccessCode().length())) + "****",
+                    merchantId,
+                    accessCode.substring(0, Math.min(4, accessCode.length())) + "****",
                     config.getPaymentUrl(),
                     config.getRedirectUrl(),
                     config.getCancelUrl());
@@ -42,8 +50,12 @@ public class CcAvenuePaymentService {
         String redirectUrl = request.getRedirectUrl() != null ? request.getRedirectUrl() : config.getRedirectUrl();
         String cancelUrl = request.getCancelUrl() != null ? request.getCancelUrl() : config.getCancelUrl();
 
+        String merchantId = trimToEmpty(config.getMerchantId());
+        String accessCode = trimToEmpty(config.getAccessCode());
+        String workingKey = trimToEmpty(config.getWorkingKey());
+
         StringBuilder data = new StringBuilder();
-        data.append("merchant_id=").append(config.getMerchantId())
+        data.append("merchant_id=").append(merchantId)
                 .append("&order_id=").append(sanitizeOrderId(request.getOrderId()))
                 .append("&currency=").append(request.getCurrency() != null ? request.getCurrency() : "INR")
                 .append("&amount=").append(amount)
@@ -62,14 +74,14 @@ public class CcAvenuePaymentService {
 
         log.error("CCAvenue PLAIN TEXT request: {}", plainText);
 
-        String encrypted = CcAvenueUtil.encrypt(plainText, config.getWorkingKey());
+        String encrypted = CcAvenueUtil.encrypt(plainText, workingKey);
 
         log.error("CCAvenue ENCRYPTED request (encRequest): {}", encrypted);
-        log.error("CCAvenue access_code: {}", config.getAccessCode());
+        log.error("CCAvenue access_code: {}", accessCode);
         log.error("CCAvenue payment URL: {}", config.getPaymentUrl());
 
         try {
-            String decrypted = CcAvenueUtil.decrypt(encrypted, config.getWorkingKey());
+            String decrypted = CcAvenueUtil.decrypt(encrypted, workingKey);
             log.error("CCAvenue DECRYPT VERIFICATION: {}", decrypted);
             if (!plainText.equals(decrypted)) {
                 log.error("CCAvenue DECRYPT MISMATCH! Original length={}, Decrypted length={}", plainText.length(), decrypted.length());
@@ -83,7 +95,7 @@ public class CcAvenuePaymentService {
         return "<html><body onload='document.forms[0].submit()'>"
                 + "<form method='post' action='" + config.getPaymentUrl() + "'>"
                 + "<input type='hidden' name='encRequest' value='" + encrypted + "'/>"
-                + "<input type='hidden' name='access_code' value='" + config.getAccessCode() + "'/>"
+                + "<input type='hidden' name='access_code' value='" + accessCode + "'/>"
                 + "</form></body></html>";
     }
 
@@ -121,5 +133,9 @@ public class CcAvenuePaymentService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private String trimToEmpty(String s) {
+        return s == null ? "" : s.trim();
     }
 }

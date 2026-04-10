@@ -17,4 +17,6 @@ public interface FarmerPaymentService {
     Page<FarmerPaymentResponseDTO> getPaymentsBySurveyId(Long surveyId, Pageable pageable);
 
     Page<FarmerPaymentResponseDTO> getPaymentsByUserId(Long userId, Pageable pageable);
+
+    FarmerPaymentResponseDTO getPaymentByOrderId(String orderId);
 }

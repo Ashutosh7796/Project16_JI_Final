@@ -38,6 +38,11 @@ public class FarmerPaymentController {
         return ResponseEntity.ok(farmerPaymentService.getPaymentById(paymentId));
     }
 
+    @GetMapping("/order/{orderId}")
+    public ResponseEntity<FarmerPaymentResponseDTO> getPaymentByOrderId(@PathVariable String orderId) {
+        return ResponseEntity.ok(farmerPaymentService.getPaymentByOrderId(orderId));
+    }
+
     @GetMapping("/survey/{surveyId}")
     public ResponseEntity<Page<FarmerPaymentResponseDTO>> getPaymentsBySurvey(
             @PathVariable Long surveyId,

@@ -278,6 +278,14 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
             throw PaymentException.rateLimitExceeded();
         }
     }
+    @Override
+    @Transactional(readOnly = true)
+    public FarmerPaymentResponseDTO getPaymentByOrderId(String orderId) {
+        String sanitizedOrderId = PaymentInputSanitizer.sanitizeOrderId(orderId);
+        FarmerPayment payment = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with order ID: " + sanitizedOrderId));
+        return mapToResponseDTO(payment, null);
+    }
 
     private String regeneratePaymentForm(FarmerPayment payment) {
         String redirectUrl = buildFarmerCallbackUrl(ccAvenueConfig.getRedirectUrl(), "/api/payment/farmer/response");
