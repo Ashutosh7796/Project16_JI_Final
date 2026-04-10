@@ -3,6 +3,7 @@ package com.spring.jwt.FarmerPayment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
 import java.util.Map;
 
 public interface FarmerPaymentService {
@@ -19,4 +20,6 @@ public interface FarmerPaymentService {
     Page<FarmerPaymentResponseDTO> getPaymentsByUserId(Long userId, Pageable pageable);
 
     FarmerPaymentResponseDTO getPaymentByOrderId(String orderId);
+
+    Map<String, FarmerPaymentResponseDTO> getSuccessfulPaymentsBySurveyIds(List<String> surveyIds);
 }

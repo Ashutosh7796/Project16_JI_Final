@@ -208,6 +208,7 @@ public class AppConfig {
 
                 // Catch-all for remaining /api/v1/** endpoints
                 .requestMatchers("/api/v1/**").permitAll()
+                .requestMatchers("/api/payment/queue/**").permitAll()
                 .requestMatchers("/api/payment/product/**").permitAll()
                 .requestMatchers("/api/payment/farmer/**").permitAll()
 

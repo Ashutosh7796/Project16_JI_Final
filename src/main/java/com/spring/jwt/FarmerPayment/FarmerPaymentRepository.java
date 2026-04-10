@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface FarmerPaymentRepository extends JpaRepository<FarmerPayment, Long> {
@@ -22,6 +24,11 @@ public interface FarmerPaymentRepository extends JpaRepository<FarmerPayment, Lo
     Page<FarmerPayment> findBySurvey_SurveyIdOrderByCreatedAtDesc(Long surveyId, Pageable pageable);
 
     Page<FarmerPayment> findByUser_UserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    List<FarmerPayment> findBySurvey_SurveyIdInAndPaymentStatusOrderByCreatedAtDesc(
+            Collection<Long> surveyIds,
+            PaymentStatus paymentStatus
+    );
 
     @Query("SELECT COUNT(fp) FROM FarmerPayment fp WHERE fp.survey.surveyId = :surveyId " +
             "AND fp.createdAt > :since")

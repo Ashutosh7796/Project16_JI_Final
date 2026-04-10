@@ -24,9 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -307,6 +311,60 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with order ID: " + sanitizedOrderId));
         validatePaymentAccess(payment);
         return mapToResponseDTO(payment, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, FarmerPaymentResponseDTO> getSuccessfulPaymentsBySurveyIds(List<String> surveyIds) {
+        if (surveyIds == null || surveyIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Long currentUserId = getCurrentUserId();
+        boolean admin = isCurrentUserAdmin();
+
+        Map<String, Long> requestedToInternalSurveyId = new LinkedHashMap<>();
+        for (String rawSurveyId : surveyIds) {
+            String surveyId = String.valueOf(rawSurveyId == null ? "" : rawSurveyId).trim();
+            if (surveyId.isEmpty() || requestedToInternalSurveyId.containsKey(surveyId)) {
+                continue;
+            }
+            try {
+                Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
+                requestedToInternalSurveyId.put(surveyId, internalSurveyId);
+            } catch (RuntimeException ex) {
+                log.debug("Skipping unresolved survey ID in bulk status lookup: {}", surveyId);
+            }
+        }
+
+        if (requestedToInternalSurveyId.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<Long> internalSurveyIds = requestedToInternalSurveyId.values().stream().collect(Collectors.toSet());
+        List<FarmerPayment> successfulPayments = farmerPaymentRepo
+                .findBySurvey_SurveyIdInAndPaymentStatusOrderByCreatedAtDesc(internalSurveyIds, PaymentStatus.SUCCESS);
+
+        Map<Long, FarmerPayment> latestSuccessfulBySurvey = new LinkedHashMap<>();
+        for (FarmerPayment payment : successfulPayments) {
+            Long internalSurveyId = payment.getSurvey().getSurveyId();
+            if (latestSuccessfulBySurvey.containsKey(internalSurveyId)) {
+                continue;
+            }
+            if (admin || payment.getUser().getUserId().equals(currentUserId)) {
+                latestSuccessfulBySurvey.put(internalSurveyId, payment);
+            }
+        }
+
+        Map<String, FarmerPaymentResponseDTO> result = new LinkedHashMap<>();
+        requestedToInternalSurveyId.forEach((requestedSurveyId, internalSurveyId) -> {
+            FarmerPayment payment = latestSuccessfulBySurvey.get(internalSurveyId);
+            if (payment != null) {
+                result.put(requestedSurveyId, mapToResponseDTO(payment, null));
+            }
+        });
+
+        return result;
     }
 
     private String regeneratePaymentForm(FarmerPayment payment) {

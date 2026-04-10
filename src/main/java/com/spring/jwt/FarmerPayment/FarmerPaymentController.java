@@ -53,6 +53,17 @@ public class FarmerPaymentController {
         return ResponseEntity.ok(farmerPaymentService.getPaymentsBySurveyId(internalSurveyId, pageable));
     }
 
+    @PostMapping("/survey/bulk-status")
+    public ResponseEntity<BulkSurveyPaymentStatusResponseDTO> getBulkSuccessfulPaymentStatus(
+            @Valid @RequestBody BulkSurveyPaymentStatusRequestDTO request) {
+        return ResponseEntity.ok(
+                BulkSurveyPaymentStatusResponseDTO.builder()
+                        .successfulPaymentsBySurveyId(
+                                farmerPaymentService.getSuccessfulPaymentsBySurveyIds(request.getSurveyIds()))
+                        .build()
+        );
+    }
+
     @GetMapping("/user/{userId}")
     public ResponseEntity<Page<FarmerPaymentResponseDTO>> getPaymentsByUser(
             @PathVariable Long userId,
