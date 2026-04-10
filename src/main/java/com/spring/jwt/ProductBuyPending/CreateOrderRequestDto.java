@@ -11,7 +11,6 @@ public class CreateOrderRequestDto {
     @NotNull
     private Long productId;
 
-    @NotNull
     private Long userId;
 
     @NotNull(message = "Quantity is required")

@@ -14,4 +14,8 @@ public class PaymentVerifyDto {
 
     private String paymentMode; // CCAVENUE, UPI, CARD
 
+    private String orderId;
+
+    private String amount;
+
 }

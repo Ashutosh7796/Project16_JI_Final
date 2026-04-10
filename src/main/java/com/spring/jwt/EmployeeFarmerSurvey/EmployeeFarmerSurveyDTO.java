@@ -17,7 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 public class EmployeeFarmerSurveyDTO {
 
-    private Long surveyId;
+    private String surveyId;
 
     @NotBlank(message = "Form Number is required")
     @Schema(description = "Form No Must Be Unique", example = "FORM-1001")

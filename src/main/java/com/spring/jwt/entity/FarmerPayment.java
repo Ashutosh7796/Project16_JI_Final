@@ -11,6 +11,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @Entity
@@ -33,6 +34,9 @@ public class FarmerPayment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "payment_id")
     private Long paymentId;
+
+    @Column(name = "payment_public_id", unique = true, updatable = false, length = 40)
+    private String paymentPublicId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "survey_id", nullable = false)
@@ -86,4 +90,11 @@ public class FarmerPayment {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    private void assignPublicIdIfMissing() {
+        if (this.paymentPublicId == null || this.paymentPublicId.isBlank()) {
+            this.paymentPublicId = "pay_" + UUID.randomUUID().toString().replace("-", "");
+        }
+    }
 }

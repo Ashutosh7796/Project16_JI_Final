@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -66,6 +67,9 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         Optional<FarmerPayment> existing = farmerPaymentRepo.findByIdempotencyKey(sanitizedKey);
         if (existing.isPresent()) {
             FarmerPayment existingPayment = existing.get();
+            if (!isCurrentUserAdmin() && !existingPayment.getUser().getUserId().equals(currentUserId)) {
+                throw new AccessDeniedException("Idempotency key belongs to a different user");
+            }
             if (PaymentStatus.SUCCESS.equals(existingPayment.getPaymentStatus())) {
                 log.info("Idempotent return: payment {} already succeeded for survey {}",
                         existingPayment.getPaymentId(), surveyId);
@@ -82,6 +86,9 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         // Validate survey exists
         EmployeeFarmerSurvey survey = surveyRepo.findById(surveyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Survey not found with ID: " + surveyId));
+        if (!isCurrentUserAdmin() && !survey.getUser().getUserId().equals(currentUserId)) {
+            throw new AccessDeniedException("You are not allowed to initiate payment for this survey");
+        }
 
         // Check if already paid
         Optional<FarmerPayment> successfulPayment =
@@ -180,11 +187,14 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
             return mapToResponseDTO(payment, null);
         }
 
+        boolean amountMismatchDetected = false;
+
         // Amount verification
         if (callbackAmount != null) {
             try {
                 BigDecimal returnedAmount = new BigDecimal(callbackAmount);
                 if (payment.getAmount().compareTo(returnedAmount) != 0) {
+                    amountMismatchDetected = true;
                     auditService.logFraudEvent("FARMER", payment.getPaymentId(), sanitizedOrderId,
                             payment.getUser().getUserId(), clientIp,
                             "Amount mismatch: expected=" + payment.getAmount() + ", received=" + returnedAmount);
@@ -199,7 +209,7 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         String oldStatus = payment.getPaymentStatus().name();
 
         try {
-            if ("Success".equalsIgnoreCase(orderStatus)) {
+            if ("Success".equalsIgnoreCase(orderStatus) && !amountMismatchDetected) {
                 payment.setPaymentStatus(PaymentStatus.SUCCESS);
             } else {
                 payment.setPaymentStatus(PaymentStatus.FAILED);
@@ -240,23 +250,32 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public FarmerPaymentResponseDTO getPaymentById(Long paymentId) {
         FarmerPayment payment = farmerPaymentRepo.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with ID: " + paymentId));
+        validatePaymentAccess(payment);
         return mapToResponseDTO(payment, null);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Page<FarmerPaymentResponseDTO> getPaymentsBySurveyId(Long surveyId, Pageable pageable) {
+        EmployeeFarmerSurvey survey = surveyRepo.findById(surveyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Survey not found with ID: " + surveyId));
+        if (!isCurrentUserAdmin() && !survey.getUser().getUserId().equals(getCurrentUserId())) {
+            throw new AccessDeniedException("You are not allowed to access payments for this survey");
+        }
         return farmerPaymentRepo.findBySurvey_SurveyIdOrderByCreatedAtDesc(surveyId, pageable)
                 .map(p -> mapToResponseDTO(p, null));
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Page<FarmerPaymentResponseDTO> getPaymentsByUserId(Long userId, Pageable pageable) {
+        if (!isCurrentUserAdmin() && !userId.equals(getCurrentUserId())) {
+            throw new AccessDeniedException("You are not allowed to access payments for this user");
+        }
         return farmerPaymentRepo.findByUser_UserIdOrderByCreatedAtDesc(userId, pageable)
                 .map(p -> mapToResponseDTO(p, null));
     }
@@ -279,11 +298,12 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         }
     }
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public FarmerPaymentResponseDTO getPaymentByOrderId(String orderId) {
         String sanitizedOrderId = PaymentInputSanitizer.sanitizeOrderId(orderId);
         FarmerPayment payment = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with order ID: " + sanitizedOrderId));
+        validatePaymentAccess(payment);
         return mapToResponseDTO(payment, null);
     }
 
@@ -322,13 +342,39 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         if (auth != null && auth.getPrincipal() instanceof UserDetailsCustom userDetails) {
             return userDetails.getUserId();
         }
-        throw new IllegalStateException("No authenticated user found");
+        throw new AccessDeniedException("Authenticated user is required");
+    }
+
+    private boolean isCurrentUserAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) {
+            return false;
+        }
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+    }
+
+    private void validatePaymentAccess(FarmerPayment payment) {
+        Long currentUserId = getCurrentUserId();
+        if (!isCurrentUserAdmin() && !payment.getUser().getUserId().equals(currentUserId)) {
+            throw new AccessDeniedException("You are not allowed to access this payment");
+        }
     }
 
     private FarmerPaymentResponseDTO mapToResponseDTO(FarmerPayment payment, String paymentFormHtml) {
+        if (payment.getPaymentPublicId() == null || payment.getSurvey().getSurveyPublicId() == null) {
+            if (payment.getPaymentPublicId() == null) {
+                payment.setPaymentPublicId("pay_" + UUID.randomUUID().toString().replace("-", ""));
+            }
+            if (payment.getSurvey().getSurveyPublicId() == null) {
+                payment.getSurvey().setSurveyPublicId("sur_" + UUID.randomUUID().toString().replace("-", ""));
+            }
+            farmerPaymentRepo.save(payment);
+        }
+
         return FarmerPaymentResponseDTO.builder()
-                .paymentId(payment.getPaymentId())
-                .surveyId(payment.getSurvey().getSurveyId())
+                .paymentId(payment.getPaymentPublicId())
+                .surveyId(payment.getSurvey().getSurveyPublicId())
                 .farmerName(payment.getSurvey().getFarmerName())
                 .userId(payment.getUser().getUserId())
                 .amount(payment.getAmount())

@@ -203,10 +203,11 @@ public class AppConfig {
                 .requestMatchers("/api/v1/product-photo/**").permitAll()
                 .requestMatchers("/api/v1/employees/**").permitAll()
                 .requestMatchers("/api/v1/emp-documents").permitAll()
+                .requestMatchers("/api/v1/farmer-payment/**").authenticated()
+                .requestMatchers("/api/customer/orders/**").authenticated()
 
                 // Catch-all for remaining /api/v1/** endpoints
                 .requestMatchers("/api/v1/**").permitAll()
-                .requestMatchers("/api/customer/orders/**").permitAll()
                 .requestMatchers("/api/payment/product/**").permitAll()
                 .requestMatchers("/api/payment/farmer/**").permitAll()
 

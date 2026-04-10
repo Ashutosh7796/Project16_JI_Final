@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 @Builder
 public class FarmerPaymentResponseDTO {
 
-    private Long paymentId;
-    private Long surveyId;
+    private String paymentId;
+    private String surveyId;
     private String farmerName;
     private Long userId;
     private BigDecimal amount;

@@ -72,25 +72,9 @@ public class CcAvenuePaymentService {
 
         String plainText = data.toString();
 
-        log.error("CCAvenue PLAIN TEXT request: {}", plainText);
-
         String encrypted = CcAvenueUtil.encrypt(plainText, workingKey);
-
-        log.error("CCAvenue ENCRYPTED request (encRequest): {}", encrypted);
-        log.error("CCAvenue access_code: {}", accessCode);
-        log.error("CCAvenue payment URL: {}", config.getPaymentUrl());
-
-        try {
-            String decrypted = CcAvenueUtil.decrypt(encrypted, workingKey);
-            log.error("CCAvenue DECRYPT VERIFICATION: {}", decrypted);
-            if (!plainText.equals(decrypted)) {
-                log.error("CCAvenue DECRYPT MISMATCH! Original length={}, Decrypted length={}", plainText.length(), decrypted.length());
-            } else {
-                log.error("CCAvenue DECRYPT MATCH OK - encryption round-trip verified");
-            }
-        } catch (Exception e) {
-            log.error("CCAvenue DECRYPT VERIFICATION FAILED: {}", e.getMessage());
-        }
+        log.debug("CCAvenue payment request prepared for orderId={}, amount={}",
+                sanitizeOrderId(request.getOrderId()), amount);
 
         return "<html><body onload='document.forms[0].submit()'>"
                 + "<form method='post' action='" + config.getPaymentUrl() + "'>"

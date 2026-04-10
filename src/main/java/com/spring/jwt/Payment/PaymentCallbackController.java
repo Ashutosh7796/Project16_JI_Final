@@ -1,6 +1,7 @@
 package com.spring.jwt.Payment;
 
 import com.spring.jwt.FarmerPayment.FarmerPaymentService;
+import com.spring.jwt.FarmerPayment.FarmerPaymentResponseDTO;
 import com.spring.jwt.ProductBuyPending.PaymentVerifyDto;
 import com.spring.jwt.ProductBuyPending.ProductBuyService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,6 +63,8 @@ public class PaymentCallbackController {
                     verifyDto.setPendingOrderId(pendingOrderId);
                     verifyDto.setPaymentId(trackingId);
                     verifyDto.setPaymentMode(mapCcAvenuePaymentMode(paymentMode));
+                    verifyDto.setOrderId(orderId);
+                    verifyDto.setAmount(params.get("amount"));
                     productBuyService.confirmPayment(verifyDto);
 
                     auditService.logEvent("PRODUCT", pendingOrderId, orderId,
@@ -136,8 +139,8 @@ public class PaymentCallbackController {
                 "tracking_id=" + trackingId + ", bank_ref_no=" + bankRefNo + ", amount=" + amount);
 
         try {
-            farmerPaymentService.handleCallback(params, clientIp);
-            if ("Success".equalsIgnoreCase(orderStatus)) {
+            FarmerPaymentResponseDTO callbackResult = farmerPaymentService.handleCallback(params, clientIp);
+            if ("SUCCESS".equalsIgnoreCase(callbackResult.getPaymentStatus())) {
                 response.sendRedirect(frontendUrl + "/farmer-payment/success?order=" + orderId);
             } else {
                 response.sendRedirect(frontendUrl + "/farmer-payment/failed?order=" + orderId);

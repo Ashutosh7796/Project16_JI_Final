@@ -8,6 +8,7 @@ import org.springframework.data.annotation.CreatedDate;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @Entity
@@ -24,6 +25,9 @@ public class EmployeeFarmerSurvey {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long surveyId;
+
+    @Column(name = "survey_public_id", unique = true, updatable = false, length = 40)
+    private String surveyPublicId;
 
     @Column(unique = true,nullable = false)
     private String formNumber;
@@ -91,4 +95,11 @@ public class EmployeeFarmerSurvey {
     @Column(nullable = false, updatable = false)
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    @PrePersist
+    private void assignPublicIdIfMissing() {
+        if (this.surveyPublicId == null || this.surveyPublicId.isBlank()) {
+            this.surveyPublicId = "sur_" + UUID.randomUUID().toString().replace("-", "");
+        }
+    }
 }

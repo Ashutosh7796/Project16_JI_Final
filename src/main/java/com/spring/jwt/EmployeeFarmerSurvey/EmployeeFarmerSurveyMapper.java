@@ -54,7 +54,7 @@ public class EmployeeFarmerSurveyMapper {
 
         EmployeeFarmerSurveyDTO dto = new EmployeeFarmerSurveyDTO();
 
-        dto.setSurveyId(survey.getSurveyId());
+        dto.setSurveyId(survey.getSurveyPublicId());
         dto.setFormNumber(survey.getFormNumber());
         dto.setFarmerName(survey.getFarmerName());
         dto.setFarmerMobile(survey.getFarmerMobile());
