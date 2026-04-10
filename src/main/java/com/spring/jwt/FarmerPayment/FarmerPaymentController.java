@@ -1,5 +1,6 @@
 package com.spring.jwt.FarmerPayment;
 
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class FarmerPaymentController {
 
     private final FarmerPaymentService farmerPaymentService;
+    private final SurveyIdResolver surveyIdResolver;
 
     @PostMapping("/initiate")
     public ResponseEntity<FarmerPaymentResponseDTO> initiatePayment(
@@ -45,9 +47,10 @@ public class FarmerPaymentController {
 
     @GetMapping("/survey/{surveyId}")
     public ResponseEntity<Page<FarmerPaymentResponseDTO>> getPaymentsBySurvey(
-            @PathVariable Long surveyId,
+            @PathVariable String surveyId,
             @PageableDefault(size = 10) Pageable pageable) {
-        return ResponseEntity.ok(farmerPaymentService.getPaymentsBySurveyId(surveyId, pageable));
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
+        return ResponseEntity.ok(farmerPaymentService.getPaymentsBySurveyId(internalSurveyId, pageable));
     }
 
     @GetMapping("/user/{userId}")

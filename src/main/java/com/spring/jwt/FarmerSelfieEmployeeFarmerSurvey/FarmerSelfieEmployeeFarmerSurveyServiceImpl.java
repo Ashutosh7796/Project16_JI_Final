@@ -5,7 +5,6 @@ import com.spring.jwt.Enums.FormStatus;
 import com.spring.jwt.Enums.PhotoType;
 import com.spring.jwt.entity.EmployeeFarmerSurvey;
 import com.spring.jwt.entity.FarmerSelfieEmployeeFarmerSurvey;
-import com.spring.jwt.exception.DocumentAlreadyExistsException;
 import com.spring.jwt.exception.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Comparator;
 
 /**
  * Service implementation responsible for managing Farmer Selfie operations
@@ -80,13 +80,10 @@ public class FarmerSelfieEmployeeFarmerSurveyServiceImpl
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Survey not found with ID: " + surveyId));
 
-        if (selfieRepository.existsBySurvey_SurveyIdAndPhotoType(surveyId, photoType)) {
-            throw new DocumentAlreadyExistsException(
-                    "Selfie already uploaded for survey ID " +
-                            surveyId + " with photoType " + photoType);
-        }
+        FarmerSelfieEmployeeFarmerSurvey selfie = selfieRepository
+                .findBySurvey_SurveyIdAndPhotoType(surveyId, photoType)
+                .orElseGet(FarmerSelfieEmployeeFarmerSurvey::new);
 
-        FarmerSelfieEmployeeFarmerSurvey selfie = new FarmerSelfieEmployeeFarmerSurvey();
         selfie.setSurvey(survey);
         selfie.setPhotoType(photoType);
         selfie.setImageUrl(encodeBase64(file));
@@ -97,7 +94,7 @@ public class FarmerSelfieEmployeeFarmerSurveyServiceImpl
         survey.setFormStatus(FormStatus.ACTIVE);
         surveyRepository.save(survey);
 
-        log.info("Selfie uploaded for surveyId={}, photoType={}", surveyId, photoType);
+        log.info("Selfie/signature upserted for surveyId={}, photoType={}", surveyId, photoType);
 
         return mapToResponseUpload(saved);
     }
@@ -150,8 +147,15 @@ public class FarmerSelfieEmployeeFarmerSurveyServiceImpl
      */
     @Override
     public FarmerSelfieResponseDTO getSelfieBySurveyId(Long surveyId) {
-
-      return null;
+        validateSurveyId(surveyId);
+        return selfieRepository.findBySurvey_SurveyId(surveyId).stream()
+                .sorted(Comparator.comparing(
+                        s -> s.getPhotoType() == PhotoType.SELFIE ? 0 : 1
+                ))
+                .findFirst()
+                .map(this::mapToResponse)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No selfie/signature found for survey ID: " + surveyId));
     }
 
     @Override

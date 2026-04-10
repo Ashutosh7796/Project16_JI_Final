@@ -222,12 +222,6 @@ public class EmployeeFarmerSurveyServiceImpl implements EmployeeFarmerSurveyServ
 
         Page<EmployeeFarmerSurvey> page =
                 employeeFarmerSurveyRepository.findByFormStatus(status, pageable);
-
-        if (page.isEmpty()) {
-            throw new ResourceNotFoundException(
-                    "No surveys found with status: " + status);
-        }
-
         return page.map(surveyMapper::toDto);
     }
 
@@ -240,13 +234,6 @@ public class EmployeeFarmerSurveyServiceImpl implements EmployeeFarmerSurveyServ
         Page<EmployeeFarmerSurvey> page =
                 employeeFarmerSurveyRepository.findByFormStatusAndUser_UserId(
                         status, userId, pageable);
-
-        if (page.isEmpty()) {
-            throw new ResourceNotFoundException(
-                    "No surveys found for userId "
-                            + userId + " with status: " + status);
-        }
-
         return page.map(surveyMapper::toDto);
     }
 

@@ -1,6 +1,7 @@
 package com.spring.jwt.FarmerSelfieEmployeeFarmerSurvey;
 
 import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
 import com.spring.jwt.Enums.PhotoType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,7 @@ public class FarmerSelfieEmployeeFarmerSurveyController {
      * related to farmer selfie operations.
      */
     private final FarmerSelfieEmployeeFarmerSurveyService selfieService;
+    private final SurveyIdResolver surveyIdResolver;
 
 
     /**
@@ -48,13 +50,14 @@ public class FarmerSelfieEmployeeFarmerSurveyController {
     @PostMapping("/upload")
     public ResponseEntity<BaseResponseDTO1<FarmerSelfieResponseUploadDTO>> uploadSelfie(
 
-            @RequestParam Long surveyId,
+            @RequestParam String surveyId,
             @RequestParam PhotoType photoType,
             @RequestParam MultipartFile file) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
         // Delegate business logic to service layer
         FarmerSelfieResponseUploadDTO response =
-                selfieService.uploadSelfie(surveyId, photoType, file);
+                selfieService.uploadSelfie(internalSurveyId, photoType, file);
 
         // Return CREATED (201) status with standardized response wrapper
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -146,11 +149,12 @@ public class FarmerSelfieEmployeeFarmerSurveyController {
     public ResponseEntity<BaseResponseDTO1<FarmerSelfieResponseDTO>> getBySurveyId(
 
             // Survey identifier
-            @PathVariable Long surveyId) {
+            @PathVariable String surveyId) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
         // Retrieve selfie associated with the survey
         FarmerSelfieResponseDTO response =
-                selfieService.getSelfieBySurveyId(surveyId);
+                selfieService.getSelfieBySurveyId(internalSurveyId);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(
@@ -177,14 +181,15 @@ public class FarmerSelfieEmployeeFarmerSurveyController {
     public ResponseEntity<BaseResponseDTO1<FarmerSelfieResponseDTO>> getBySurveyIdAndPhotoType(
 
             // Survey identifier
-            @PathVariable Long surveyId,
+            @PathVariable String surveyId,
 
             // Enum representing selfie type
             @PathVariable PhotoType photoType) {
 
         // Fetch selfie based on survey + photoType
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
         FarmerSelfieResponseDTO response =
-                selfieService.getSelfieBySurveyIdAndPhotoType(surveyId, photoType);
+                selfieService.getSelfieBySurveyIdAndPhotoType(internalSurveyId, photoType);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(

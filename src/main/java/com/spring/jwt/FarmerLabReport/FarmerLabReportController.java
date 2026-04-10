@@ -1,6 +1,7 @@
 package com.spring.jwt.FarmerLabReport;
 
 import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -33,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class FarmerLabReportController {
 
     private final FarmerLabReportService labReportService;
+    private final SurveyIdResolver surveyIdResolver;
 
     /* ===================== UPLOAD ===================== */
 
@@ -41,11 +43,12 @@ public class FarmerLabReportController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public ResponseEntity<BaseResponseDTO1<FarmerLabReportUploadDTO>> upload(
-            @PathVariable Long surveyId,
+            @PathVariable String surveyId,
             @RequestParam MultipartFile file) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
         FarmerLabReportUploadDTO response =
-                labReportService.uploadLabReport(surveyId, file);
+                labReportService.uploadLabReport(internalSurveyId, file);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(
@@ -60,10 +63,11 @@ public class FarmerLabReportController {
 
     @GetMapping("/view/{surveyId}")
     public ResponseEntity<BaseResponseDTO1<FarmerLabReportViewDTO>> view(
-            @PathVariable Long surveyId) {
+            @PathVariable String surveyId) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
         FarmerLabReportViewDTO response =
-                labReportService.viewLabReport(surveyId);
+                labReportService.viewLabReport(internalSurveyId);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(
@@ -98,11 +102,12 @@ public class FarmerLabReportController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public ResponseEntity<BaseResponseDTO1<FarmerLabReportUploadDTO>> update(
-            @PathVariable Long surveyId,
+            @PathVariable String surveyId,
             @RequestParam MultipartFile file) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
         FarmerLabReportUploadDTO response =
-                labReportService.updateLabReportBySurveyId(surveyId, file);
+                labReportService.updateLabReportBySurveyId(internalSurveyId, file);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(
@@ -117,9 +122,10 @@ public class FarmerLabReportController {
 
     @DeleteMapping("/delete/{surveyId}")
     public ResponseEntity<BaseResponseDTO1<Void>> delete(
-            @PathVariable Long surveyId) {
+            @PathVariable String surveyId) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
-        labReportService.deleteLabReportBySurveyId(surveyId);
+        labReportService.deleteLabReportBySurveyId(internalSurveyId);
 
         return ResponseEntity.ok(
                 new BaseResponseDTO1<>(
@@ -136,9 +142,10 @@ public class FarmerLabReportController {
             value = "/download/{surveyId}",
             produces = MediaType.APPLICATION_PDF_VALUE
     )
-    public ResponseEntity<byte[]> download(@PathVariable Long surveyId) {
+    public ResponseEntity<byte[]> download(@PathVariable String surveyId) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
 
-        byte[] pdf = labReportService.downloadLabReport(surveyId);
+        byte[] pdf = labReportService.downloadLabReport(internalSurveyId);
 
         return ResponseEntity.ok()
                 .header(

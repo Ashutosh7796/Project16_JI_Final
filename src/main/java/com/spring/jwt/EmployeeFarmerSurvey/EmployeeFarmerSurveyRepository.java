@@ -12,6 +12,7 @@ public interface EmployeeFarmerSurveyRepository extends JpaRepository<EmployeeFa
 
 
     Optional<EmployeeFarmerSurvey> findByFormNumber(String formNumber);
+    Optional<EmployeeFarmerSurvey> findBySurveyPublicId(String surveyPublicId);
 
     boolean existsByFormNumber(String formNumber);
 

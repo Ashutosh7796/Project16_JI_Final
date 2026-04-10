@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.*;
 public class EmployeeFarmerSurveyController {
 
     private final EmployeeFarmerSurveyService employeeFarmerSurveyService;
+    private final SurveyIdResolver surveyIdResolver;
 
     /**
      * Create a new Employee–Farmer Survey.
@@ -66,9 +67,10 @@ public class EmployeeFarmerSurveyController {
      */
     @GetMapping("/{surveyId}")
     public ResponseEntity<BaseResponseDTO1<EmployeeFarmerSurveyDTO>> getSurveyById(
-            @PathVariable Long surveyId) {
+            @PathVariable String surveyId) {
 
-        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.getSurveyById(surveyId);
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
+        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.getSurveyById(internalSurveyId);
 
         return ResponseEntity.ok(new BaseResponseDTO1<>("200", "Survey fetched successfully", result)
         );
@@ -104,10 +106,11 @@ public class EmployeeFarmerSurveyController {
      */
     @PatchMapping("/{surveyId}")
     public ResponseEntity<BaseResponseDTO1<EmployeeFarmerSurveyDTO>> updateSurvey(
-            @PathVariable Long surveyId,
+            @PathVariable String surveyId,
             @RequestBody EmployeeFarmerSurveyDTO dto) {
 
-        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.updateSurvey(surveyId, dto);
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
+        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.updateSurvey(internalSurveyId, dto);
 
         return ResponseEntity.ok(new BaseResponseDTO1<>("200", "Survey updated successfully", result));
     }
@@ -122,10 +125,11 @@ public class EmployeeFarmerSurveyController {
      */
     @DeleteMapping("/{surveyId}")
     public ResponseEntity<BaseResponseDTO1<Void>> deleteSurvey(
-            @PathVariable Long surveyId) {
+            @PathVariable String surveyId) {
+        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);
         
         log.debug("Delete request received for survey ID: {}", surveyId);
-        employeeFarmerSurveyService.deleteSurvey(surveyId);
+        employeeFarmerSurveyService.deleteSurvey(internalSurveyId);
         log.info("Survey deleted successfully: {}", surveyId);
         
         return ResponseEntity.ok(new BaseResponseDTO1<>("200", "Survey deleted successfully", null));

@@ -3,6 +3,7 @@ package com.spring.jwt.FarmerPayment;
 import com.spring.jwt.Enums.PaymentStatus;
 import com.spring.jwt.Payment.*;
 import com.spring.jwt.EmployeeFarmerSurvey.EmployeeFarmerSurveyRepository;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
 import com.spring.jwt.entity.EmployeeFarmerSurvey;
 import com.spring.jwt.entity.FarmerPayment;
 import com.spring.jwt.entity.User;
@@ -34,6 +35,7 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
 
     private final FarmerPaymentRepository farmerPaymentRepo;
     private final EmployeeFarmerSurveyRepository surveyRepo;
+    private final SurveyIdResolver surveyIdResolver;
     private final UserRepository userRepo;
     private final CcAvenuePaymentService ccAvenuePaymentService;
     private final CcAvenueConfig ccAvenueConfig;
@@ -55,7 +57,7 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
     @Transactional
     public FarmerPaymentResponseDTO initiatePayment(FarmerPaymentInitiateDTO dto, String idempotencyKey,
                                                      String clientIp, String userAgent) {
-        Long surveyId = dto.getSurveyId();
+        Long surveyId = surveyIdResolver.resolveToInternalId(dto.getSurveyId());
         Long currentUserId = getCurrentUserId();
 
         String resolvedKey = (idempotencyKey == null || idempotencyKey.isBlank())
