@@ -37,7 +37,7 @@ public class PaymentAuditService {
 
             auditLogRepository.save(auditLog);
 
-            log.debug("Payment audit: type={}, paymentId={}, action={}, status={}->{}",
+            log.info("Payment audit: type={}, paymentId={}, action={}, status={}->{}",
                     paymentType, paymentId, actionType, oldStatus, newStatus);
         } catch (Exception e) {
             log.error("Failed to write payment audit log: type={}, paymentId={}, action={}",
