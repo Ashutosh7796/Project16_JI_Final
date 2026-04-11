@@ -11,9 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -24,7 +28,7 @@ import java.util.List;
 @RequestMapping("/api/v1/admin/attendance")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
 @Tag(name = "Admin Attendance", description = "Admin endpoints for employee attendance management")
 public class AdminAttendanceController {
 
@@ -59,7 +63,11 @@ public class AdminAttendanceController {
             @RequestParam int year) {
         
         log.info("Admin fetching attendance for employee: {} - {}/{}", userId, year, month);
-        
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        authentication.getAuthorities().forEach(a ->
+                System.err.println(a.getAuthority()));
+
         MonthlyAttendanceResponse response = attendanceService.getMonthlyAttendance(userId, year, month);
         
         if (response == null) {
@@ -82,7 +90,11 @@ public class AdminAttendanceController {
             @RequestParam LocalDate endDate) {
         
         log.info("Admin fetching attendance for employee: {} from {} to {}", userId, startDate, endDate);
-        
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        authentication.getAuthorities().forEach(a ->
+                System.err.println(a.getAuthority()));
+
         List<AttendanceResponse> response = attendanceService.getAttendanceByDateRange(userId, startDate, endDate);
         
         return ResponseEntity.ok(ApiResponse.success("Employee attendance records retrieved successfully", response));
@@ -97,7 +109,10 @@ public class AdminAttendanceController {
     public ResponseEntity<ApiResponse<AttendanceResponse>> getEmployeeAttendanceByDate(
             @PathVariable Long userId,
             @PathVariable LocalDate date) {
-        
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        authentication.getAuthorities().forEach(a ->
+                System.err.println(a.getAuthority()));
         log.info("Admin fetching attendance for employee: {} on date: {}", userId, date);
         
         AttendanceResponse response = attendanceService.getAttendanceByDate(userId, date);

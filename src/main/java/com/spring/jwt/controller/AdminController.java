@@ -43,7 +43,7 @@ public class AdminController {
     }
 
     @PostMapping("/employees")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<BaseResponseDTO> createEmployee(@RequestBody UserDTO userDTO) {
         if (userRepository.findByEmail(userDTO.getEmail()) != null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -83,7 +83,7 @@ public class AdminController {
     }
 
     @GetMapping("/employees")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<List<UserDTO>> getAllEmployees() {
 
         List<User> users = userRepository.findAll();
@@ -97,7 +97,7 @@ public class AdminController {
     }
 
     @PutMapping("/employees/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<BaseResponseDTO> updateEmployee(@PathVariable Long userId, @RequestBody UserDTO userDTO) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
@@ -123,7 +123,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/employees/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<BaseResponseDTO> deactivateEmployee(@PathVariable Long userId) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {

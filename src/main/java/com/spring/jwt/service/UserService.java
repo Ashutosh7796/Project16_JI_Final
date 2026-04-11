@@ -1,33 +1,31 @@
 package com.spring.jwt.service;
 
-import com.spring.jwt.dto.ResetPassword;
 import com.spring.jwt.dto.UserDTO;
 import com.spring.jwt.dto.UserUpdateRequest;
-import com.spring.jwt.exception.UserNotFoundExceptions;
-import com.spring.jwt.utils.BaseResponseDTO;
-import com.spring.jwt.utils.ResponseDto;
 import org.springframework.data.domain.Page;
 
+/**
+ * User Service Interface
+ * 
+ * Handles user management operations
+ * 
+ * Note: Password reset moved to PasswordResetService
+ * Note: Registration moved to RegistrationService
+ */
 public interface UserService {
-    BaseResponseDTO registerAccount(UserDTO userDTO);
-
-    ResponseDto forgotPass(String email, String resetPasswordLink, String domain) throws UserNotFoundExceptions;
-
-    ResponseDto handleForgotPassword(String email, String domain);
-
-    void updateResetPassword(String token, String email);
-
-    boolean validateResetToken(String token);
-
-    boolean isSameAsOldPassword(String token, String newPassword);
-
-    ResponseDto updatePassword(String token, String newPassword);
-
-    ResponseDto processPasswordUpdate(ResetPassword resetRequest);
-
+    
+    /**
+     * Get all users with pagination
+     */
     Page<UserDTO> getAllUsers(int pageNo, int pageSize);
 
+    /**
+     * Get user by ID
+     */
     UserDTO getUserById(Long id);
 
+    /**
+     * Update user information
+     */
     UserDTO updateUser(Long id, UserUpdateRequest request);
 }

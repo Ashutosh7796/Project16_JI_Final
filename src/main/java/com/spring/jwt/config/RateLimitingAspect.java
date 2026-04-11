@@ -56,8 +56,8 @@ public class RateLimitingAspect {
         }
     }
 
-    @Around("execution(* com.spring.jwt.service.UserService.handleForgotPassword(..)) || " +
-            "execution(* com.spring.jwt.service.UserService.processPasswordUpdate(..))")
+    @Around("execution(* com.spring.jwt.service.PasswordResetService.initiatePasswordReset(..)) || " +
+            "execution(* com.spring.jwt.service.PasswordResetService.resetPassword(..))")
     public Object limitSensitiveOperations(ProceedingJoinPoint joinPoint) throws Throwable {
         if (!rateLimitingEnabled) {
             return joinPoint.proceed();

@@ -238,7 +238,7 @@ public class AttendanceController {
      * GET /api/v1/attendance/leave/requests?page=0&size=10
      */
     @GetMapping("/leave/requests")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Get all leave requests (Admin)", description = "Get all leave requests with pagination")
     public ResponseEntity<ApiResponse<Page<LeaveRequestResponse>>> getAllLeaveRequests(
             @RequestParam(defaultValue = "0") int page,
@@ -257,7 +257,7 @@ public class AttendanceController {
      * GET /api/v1/attendance/leave/requests/status/{status}?page=0&size=10
      */
     @GetMapping("/leave/requests/status/{status}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Get leave requests by status (Admin)", description = "Get leave requests filtered by status")
     public ResponseEntity<ApiResponse<Page<LeaveRequestResponse>>> getLeaveRequestsByStatus(
             @PathVariable String status,
@@ -297,7 +297,7 @@ public class AttendanceController {
      * PUT /api/v1/attendance/leave/approve/{leaveRequestId}
      */
     @PutMapping("/leave/approve/{leaveRequestId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Approve leave request (Admin)", description = "Approve a pending leave request")
     public ResponseEntity<ApiResponse<LeaveRequestResponse>> approveLeaveRequest(
             @PathVariable Long leaveRequestId,
@@ -316,7 +316,7 @@ public class AttendanceController {
      * PUT /api/v1/attendance/leave/reject/{leaveRequestId}
      */
     @PutMapping("/leave/reject/{leaveRequestId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     @Operation(summary = "Reject leave request (Admin)", description = "Reject a pending leave request")
     public ResponseEntity<ApiResponse<LeaveRequestResponse>> rejectLeaveRequest(
             @PathVariable Long leaveRequestId,

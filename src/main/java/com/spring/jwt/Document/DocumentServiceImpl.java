@@ -318,7 +318,7 @@ public class DocumentServiceImpl implements DocumentService {
             return false;
         }
         return auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_MANAGER"));
     }
 
     /**
@@ -329,7 +329,7 @@ public class DocumentServiceImpl implements DocumentService {
         log.info("Admin fetching all documents for user {}", targetUserId);
 
         if (!isCurrentUserAdmin()) {
-            throw new UnauthorizedAccessException("Only admins can access documents of other users");
+            throw new UnauthorizedAccessException("Only admins and managers can access documents of other users");
         }
 
         documentServiceHelper.validateUserId(targetUserId);

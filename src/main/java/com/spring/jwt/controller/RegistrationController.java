@@ -35,7 +35,6 @@ import org.springframework.web.bind.annotation.*;
 public class RegistrationController {
 
     private final SecureAuthenticationService secureAuthenticationService;
-    private final UserService userService;
 
 ///////////////////////////////////////////////////////////////////////////////////
 //
@@ -144,10 +143,11 @@ public class RegistrationController {
         )
     })
     @PostMapping("/authenticate")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> authenticateUser(
             @Valid @RequestBody SecureLoginRequest request,
             HttpServletRequest httpRequest) {
-        
+
         log.info("User authentication request received");
         BaseResponseDTO response = secureAuthenticationService.authenticateUser(request, httpRequest);
         return ResponseEntity.ok(response);
@@ -170,6 +170,7 @@ public class RegistrationController {
         )
     })
     @GetMapping("/account-status")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> checkAccountStatus(
             @RequestParam String email) {
         
@@ -231,6 +232,7 @@ public class RegistrationController {
         )
     })
     @PostMapping("/admin/validate-secret")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> validateAdminSecret(
             @RequestParam String secretKey) {
         
@@ -243,35 +245,5 @@ public class RegistrationController {
         return ResponseEntity.ok(response);
     }
 
-//    @Operation(
-//            summary = "Register a new user account",
-//            description = "Creates a new user account with the provided user details",
-//            tags = {"Authentication"}
-//    )
-//    @ApiResponses({
-//            @ApiResponse(
-//                    responseCode = "201",
-//                    description = "User account created successfully"
-//            ),
-//            @ApiResponse(
-//                    responseCode = "400",
-//                    description = "Invalid input or account already exists",
-//                    content = @Content(
-//                            schema = @Schema(implementation = ErrorResponseDto.class)
-//                    )
-//            ),
-//            @ApiResponse(
-//                    responseCode = "500",
-//                    description = "Internal server error",
-//                    content = @Content(
-//                            schema = @Schema(implementation = ErrorResponseDto.class)
-//                    )
-//            )
-//    })
-//    @PostMapping("/register")
-//    public ResponseEntity<BaseResponseDTO> registerUser(@Valid @RequestBody UserDTO userDTO) {
-//        BaseResponseDTO response = userService.registerAccount(userDTO);
-//        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-//    }
 
 }

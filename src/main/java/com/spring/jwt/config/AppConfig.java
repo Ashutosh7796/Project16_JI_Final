@@ -152,7 +152,6 @@ public class AppConfig {
                 .requestMatchers("/error").permitAll()
 
                 // Authentication endpoints
-                .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(jwtConfig.getUrl()).permitAll()
                 .requestMatchers(jwtConfig.getRefreshUrl()).permitAll()
                 .requestMatchers("/api/auth/v1/register/**").permitAll()
@@ -175,6 +174,14 @@ public class AppConfig {
 
                 // Admin dashboard stats — managers may view KPIs (must be before broader /api/v1/admin/**)
                 .requestMatchers("/api/v1/admin/users/dashboard/stats").hasAnyRole("ADMIN", "MANAGER")
+                
+                // Admin attendance endpoints - managers can view employee attendance
+                .requestMatchers("/api/v1/admin/attendance/**").hasAnyRole("ADMIN", "MANAGER")
+                
+                // Admin users endpoints - managers can view employee details
+                .requestMatchers("/api/v1/admin/users/employees/**").hasAnyRole("ADMIN", "MANAGER")
+
+                .requestMatchers("/api/v1/admin/employees/**").hasAnyRole("ADMIN", "MANAGER")
 
                 // Other admin endpoints
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
@@ -184,7 +191,7 @@ public class AppConfig {
 
                 // Documents endpoints - must come before general /api/v1/** rules
                 .requestMatchers("/api/v1/documents/uploadByUser").permitAll()
-                .requestMatchers("/api/v1/documents/**").authenticated()
+                .requestMatchers("/api/v1/documents/**").hasAnyRole("ADMIN", "MANAGER")
 
                 // Interests endpoints - must come before general /api/v1/** rules
                 .requestMatchers("/api/v1/interests/**").authenticated()

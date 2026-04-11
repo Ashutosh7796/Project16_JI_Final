@@ -122,7 +122,7 @@ public class DocumentSecurityServiceImpl implements DocumentSecurityService {
     }
 
     /**
-     * Checks if the currently authenticated user has the ADMIN role.
+     * Checks if the currently authenticated user has the ADMIN or MANAGER role.
      */
     private boolean isCurrentUserAdmin() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -130,7 +130,7 @@ public class DocumentSecurityServiceImpl implements DocumentSecurityService {
             return false;
         }
         return auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_MANAGER"));
     }
 
     @Override

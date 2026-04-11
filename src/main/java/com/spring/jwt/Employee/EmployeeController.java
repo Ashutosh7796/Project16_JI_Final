@@ -127,7 +127,7 @@ public class EmployeeController {
                     content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     })
     @GetMapping("/getAll/surv")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<PagedResponse<EmployeeByRoleResponse>> getSurveyors(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size

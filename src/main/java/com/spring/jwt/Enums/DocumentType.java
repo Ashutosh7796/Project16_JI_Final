@@ -1,5 +1,9 @@
 package com.spring.jwt.Enums;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.spring.jwt.config.DocumentTypeDeserializer;
+
+@JsonDeserialize(using = DocumentTypeDeserializer.class)
 public enum DocumentType {
     AADHAAR_CARD("Aadhaar Card"),
     PAN_CARD("PAN Card"),

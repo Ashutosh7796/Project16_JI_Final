@@ -62,8 +62,8 @@ public class DocumentController
         {
 
                 Long userId = SecurityUtil.getCurrentUserId();
-                log.info("Upload request: user={}, type={}, file={}, size={}KB",
-                                userId, documentType, file.getOriginalFilename(), file.getSize() / 1024);
+                log.info("Upload request: user={}, type={} (enum={}), file={}, size={}KB",
+                                userId, documentType, documentType.name(), file.getOriginalFilename(), file.getSize() / 1024);
 
                 DocumentResponseDTO response = documentService.uploadDocument(userId, file, documentType, description);
 
@@ -98,8 +98,8 @@ public class DocumentController
         {
 
 //                Long userId = SecurityUtil.getCurrentUserId();
-                log.info("Upload request: user={}, type={}, file={}, size={}KB",
-                        userId, documentType, file.getOriginalFilename(), file.getSize() / 1024);
+                log.info("Upload request: user={}, type={} (enum={}), file={}, size={}KB",
+                        userId, documentType, documentType.name(), file.getOriginalFilename(), file.getSize() / 1024);
 
                 DocumentResponseDTO response = documentService.uploadDocument(userId, file, documentType, description);
 
@@ -243,7 +243,6 @@ public class DocumentController
                 @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
         })
         @GetMapping("/user/{userId}/all")
-        @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
         public ResponseEntity<ApiResponse<List<DocumentResponseDTO>>> getAllDocumentsByUserIdForAdmin(
                 @Parameter(description = "Target user ID", required = true)
                 @PathVariable Long userId)

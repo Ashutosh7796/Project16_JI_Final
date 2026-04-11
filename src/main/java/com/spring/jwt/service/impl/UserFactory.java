@@ -75,6 +75,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -109,18 +110,22 @@ public class UserFactory {
 
         /* ===================== ROLE LOGIC ===================== */
 
-//        String roleName = (request.getRole() == null || request.getRole().isBlank())
-//                ? "USER"
-//                : request.getRole().toUpperCase();
-        if (request.getRole() == null) {
-            throw new IllegalArgumentException("Role is required");
-        }
-
-        String roleName = request.getRole().toUpperCase();
-
-        // 🚫 block admin here
-        if ("ADMIN".equals(roleName)) {
-            throw new AccessDeniedException("The selected role is not available for assignment.");
+        // Default to USER role for public registration
+        String roleName = "USER";
+        
+        // If role is explicitly provided, validate it
+        if (request.getRole() != null && !request.getRole().isBlank()) {
+            roleName = request.getRole().toUpperCase();
+            
+            // Block ADMIN role - requires special registration endpoint
+            if ("ADMIN".equals(roleName)) {
+                throw new AccessDeniedException("ADMIN role cannot be assigned through public registration");
+            }
+            
+            // MANAGER role requires ADMIN authorization
+            if ("MANAGER".equals(roleName)) {
+                validateManagerRegistration();
+            }
         }
 
         Role role = roleRepository.findByName(roleName);
@@ -134,11 +139,35 @@ public class UserFactory {
 
         /* ===================== CREATE EMPLOYEE FOR STAFF ===================== */
 
-        if ("SURVEYOR".equals(roleName) || "LAB_TECHNICIAN".equals(roleName)|| "MANAGER".equals(roleName)) {
+        if ("SURVEYOR".equals(roleName) || "LAB_TECHNICIAN".equals(roleName)) {
+            createEmployee(user, request);
+        }
+        
+        // MANAGER role requires ADMIN authorization (already validated above)
+        if ("MANAGER".equals(roleName)) {
             createEmployee(user, request);
         }
 
         return user;
+    }
+
+    /**
+     * Validates that only ADMIN users can register MANAGER role
+     */
+    private void validateManagerRegistration() {
+        Authentication authentication = 
+            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required to register MANAGER role");
+        }
+        
+        boolean isAdmin = authentication.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        
+        if (!isAdmin) {
+            throw new AccessDeniedException("Only ADMIN users can register MANAGER role");
+        }
     }
 
     /* ===================== ADMIN REGISTRATION ===================== */
