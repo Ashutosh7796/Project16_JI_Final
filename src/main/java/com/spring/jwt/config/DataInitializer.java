@@ -43,6 +43,7 @@ public class DataInitializer {
         createRoleIfNotFound("SURVEYOR");
         createRoleIfNotFound("LAB_TECHNICIAN");
         createRoleIfNotFound("USER");
+        createRoleIfNotFound("MANAGER");
     }
 
     private void createRoleIfNotFound(String roleName) {

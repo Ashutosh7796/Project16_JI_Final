@@ -3,6 +3,7 @@ package com.spring.jwt.Payment;
 import com.spring.jwt.entity.PaymentCallbackQueue;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ public class PaymentCallbackQueueService {
 
     private final PaymentCallbackQueueRepository callbackQueueRepository;
     private final PaymentAuditService auditService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Long enqueue(String paymentType, String callbackType, String encResp, String clientIp) {
@@ -43,6 +45,10 @@ public class PaymentCallbackQueueService {
         );
         log.info("Queued payment callback: queueId={}, paymentType={}, callbackType={}",
                 saved.getId(), paymentType, callbackType);
+        
+        // Publish event for immediate processing (event-driven approach)
+        eventPublisher.publishEvent(new PaymentCallbackEvent(this, saved.getId(), paymentType, callbackType));
+        
         return saved.getId();
     }
 

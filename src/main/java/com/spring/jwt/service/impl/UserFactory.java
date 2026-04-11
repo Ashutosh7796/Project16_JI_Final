@@ -95,7 +95,7 @@ public class UserFactory {
     public User createUser(SecureUserRegistrationRequest request,
                            HttpServletRequest httpRequest) {
 
-        // 🔐 BUILD USER
+        // BUILD USER
         User user = buildUser(
                 request.getEmail(),
                 request.getPassword(),
@@ -120,7 +120,7 @@ public class UserFactory {
 
         // 🚫 block admin here
         if ("ADMIN".equals(roleName)) {
-            throw new AccessDeniedException("ADMIN role cannot be assigned via this API");
+            throw new AccessDeniedException("The selected role is not available for assignment.");
         }
 
         Role role = roleRepository.findByName(roleName);
@@ -134,7 +134,7 @@ public class UserFactory {
 
         /* ===================== CREATE EMPLOYEE FOR STAFF ===================== */
 
-        if ("SURVEYOR".equals(roleName) || "LAB_TECHNICIAN".equals(roleName)) {
+        if ("SURVEYOR".equals(roleName) || "LAB_TECHNICIAN".equals(roleName)|| "MANAGER".equals(roleName)) {
             createEmployee(user, request);
         }
 
