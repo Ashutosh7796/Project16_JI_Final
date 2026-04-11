@@ -9,12 +9,12 @@ import com.spring.jwt.utils.HelperUtils;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.security.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,15 +28,27 @@ import java.util.Arrays;
 import java.util.Optional;
 
 @Slf4j
-@RequiredArgsConstructor
 public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtConfig jwtConfig;
     private final JwtService jwtService;
     private final UserDetailsServiceCustom userDetailsService;
     private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
 
     private static final String ACCESS_TOKEN_COOKIE_NAME = "access_token";
+
+    public JwtTokenAuthenticationFilter(JwtConfig jwtConfig,
+                                          JwtService jwtService,
+                                          UserDetailsServiceCustom userDetailsService,
+                                          ActiveSessionService activeSessionService,
+                                          boolean jwtDiagnosticLogging) {
+        this.jwtConfig = jwtConfig;
+        this.jwtService = jwtService;
+        this.userDetailsService = userDetailsService;
+        this.activeSessionService = activeSessionService;
+        this.jwtDiagnosticLogging = jwtDiagnosticLogging;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -56,11 +68,28 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        if (jwtDiagnosticLogging) {
+            log.info("[jwt-diag] bearer_present method={} servletPath={} requestURI={} authHeaderLen={} hasAccessCookie={}",
+                    request.getMethod(),
+                    request.getServletPath(),
+                    safeUriWithoutQuery(request),
+                    authHeader != null ? authHeader.length() : 0,
+                    hasAccessTokenCookie(request));
+        }
+
         String token = getJwtFromRequest(request);
+        if (!StringUtils.hasText(token)) {
+            logAuthFailure(request, null, "EMPTY_TOKEN_AFTER_BEARER",
+                    "Authorization header had Bearer prefix but token body empty/whitespace only");
+            handleInvalidToken(response, "Missing access token after Bearer prefix. Send Authorization: Bearer <token>.");
+            return;
+        }
 
         try {
             if (!jwtService.isValidToken(token)) {
-                handleInvalidToken(response, getSpecificInvalidReason(token, request));
+                String reason = getSpecificInvalidReason(token, request);
+                logAuthFailure(request, token, "IS_VALID_TOKEN_FALSE", reason);
+                handleInvalidToken(response, reason);
                 return;
             }
 
@@ -69,7 +98,17 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             Integer userId = claims.get("userId", Integer.class);
             String tokenId = claims.getId();
 
+            if (jwtDiagnosticLogging) {
+                log.info("[jwt-diag] token_ok subject={} userId={} jtiPrefix={} path={}",
+                        maskUser(username),
+                        userId,
+                        jtiPrefix(tokenId),
+                        safeUriWithoutQuery(request));
+            }
+
             if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {
+                logAuthFailure(request, token, "ACTIVE_SESSION_MISMATCH",
+                        "access jti not current for subject=" + maskUser(username));
                 handleInvalidToken(response,
                         "You are logged in on another device. Please logout from the other device to continue");
                 return;
@@ -91,16 +130,77 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
 
         } catch (ExpiredJwtException ex) {
             SecurityContextHolder.clearContext();
+            logAuthFailure(request, token, "EXPIRED_JWT_EXCEPTION", ex.getMessage());
             handleExpiredToken(response);
 
         } catch (JwtException ex) {
             SecurityContextHolder.clearContext();
+            logAuthFailure(request, token, "JWT_EXCEPTION", ex.getClass().getSimpleName() + ": " + ex.getMessage());
             handleInvalidToken(response, "Invalid JWT token");
 
         } catch (Exception ex) {
             SecurityContextHolder.clearContext();
+            logAuthFailure(request, token, "UNEXPECTED", ex.getClass().getSimpleName() + ": " + ex.getMessage());
             handleAuthenticationException(response, ex);
         }
+    }
+
+    private static String safeUriWithoutQuery(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        if (uri == null) {
+            return "";
+        }
+        int q = uri.indexOf('?');
+        return q > 0 ? uri.substring(0, q) : uri;
+    }
+
+    private static boolean hasAccessTokenCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return false;
+        }
+        return Arrays.stream(cookies).anyMatch(c -> ACCESS_TOKEN_COOKIE_NAME.equals(c.getName()));
+    }
+
+    private static int tokenPartCount(String token) {
+        if (!StringUtils.hasText(token)) {
+            return 0;
+        }
+        return token.split("\\.").length;
+    }
+
+    private static String maskUser(String username) {
+        if (!StringUtils.hasText(username)) {
+            return "(empty)";
+        }
+        if (username.length() <= 3) {
+            return "***";
+        }
+        return username.charAt(0) + "***" + username.charAt(username.length() - 1);
+    }
+
+    private static String jtiPrefix(String jti) {
+        if (!StringUtils.hasText(jti)) {
+            return "(none)";
+        }
+        return jti.length() <= 6 ? jti.substring(0, Math.min(3, jti.length())) + "…" : jti.substring(0, 6) + "…";
+    }
+
+    private void logAuthFailure(HttpServletRequest request, String token, String stage, String detail) {
+        int len = StringUtils.hasText(token) ? token.length() : 0;
+        int parts = tokenPartCount(token);
+        String xff = request.getHeader("X-Forwarded-For");
+        String xffShort = StringUtils.hasText(xff) && xff.length() > 60 ? xff.substring(0, 60) + "…" : xff;
+        log.warn("[auth-fail] stage={} method={} servletPath={} uri={} tokenLen={} tokenParts={} hasAccessCookie={} xForwardedFor={} detail={}",
+                stage,
+                request.getMethod(),
+                request.getServletPath(),
+                safeUriWithoutQuery(request),
+                len,
+                parts,
+                hasAccessTokenCookie(request),
+                xffShort,
+                detail);
     }
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -123,7 +223,7 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader(jwtConfig.getHeader());
         if (StringUtils.hasText(bearerToken) &&
                 bearerToken.startsWith(jwtConfig.getPrefix() + " ")) {
-            return bearerToken.substring((jwtConfig.getPrefix() + " ").length());
+            return bearerToken.substring((jwtConfig.getPrefix() + " ").length()).trim();
         }
 
         Cookie[] cookies = request.getCookies();
@@ -163,10 +263,20 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             return "Session is no longer active. Please login again.";
 
         } catch (ExpiredJwtException e) {
+            if (jwtDiagnosticLogging) {
+                log.info("[jwt-diag] getSpecificInvalidReason: expired exp={}", e.getClaims() != null ? e.getClaims().getExpiration() : "n/a");
+            }
             return "Token has expired. Please login again.";
+        } catch (SignatureException e) {
+            log.warn("[jwt-reject] SignatureException in getSpecificInvalidReason — check jwt.secret / JWT_SECRET parity across pods");
+            return "Invalid token signature. Re-login; if this persists, ensure every server instance uses the same jwt.secret (Base64).";
         } catch (JwtException e) {
+            log.warn("[jwt-reject] JwtException in getSpecificInvalidReason type={} msg={}",
+                    e.getClass().getSimpleName(), e.getMessage());
             return "Malformed or invalid token. Please clear your browser data and login again.";
         } catch (Exception e) {
+            log.warn("[jwt-reject] unexpected in getSpecificInvalidReason type={} msg={}",
+                    e.getClass().getSimpleName(), e.getMessage());
             return "Authentication failed. Please login again.";
         }
     }

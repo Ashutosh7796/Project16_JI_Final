@@ -11,9 +11,11 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.GrantedAuthority;
@@ -43,18 +45,33 @@ public class JwtServiceImpl implements JwtService {
     private final UserDetailsService userDetailsService;
     private final TokenBlacklistService tokenBlacklistService;
     private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
 
     @Autowired
-    public JwtServiceImpl(@Lazy UserDetailsService userDetailsService, 
-                          UserRepository userRepository, 
+    public JwtServiceImpl(@Lazy UserDetailsService userDetailsService,
+                          UserRepository userRepository,
                           @Lazy JwtConfig jwtConfig,
-                           TokenBlacklistService tokenBlacklistService,
-                           ActiveSessionService activeSessionService) {
+                          TokenBlacklistService tokenBlacklistService,
+                          ActiveSessionService activeSessionService,
+                          @Value("${app.security.jwt.diagnostic-logging:false}") boolean jwtDiagnosticLogging) {
         this.userDetailsService = userDetailsService;
         this.userRepository = userRepository;
         this.jwtConfig = jwtConfig;
         this.tokenBlacklistService = tokenBlacklistService;
         this.activeSessionService = activeSessionService;
+        this.jwtDiagnosticLogging = jwtDiagnosticLogging;
+    }
+
+    @PostConstruct
+    void validateJwtSecret() {
+        try {
+            getKey();
+            log.info("JWT signing key loaded (Base64 decode OK, length validated by JJWT)");
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Invalid jwt.secret: must be a Base64-encoded key (HS256, sufficient length). "
+                            + "If you use JWT_SECRET env var, it must be identical on every instance and non-empty.", e);
+        }
     }
 
     @Override
@@ -279,35 +296,39 @@ public class JwtServiceImpl implements JwtService {
         try {
             claims = extractAllClaims(token);
         } catch (Exception e) {
-            log.debug("Token validation failed: unable to parse token - {}", e.getMessage());
+            log.warn("[jwt-reject] phase=parse tokenLen={} parts={} exType={} msg={}",
+                    token != null ? token.length() : 0,
+                    tokenPartCount(token),
+                    e.getClass().getSimpleName(),
+                    e.getMessage());
+            jwtDiag("parse failure: {}", e.toString());
             return false;
         }
 
         try {
             String tokenId = claims.getId();
             if (tokenId != null && tokenBlacklistService.isBlacklisted(tokenId)) {
-                log.warn("Token is blacklisted");
+                log.warn("[jwt-reject] phase=blacklist jtiPrefix={}", jtiPrefix(tokenId));
                 return false;
             }
 
             final String username = claims.getSubject();
             
             if (!StringUtils.hasText(username)) {
-                log.debug("Token validation failed: empty username");
+                log.warn("[jwt-reject] phase=claims subject empty jtiPrefix={}", jtiPrefix(tokenId));
                 return false;
             }
     
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
             
             if (ObjectUtils.isEmpty(userDetails)) {
-                log.debug("Token validation failed: user not found");
+                log.warn("[jwt-reject] phase=user_load subject={}", maskEmail(username));
                 return false;
             }
 
             Date nbf = claims.getNotBefore();
             if (nbf != null && nbf.after(new Date())) {
-                log.debug("Token not yet valid. Current time: {}, Not before: {}", 
-                        new Date(), nbf);
+                log.warn("[jwt-reject] phase=nbf notBefore={} now={}", nbf, new Date());
                 return false;
             }
             if (jwtConfig.isDeviceFingerprintingEnabled()) {
@@ -341,12 +362,45 @@ public class JwtServiceImpl implements JwtService {
                 log.warn("Could not verify active session: {}", e.getMessage());
             }
 
-            log.debug("Token validation successful for user: {}", username);
+            jwtDiag("Token validation successful for user={}", username);
             return true;
         } catch (Exception e) {
-            log.debug("Token validation failed with exception: {}", e.getMessage());
+            log.warn("[jwt-reject] phase=post_claims exType={} msg={}", e.getClass().getSimpleName(), e.getMessage());
+            jwtDiag("post-claims failure: {}", e.toString());
             return false;
         }
+    }
+
+    private void jwtDiag(String format, Object... args) {
+        if (jwtDiagnosticLogging) {
+            log.info("[jwt-diag] " + format, args);
+        }
+    }
+
+    private static int tokenPartCount(String token) {
+        if (!StringUtils.hasText(token)) {
+            return 0;
+        }
+        return token.split("\\.").length;
+    }
+
+    private static String jtiPrefix(String jti) {
+        if (!StringUtils.hasText(jti)) {
+            return "(none)";
+        }
+        return jti.length() <= 8 ? jti : jti.substring(0, 8) + "…";
+    }
+
+    private static String maskEmail(String username) {
+        if (!StringUtils.hasText(username) || !username.contains("@")) {
+            return username != null && username.length() > 2
+                    ? username.charAt(0) + "***" + username.charAt(username.length() - 1)
+                    : "(short)";
+        }
+        int at = username.indexOf('@');
+        String local = username.substring(0, at);
+        String tail = local.length() > 1 ? local.substring(0, 1) + "***" : "*";
+        return tail + "@" + username.substring(at + 1);
     }
 
     private String extractUsername(String token){
@@ -364,6 +418,7 @@ public class JwtServiceImpl implements JwtService {
         try {
             claims = Jwts.parserBuilder()
                     .setSigningKey(getKey())
+                    .setAllowedClockSkewSeconds(jwtConfig.getAllowedClockSkewSeconds())
                     .build()
                     .parseClaimsJws(token)
                     .getBody();

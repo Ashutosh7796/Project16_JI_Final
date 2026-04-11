@@ -85,6 +85,9 @@ public class AppConfig {
     @Value("#{'${app.cors.allowed-origins}'.split(',')}")
     private List<String> allowedOrigins;
 
+    @Value("${app.security.jwt.diagnostic-logging:false}")
+    private boolean jwtDiagnosticLogging;
+
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -232,7 +235,8 @@ public class AppConfig {
                         jwtConfig,
                         jwtService,
                         userDetailsService(),
-                        activeSessionService
+                        activeSessionService,
+                        jwtDiagnosticLogging
                 );
 
         JwtUsernamePasswordAuthenticationFilter loginFilter =
