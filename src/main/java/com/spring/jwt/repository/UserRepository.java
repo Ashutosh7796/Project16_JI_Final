@@ -45,4 +45,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
         WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN')
     """)
     Page<User> findAllEmployees(Pageable pageable);
+
+    @Query("""
+        SELECT COUNT(DISTINCT u.userId) FROM User u
+        JOIN u.roles r
+        WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN', 'MANAGER')
+          AND (u.status IS NULL OR u.status = true)
+        """)
+    long countActiveStaffUsers();
 }

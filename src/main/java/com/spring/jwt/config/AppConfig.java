@@ -173,7 +173,10 @@ public class AppConfig {
                         "/swagger-ui.html"
                 ).permitAll()
 
-                // Admin endpoints - must come before general /api/v1/** rules
+                // Admin dashboard stats — managers may view KPIs (must be before broader /api/v1/admin/**)
+                .requestMatchers("/api/v1/admin/users/dashboard/stats").hasAnyRole("ADMIN", "MANAGER")
+
+                // Other admin endpoints
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 
                 // Attendance endpoints - must come before general /api/v1/** rules

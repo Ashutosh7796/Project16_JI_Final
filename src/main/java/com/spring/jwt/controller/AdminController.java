@@ -1,11 +1,13 @@
 package com.spring.jwt.controller;
 
+import com.spring.jwt.dto.AdminDashboardStatsDTO;
 import com.spring.jwt.dto.UserDTO;
-import com.spring.jwt.entity.Product;
 import com.spring.jwt.entity.Role;
 import com.spring.jwt.entity.User;
 import com.spring.jwt.repository.RoleRepository;
 import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.AdminDashboardService;
+import com.spring.jwt.utils.ApiResponse;
 import com.spring.jwt.utils.BaseResponseDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,15 +25,25 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
 @Slf4j
-@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-//    private final ProductRepository productRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdminDashboardService adminDashboardService;
+
+    /**
+     * Dashboard KPIs + 8-week order track. Allowed for admin and manager roles.
+     */
+    @GetMapping("/users/dashboard/stats")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+    public ResponseEntity<ApiResponse<AdminDashboardStatsDTO>> getDashboardStats() {
+        AdminDashboardStatsDTO dto = adminDashboardService.buildStats();
+        return ResponseEntity.ok(ApiResponse.success("Dashboard stats", dto));
+    }
 
     @PostMapping("/employees")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> createEmployee(@RequestBody UserDTO userDTO) {
         if (userRepository.findByEmail(userDTO.getEmail()) != null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -57,11 +69,11 @@ public class AdminController {
                 roles.add(role);
             } else {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(new BaseResponseDTO("400", "Invalid Role. Use SURVEYOR or LAB_TECHNICIAN", null));
+                        .body(new BaseResponseDTO("400", "Invalid Role. Use SURVEYOR, LAB_TECHNICIAN, or MANAGER", null));
             }
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new BaseResponseDTO("400", "Role is required (SURVEYOR or LAB_TECHNICIAN)", null));
+                    .body(new BaseResponseDTO("400", "Role is required (SURVEYOR, LAB_TECHNICIAN, or MANAGER)", null));
         }
         user.setRoles(roles);
 
@@ -71,6 +83,7 @@ public class AdminController {
     }
 
     @GetMapping("/employees")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserDTO>> getAllEmployees() {
 
         List<User> users = userRepository.findAll();
@@ -84,6 +97,7 @@ public class AdminController {
     }
 
     @PutMapping("/employees/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> updateEmployee(@PathVariable Long userId, @RequestBody UserDTO userDTO) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
@@ -109,6 +123,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/employees/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BaseResponseDTO> deactivateEmployee(@PathVariable Long userId) {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
