@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Locale;
 
 import com.spring.jwt.exception.SecurityExceptionHandler;
-import com.spring.jwt.utils.SecurityAuditLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Configuration
@@ -79,9 +78,6 @@ public class AppConfig {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    @Autowired
-    private SecurityAuditLogger securityAuditLogger;
 
     @Value("${app.url.frontend:http://localhost:5173}")
     private String frontendUrl;
@@ -245,8 +241,7 @@ public class AppConfig {
                         jwtConfig,
                         jwtService,
                         userRepository,
-                        activeSessionService,
-                        securityAuditLogger
+                        activeSessionService
                 );
 
         JwtRefreshTokenFilter refreshTokenFilter =

@@ -11,7 +11,6 @@ import com.spring.jwt.repository.UserRepository;
 import com.spring.jwt.service.security.UserDetailsCustom;
 import com.spring.jwt.utils.BaseResponseDTO;
 import com.spring.jwt.utils.HelperUtils;
-import com.spring.jwt.utils.SecurityAuditLogger;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -44,17 +43,14 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
     private final UserRepository userRepository;
     private final JwtConfig jwtConfig;
     private final ActiveSessionService activeSessionService;
-    private final SecurityAuditLogger securityAuditLogger;
 
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
-    public static final String AUDIT_LOGIN_USERNAME = "AUDIT_LOGIN_USERNAME";
 
     public JwtUsernamePasswordAuthenticationFilter(AuthenticationManager manager,
                                                    JwtConfig jwtConfig,
                                                     JwtService jwtService,
                                                     UserRepository userRepository,
-                                                    ActiveSessionService activeSessionService,
-                                                    SecurityAuditLogger securityAuditLogger) {
+                                                    ActiveSessionService activeSessionService){
         super(new AntPathRequestMatcher(jwtConfig.getUrl(), "POST"));
         setAuthenticationManager(manager);
         this.objectMapper = new ObjectMapper();
@@ -62,7 +58,6 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
         this.userRepository = userRepository;
         this.jwtConfig = jwtConfig;
         this.activeSessionService = activeSessionService;
-        this.securityAuditLogger = securityAuditLogger;
     }
 
     @Override
@@ -75,7 +70,6 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
             throws AuthenticationException, IOException, ServletException {
         log.debug("Start attempt to authentication");
         LoginRequest loginRequest = objectMapper.readValue(request.getInputStream(), LoginRequest.class);
-        request.setAttribute(AUDIT_LOGIN_USERNAME, loginRequest.getUsername());
         log.debug("End attempt to authentication");
 
         return getAuthenticationManager()
@@ -148,7 +142,6 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
             response.setContentType("application/json; charset=UTF-8");
             response.getWriter().write(json);
             log.info("End successful authentication with token generation");
-            securityAuditLogger.logAuthenticationSuccess(userDetailsCustom.getUsername(), "password_grant");
         } catch (BaseException ex) {
             log.error("Error during token generation: {}", ex.getMessage());
             unsuccessfulAuthentication(request, response, new BadCredentialsException(ex.getMessage()));
@@ -173,10 +166,6 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
 
     @Override
     protected void unsuccessfulAuthentication(HttpServletRequest request, HttpServletResponse response, AuthenticationException failed) throws IOException, ServletException {
-        Object u = request.getAttribute(AUDIT_LOGIN_USERNAME);
-        String username = u instanceof String s ? s : "unknown";
-        securityAuditLogger.logAuthenticationFailure(username, failed.getMessage(), "password_grant");
-
         BaseResponseDTO responseDTO = new BaseResponseDTO();
         responseDTO.setCode(String.valueOf(HttpStatus.UNAUTHORIZED.value()));
         responseDTO.setMessage(failed.getMessage());

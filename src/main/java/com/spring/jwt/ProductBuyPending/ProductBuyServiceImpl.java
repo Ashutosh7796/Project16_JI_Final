@@ -1,7 +1,6 @@
 package com.spring.jwt.ProductBuyPending;
 
 import com.spring.jwt.Enums.PaymentStatus;
-import com.spring.jwt.audit.ApplicationAuditService;
 import com.spring.jwt.Payment.CcAvenuePaymentRequest;
 import com.spring.jwt.Payment.CcAvenuePaymentService;
 import com.spring.jwt.Product.ProductRepository;
@@ -19,8 +18,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Optional;
 
@@ -37,7 +34,6 @@ public class ProductBuyServiceImpl implements ProductBuyService {
     private final ProductBuyPendingRepository pendingRepo;
     private final ProductBuyConfirmedRepository confirmedRepo;
     private final CcAvenuePaymentService ccAvenuePaymentService;
-    private final ApplicationAuditService applicationAuditService;
 
     @Override
     @Transactional
@@ -83,19 +79,6 @@ public class ProductBuyServiceImpl implements ProductBuyService {
 
         log.info("Created pending order {} for product {}", pending.getProductBuyPendingId(), product.getProductId());
 
-        applicationAuditService.log(
-                "COMMERCE",
-                "PRODUCT_PENDING_ORDER_CREATE",
-                "SUCCESS",
-                currentUserId,
-                null,
-                "ProductBuyPending",
-                String.valueOf(pending.getProductBuyPendingId()),
-                "productId=" + product.getProductId() + ";amount=" + totalAmount,
-                currentRequestClientIp(),
-                currentRequestUserAgent()
-        );
-
         ProductBuyPendingDto response = mapToPendingDto(pending);
         response.setPaymentGatewayOrderId(paymentForm);
 
@@ -109,9 +92,7 @@ public class ProductBuyServiceImpl implements ProductBuyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Pending order not found"));
 
         if (PaymentStatus.SUCCESS.equals(pending.getPaymentStatus())) {
-            ProductBuyConfirmedDto dtoOut = loadConfirmedAfterDuplicateCallback(dto, pending);
-            auditProductPaymentConfirmed(dto.getPendingOrderId(), dto.getPaymentId());
-            return dtoOut;
+            return loadConfirmedAfterDuplicateCallback(dto, pending);
         }
 
         if (dto.getOrderId() == null || !dto.getOrderId().equals(pending.getPaymentGatewayOrderId())) {
@@ -151,16 +132,13 @@ public class ProductBuyServiceImpl implements ProductBuyService {
 
             log.info("Payment confirmed for order {}", pending.getProductBuyPendingId());
 
-            auditProductPaymentConfirmed(dto.getPendingOrderId(), dto.getPaymentId());
             return mapToConfirmedDto(confirmed);
         } catch (ObjectOptimisticLockingFailureException ex) {
             ProductBuyPending latest = pendingRepo.findById(dto.getPendingOrderId())
                     .orElseThrow(() -> new ResourceNotFoundException("Pending order not found"));
             if (PaymentStatus.SUCCESS.equals(latest.getPaymentStatus())) {
                 log.info("Concurrent confirm resolved idempotently for pending {}", dto.getPendingOrderId());
-                ProductBuyConfirmedDto dtoOut = loadConfirmedAfterDuplicateCallback(dto, latest);
-                auditProductPaymentConfirmed(dto.getPendingOrderId(), dto.getPaymentId());
-                return dtoOut;
+                return loadConfirmedAfterDuplicateCallback(dto, latest);
             }
             throw ex;
         }
@@ -195,19 +173,6 @@ public class ProductBuyServiceImpl implements ProductBuyService {
         pendingRepo.save(pending);
 
         log.info("Payment marked failed for order {}", pendingOrderId);
-
-        applicationAuditService.log(
-                "COMMERCE",
-                "PRODUCT_PAYMENT_FAILED",
-                "SUCCESS",
-                null,
-                null,
-                "ProductBuyPending",
-                String.valueOf(pendingOrderId),
-                null,
-                currentRequestClientIp(),
-                currentRequestUserAgent()
-        );
     }
 
     @Override
@@ -250,46 +215,6 @@ public class ProductBuyServiceImpl implements ProductBuyService {
             return userDetails.getUserId();
         }
         throw new AccessDeniedException("Authenticated user is required");
-    }
-
-    private void auditProductPaymentConfirmed(Long pendingOrderId, String paymentId) {
-        applicationAuditService.log(
-                "COMMERCE",
-                "PRODUCT_PAYMENT_CONFIRMED",
-                "SUCCESS",
-                null,
-                null,
-                "ProductBuyPending",
-                String.valueOf(pendingOrderId),
-                paymentId != null ? "paymentId=" + paymentId : null,
-                currentRequestClientIp(),
-                currentRequestUserAgent()
-        );
-    }
-
-    private String currentRequestClientIp() {
-        return Optional.ofNullable(RequestContextHolder.getRequestAttributes())
-                .filter(ServletRequestAttributes.class::isInstance)
-                .map(a -> ((ServletRequestAttributes) a).getRequest())
-                .map(req -> {
-                    String xff = req.getHeader("X-Forwarded-For");
-                    if (xff != null && !xff.isBlank() && !"unknown".equalsIgnoreCase(xff)) {
-                        return xff.contains(",") ? xff.split(",")[0].trim() : xff.trim();
-                    }
-                    String realIp = req.getHeader("X-Real-IP");
-                    if (realIp != null && !realIp.isBlank()) {
-                        return realIp.trim();
-                    }
-                    return req.getRemoteAddr();
-                })
-                .orElse(null);
-    }
-
-    private String currentRequestUserAgent() {
-        return Optional.ofNullable(RequestContextHolder.getRequestAttributes())
-                .filter(ServletRequestAttributes.class::isInstance)
-                .map(a -> ((ServletRequestAttributes) a).getRequest().getHeader("User-Agent"))
-                .orElse(null);
     }
 
     private ProductBuyPendingDto mapToPendingDto(ProductBuyPending e) {
