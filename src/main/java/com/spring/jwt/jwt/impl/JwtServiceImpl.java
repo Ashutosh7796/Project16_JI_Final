@@ -427,9 +427,11 @@ public class JwtServiceImpl implements JwtService {
         }catch (UnsupportedJwtException e){
             throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Token's not supported");
         }catch (MalformedJwtException e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Invalid format 3 part of token");
+            // Three dot-separated segments does not guarantee valid Base64URL / JSON; do not imply "wrong part count".
+            String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Malformed JWT: " + detail);
         }catch (SignatureException e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Invalid format token");
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Invalid JWT signature");
         }catch (Exception e){
             throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), e.getLocalizedMessage());
         }
