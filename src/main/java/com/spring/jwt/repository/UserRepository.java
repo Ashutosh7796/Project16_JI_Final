@@ -53,4 +53,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
           AND (u.status IS NULL OR u.status = true)
         """)
     long countActiveStaffUsers();
+
+    @Query("""
+            SELECT DISTINCT u FROM User u
+            JOIN FETCH u.roles r
+            WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN', 'ADMIN')
+            """)
+    List<User> findStaffRolesForAdminList();
 }

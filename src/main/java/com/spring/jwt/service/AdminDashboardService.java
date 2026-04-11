@@ -8,14 +8,16 @@ import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedRepository;
 import com.spring.jwt.ProductBuyPending.ProductBuyPendingRepository;
 import com.spring.jwt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,25 +30,29 @@ public class AdminDashboardService {
     private final ProductBuyPendingRepository productBuyPendingRepository;
     private final ProductBuyConfirmedRepository productBuyConfirmedRepository;
 
+    @Autowired
+    @Qualifier("dashboardStatsExecutor")
+    private Executor dashboardStatsExecutor;
+
     /**
-     * Runs independent counts and weekly buckets in parallel to avoid many sequential
-     * round-trips to the database (important when DB is remote).
+     * Runs independent counts and weekly buckets in parallel (bounded executor, not ForkJoinPool.commonPool).
+     * Each repository call runs in its own short transaction (no single enclosing read transaction).
      */
-    @Transactional(readOnly = true)
     public AdminDashboardStatsDTO buildStats() {
         final LocalDate today = LocalDate.now();
         final LocalDateTime newestEndExclusive = today.plusDays(1).atStartOfDay();
+        Executor ex = dashboardStatsExecutor;
 
         CompletableFuture<Long> farmers =
-                CompletableFuture.supplyAsync(() -> employeeFarmerSurveyRepository.count());
+                CompletableFuture.supplyAsync(() -> employeeFarmerSurveyRepository.count(), ex);
         CompletableFuture<Long> employees =
-                CompletableFuture.supplyAsync(() -> userRepository.countActiveStaffUsers());
+                CompletableFuture.supplyAsync(() -> userRepository.countActiveStaffUsers(), ex);
         CompletableFuture<Long> products =
-                CompletableFuture.supplyAsync(() -> productRepository.count());
+                CompletableFuture.supplyAsync(() -> productRepository.count(), ex);
         CompletableFuture<Long> pending =
-                CompletableFuture.supplyAsync(() -> productBuyPendingRepository.count());
+                CompletableFuture.supplyAsync(() -> productBuyPendingRepository.count(), ex);
         CompletableFuture<Long> confirmed =
-                CompletableFuture.supplyAsync(() -> productBuyConfirmedRepository.count());
+                CompletableFuture.supplyAsync(() -> productBuyConfirmedRepository.count(), ex);
 
         List<CompletableFuture<OrderWeekPointDTO>> weekFutures = new ArrayList<>(8);
         for (int w = 0; w < 8; w++) {
@@ -66,7 +72,7 @@ public class AdminDashboardService {
                                         .plan(plan)
                                         .actual(actual)
                                         .build();
-                            }));
+                            }, ex));
         }
 
         CompletableFuture<Void> weeksDone =

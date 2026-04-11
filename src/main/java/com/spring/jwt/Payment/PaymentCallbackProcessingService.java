@@ -34,9 +34,6 @@ public class PaymentCallbackProcessingService {
     private final PaymentAuditService auditService;
 
     /**
-     * One queue row per transaction: atomic claim, then business logic, then terminal status.
-     */
-    /**
      * Rows stuck in PROCESSING (e.g. JVM died after claim) are moved back to RETRY for the scheduled poller.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -50,6 +47,9 @@ public class PaymentCallbackProcessingService {
         return n;
     }
 
+    /**
+     * One queue row per transaction: atomic claim, then business logic, then terminal status.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void processByQueueId(Long queueId) {
         int claimed = queueRepository.claimForProcessing(queueId, LocalDateTime.now());

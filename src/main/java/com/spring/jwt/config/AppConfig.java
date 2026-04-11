@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
@@ -38,11 +37,11 @@ import java.util.List;
 import java.util.Locale;
 
 import com.spring.jwt.exception.SecurityExceptionHandler;
+import com.spring.jwt.utils.SecurityAuditLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableWebSecurity
-@EnableScheduling
 @EnableMethodSecurity(
         securedEnabled = true,
         jsr250Enabled = true
@@ -80,6 +79,9 @@ public class AppConfig {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private SecurityAuditLogger securityAuditLogger;
 
     @Value("${app.url.frontend:http://localhost:5173}")
     private String frontendUrl;
@@ -150,6 +152,9 @@ public class AppConfig {
 
                 // Error endpoint - must be accessible
                 .requestMatchers("/error").permitAll()
+
+                .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
 
                 // Authentication endpoints
                 .requestMatchers(jwtConfig.getUrl()).permitAll()
@@ -240,7 +245,8 @@ public class AppConfig {
                         jwtConfig,
                         jwtService,
                         userRepository,
-                        activeSessionService
+                        activeSessionService,
+                        securityAuditLogger
                 );
 
         JwtRefreshTokenFilter refreshTokenFilter =

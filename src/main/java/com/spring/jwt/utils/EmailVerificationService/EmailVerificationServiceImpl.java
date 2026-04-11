@@ -11,6 +11,7 @@ import jakarta.mail.internet.MimeMessage;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -105,6 +106,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     }
 
     @Scheduled(cron = "0 4 14 * * ?", zone = "Asia/Kolkata")
+    @SchedulerLock(name = "emailVerificationOtpCleanup", lockAtLeastFor = "30s", lockAtMostFor = "15m")
     @Transactional
     public void cleanupExpiredOTP() {
         LocalDateTime expiryThreshold = LocalDateTime.now().minusMinutes(OTP_EXPIRY_MINUTES);

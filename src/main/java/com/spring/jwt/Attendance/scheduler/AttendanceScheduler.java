@@ -3,6 +3,7 @@ package com.spring.jwt.Attendance.scheduler;
 import com.spring.jwt.Attendance.service.AttendanceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +24,8 @@ public class AttendanceScheduler {
      * Auto check-out employees who forgot to check out
      * Runs every day at 11:59 PM
      */
-    @Scheduled(cron = "0 59 23 * * *")
+    @Scheduled(cron = "0 59 23 * * *", zone = "Asia/Kolkata")
+    @SchedulerLock(name = "attendanceAutoCheckout", lockAtLeastFor = "30s", lockAtMostFor = "25m")
     public void autoCheckoutScheduler() {
         log.info("Running scheduled auto check-out task");
         
@@ -41,7 +43,8 @@ public class AttendanceScheduler {
      * Send attendance reminder notifications
      * Runs every day at 9:00 AM
      */
-    @Scheduled(cron = "0 0 9 * * MON-FRI")
+    @Scheduled(cron = "0 0 9 * * MON-FRI", zone = "Asia/Kolkata")
+    @SchedulerLock(name = "attendanceMorningReminder", lockAtLeastFor = "30s", lockAtMostFor = "15m")
     public void sendAttendanceReminder() {
         log.info("Sending attendance reminder notifications");
     }
@@ -50,7 +53,8 @@ public class AttendanceScheduler {
      * Generate daily attendance report
      * Runs every day at 6:00 PM
      */
-    @Scheduled(cron = "0 0 18 * * MON-FRI")
+    @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Kolkata")
+    @SchedulerLock(name = "attendanceDailyReport", lockAtLeastFor = "30s", lockAtMostFor = "15m")
     public void generateDailyReport() {
         log.info("Generating daily attendance report");
     }

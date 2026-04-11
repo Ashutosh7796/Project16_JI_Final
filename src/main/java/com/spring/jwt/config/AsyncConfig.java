@@ -57,6 +57,42 @@ public class AsyncConfig {
         return executor;
     }
 
+    @Bean(name = "documentProcessingExecutor")
+    public ThreadPoolTaskExecutor documentProcessingExecutor(
+            @Value("${document.async.core-pool-size:3}") int corePoolSize,
+            @Value("${document.async.max-pool-size:6}") int maxPoolSize,
+            @Value("${document.async.queue-capacity:50}") int queueCapacity) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix("doc-process-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        log.info("Document processing async executor: core={}, max={}, queue={}", corePoolSize, maxPoolSize, queueCapacity);
+        return executor;
+    }
+
+    @Bean(name = "dashboardStatsExecutor")
+    public ThreadPoolTaskExecutor dashboardStatsExecutor(
+            @Value("${dashboard.async.core-pool-size:4}") int corePoolSize,
+            @Value("${dashboard.async.max-pool-size:8}") int maxPoolSize,
+            @Value("${dashboard.async.queue-capacity:32}") int queueCapacity) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix("dash-stats-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        log.info("Dashboard stats executor: core={}, max={}, queue={}", corePoolSize, maxPoolSize, queueCapacity);
+        return executor;
+    }
+
     @Bean
     public AsyncConfigurer asyncConfigurer(
             @Qualifier("applicationTaskExecutor") Executor applicationTaskExecutor) {

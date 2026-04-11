@@ -1,5 +1,6 @@
 package com.spring.jwt.controller;
 
+import com.spring.jwt.audit.ApplicationAuditService;
 import com.spring.jwt.dto.AdminDashboardStatsDTO;
 import com.spring.jwt.dto.UserDTO;
 import com.spring.jwt.entity.Role;
@@ -7,15 +8,22 @@ import com.spring.jwt.entity.User;
 import com.spring.jwt.repository.RoleRepository;
 import com.spring.jwt.repository.UserRepository;
 import com.spring.jwt.service.AdminDashboardService;
+import com.spring.jwt.service.security.UserDetailsCustom;
 import com.spring.jwt.utils.ApiResponse;
 import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.DataMaskingUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -31,6 +39,7 @@ public class AdminController {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminDashboardService adminDashboardService;
+    private final ApplicationAuditService applicationAuditService;
 
     /**
      * Dashboard KPIs + 8-week order track. Allowed for admin and manager roles.
@@ -79,6 +88,19 @@ public class AdminController {
 
         userRepository.save(user);
 
+        applicationAuditService.log(
+                "ADMIN",
+                "EMPLOYEE_CREATE",
+                "SUCCESS",
+                currentActorUserId(),
+                null,
+                "User",
+                String.valueOf(user.getUserId()),
+                "role=" + roleName + ";email=" + DataMaskingUtils.maskEmail(user.getEmail()),
+                currentClientIp(),
+                currentUserAgent()
+        );
+
         return ResponseEntity.ok(new BaseResponseDTO("200", "Employee created successfully", null));
     }
 
@@ -86,7 +108,7 @@ public class AdminController {
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<List<UserDTO>> getAllEmployees() {
 
-        List<User> users = userRepository.findAll();
+        List<User> users = userRepository.findStaffRolesForAdminList();
         List<UserDTO> employees = users.stream()
                 .filter(u -> u.getRoles().stream()
                         .anyMatch(r -> r.getName().equals("SURVEYOR") || r.getName().equals("LAB_TECHNICIAN")
@@ -119,6 +141,21 @@ public class AdminController {
         }
 
         userRepository.save(user);
+
+        applicationAuditService.log(
+                "ADMIN",
+                "EMPLOYEE_UPDATE",
+                "SUCCESS",
+                currentActorUserId(),
+                null,
+                "User",
+                String.valueOf(userId),
+                "passwordChanged=" + (userDTO.getPassword() != null && !userDTO.getPassword().isEmpty())
+                        + ";roleChanged=" + (userDTO.getRole() != null),
+                currentClientIp(),
+                currentUserAgent()
+        );
+
         return ResponseEntity.ok(new BaseResponseDTO("200", "Employee updated successfully", null));
     }
 
@@ -133,7 +170,57 @@ public class AdminController {
         user.setStatus(false);
 
         userRepository.save(user);
+
+        applicationAuditService.log(
+                "ADMIN",
+                "EMPLOYEE_DEACTIVATE",
+                "SUCCESS",
+                currentActorUserId(),
+                null,
+                "User",
+                String.valueOf(userId),
+                null,
+                currentClientIp(),
+                currentUserAgent()
+        );
+
         return ResponseEntity.ok(new BaseResponseDTO("200", "Employee deactivated successfully", null));
+    }
+
+    private Long currentActorUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsCustom u) {
+            return u.getUserId();
+        }
+        return null;
+    }
+
+    private String currentClientIp() {
+        return Optional.ofNullable(RequestContextHolder.getRequestAttributes())
+                .filter(ServletRequestAttributes.class::isInstance)
+                .map(a -> ((ServletRequestAttributes) a).getRequest())
+                .map(this::clientIp)
+                .orElse(null);
+    }
+
+    private String currentUserAgent() {
+        return Optional.ofNullable(RequestContextHolder.getRequestAttributes())
+                .filter(ServletRequestAttributes.class::isInstance)
+                .map(a -> ((ServletRequestAttributes) a).getRequest())
+                .map(r -> r.getHeader("User-Agent"))
+                .orElse(null);
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank() && !"unknown".equalsIgnoreCase(xff)) {
+            return xff.contains(",") ? xff.split(",")[0].trim() : xff.trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank() && !"unknown".equalsIgnoreCase(realIp)) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private UserDTO convertToDTO(User user) {

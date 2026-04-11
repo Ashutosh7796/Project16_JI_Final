@@ -3,6 +3,7 @@ package com.spring.jwt.Payment;
 import com.spring.jwt.entity.PaymentCallbackQueue;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
@@ -46,6 +47,7 @@ public class PaymentCallbackQueueProcessor {
      * Fallback: retries and recovery without holding one long transaction around the batch.
      */
     @Scheduled(fixedDelayString = "${payment.callback.queue.poll-delay-ms:30000}")
+    @SchedulerLock(name = "paymentCallbackQueuePoll", lockAtLeastFor = "15s", lockAtMostFor = "4m")
     public void processQueue() {
         processingService.releaseStaleProcessingRows(staleProcessingMinutes);
 
