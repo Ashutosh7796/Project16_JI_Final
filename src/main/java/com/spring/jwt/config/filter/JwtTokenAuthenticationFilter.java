@@ -49,14 +49,11 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String authHeader = request.getHeader(jwtConfig.getHeader());
-
-        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith(jwtConfig.getPrefix() + " ")) {
+        String token = resolveJwt(request);
+        if (!StringUtils.hasText(token)) {
             filterChain.doFilter(request, response);
             return;
         }
-
-        String token = getJwtFromRequest(request);
 
         try {
             if (!jwtService.isValidToken(token)) {
@@ -116,14 +113,16 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Extract JWT token from header or cookie
+     * Prefer {@code Authorization: Bearer <jwt>}; if missing/blank/not a JWS, use {@code access_token} cookie.
+     * Avoids treating values like "undefined" as a JWT when the browser sends a bad header but a good cookie.
      */
-    private String getJwtFromRequest(HttpServletRequest request) {
-
+    private String resolveJwt(HttpServletRequest request) {
         String bearerToken = request.getHeader(jwtConfig.getHeader());
-        if (StringUtils.hasText(bearerToken) &&
-                bearerToken.startsWith(jwtConfig.getPrefix() + " ")) {
-            return bearerToken.substring((jwtConfig.getPrefix() + " ").length());
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(jwtConfig.getPrefix() + " ")) {
+            String fromHeader = normalizeToken(bearerToken.substring((jwtConfig.getPrefix() + " ").length()));
+            if (looksLikeJws(fromHeader)) {
+                return fromHeader;
+            }
         }
 
         Cookie[] cookies = request.getCookies();
@@ -133,10 +132,33 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
                     .findFirst();
 
             if (accessTokenCookie.isPresent()) {
-                return accessTokenCookie.get().getValue();
+                String fromCookie = normalizeToken(accessTokenCookie.get().getValue());
+                if (looksLikeJws(fromCookie)) {
+                    return fromCookie;
+                }
             }
         }
         return null;
+    }
+
+    private static String normalizeToken(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String t = raw.trim();
+        if (t.length() >= 2 && t.startsWith("\"") && t.endsWith("\"")) {
+            t = t.substring(1, t.length() - 1).trim();
+        }
+        return StringUtils.hasText(t) ? t : null;
+    }
+
+    /** JWS compact form: header.payload.signature → exactly two dots. */
+    private static boolean looksLikeJws(String token) {
+        if (!StringUtils.hasText(token)) {
+            return false;
+        }
+        long dots = token.chars().filter(ch -> ch == '.').count();
+        return dots == 2;
     }
 
     /**
