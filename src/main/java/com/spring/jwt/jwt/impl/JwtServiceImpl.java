@@ -29,6 +29,7 @@ import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -66,7 +67,18 @@ public class JwtServiceImpl implements JwtService {
     void validateJwtSecret() {
         try {
             getKey();
-            log.info("JWT signing key loaded (Base64 decode OK, length validated by JJWT)");
+            byte[] rawKeyBytes = Decoders.BASE64.decode(jwtConfig.getSecret());
+            byte[] fp = MessageDigest.getInstance("SHA-256").digest(rawKeyBytes);
+            String fp12 = HexFormat.of().formatHex(fp).substring(0, 12);
+            log.info(
+                    "JWT signing key loaded (Base64 decode OK). [jwt-signing] keySha256First12={} issuer={} audience={} accessTtlMs={} refreshTtlSec={} clockSkewSec={} dfpEnabled={} — compare keySha256First12 on every instance; mismatch invalidates all tokens.",
+                    fp12,
+                    asciiSafeLog(jwtConfig.getIssuer(), 80),
+                    asciiSafeLog(jwtConfig.getAudience(), 80),
+                    jwtConfig.getExpiration(),
+                    jwtConfig.getRefreshExpiration(),
+                    jwtConfig.getAllowedClockSkewSeconds(),
+                    jwtConfig.isDeviceFingerprintingEnabled());
         } catch (Exception e) {
             throw new IllegalStateException(
                     "Invalid jwt.secret: must be a Base64-encoded key (HS256, sufficient length). "
@@ -145,11 +157,12 @@ public class JwtServiceImpl implements JwtService {
                 userDetailsCustom.getUsername(), 
                 deviceFingerprint != null ? deviceFingerprint.substring(0, 8) + "..." : "none");
 
+            String accessJti = UUID.randomUUID().toString();
             JwtBuilder jwtBuilder = Jwts.builder()
                 .setSubject(userDetailsCustom.getUsername())
                 .setIssuer(jwtConfig.getIssuer())
                 .setAudience(jwtConfig.getAudience())
-                .setId(UUID.randomUUID().toString())
+                .setId(accessJti)
                 .claim("firstname", firstName)
                 .claim("userId", userId)
                 .claim("authorities", roles)
@@ -169,7 +182,15 @@ public class JwtServiceImpl implements JwtService {
             jwtBuilder.claim(CLAIM_KEY_DEVICE_FINGERPRINT, deviceFingerprint);
         }
 
-        return jwtBuilder.compact();
+        String compact = jwtBuilder.compact();
+        long expSec = now.plusMillis(jwtConfig.getExpiration()).getEpochSecond();
+        jwtDiag("signed access userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}",
+                maskEmail(userDetailsCustom.getUsername()),
+                jtiPrefix(accessJti),
+                expSec,
+                compact.length(),
+                jwtConfig.isDeviceFingerprintingEnabled() && StringUtils.hasText(deviceFingerprint));
+        return compact;
     }
     
     @Override
@@ -185,10 +206,11 @@ public class JwtServiceImpl implements JwtService {
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toList());
 
+            String refreshJti = UUID.randomUUID().toString();
             JwtBuilder jwtBuilder = Jwts.builder()
                 .setSubject(userDetailsCustom.getUsername())
                 .setIssuer(jwtConfig.getIssuer())
-                .setId(UUID.randomUUID().toString())
+                .setId(refreshJti)
                 .claim("userId", userDetailsCustom.getUserId())
                 .claim("authorities", roles);
 
@@ -208,7 +230,15 @@ public class JwtServiceImpl implements JwtService {
             jwtBuilder.claim(CLAIM_KEY_DEVICE_FINGERPRINT, deviceFingerprint);
         }
 
-        return jwtBuilder.compact();
+        String compact = jwtBuilder.compact();
+        long expSec = now.plusSeconds(jwtConfig.getRefreshExpiration()).getEpochSecond();
+        jwtDiag("signed refresh userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}",
+                maskEmail(userDetailsCustom.getUsername()),
+                jtiPrefix(refreshJti),
+                expSec,
+                compact.length(),
+                jwtConfig.isDeviceFingerprintingEnabled() && StringUtils.hasText(deviceFingerprint));
+        return compact;
     }
     
     @Override
@@ -306,9 +336,17 @@ public class JwtServiceImpl implements JwtService {
         }
 
         try {
+            jwtDiag("validate: parsed tokenType={} subjectMasked={} jti={} expEpochSec={} hasDfpClaim={}",
+                    claims.get(CLAIM_KEY_TOKEN_TYPE, String.class),
+                    maskEmail(claims.getSubject()),
+                    jtiPrefix(claims.getId()),
+                    claims.getExpiration() != null ? claims.getExpiration().getTime() / 1000L : -1L,
+                    StringUtils.hasText(claims.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class)));
+
             String tokenId = claims.getId();
             if (tokenId != null && tokenBlacklistService.isBlacklisted(tokenId)) {
                 log.warn("[jwt-reject] phase=blacklist jtiPrefix={}", jtiPrefix(tokenId));
+                jwtDiag("validate: rejected blacklist jti={}", jtiPrefix(tokenId));
                 return false;
             }
 
@@ -338,6 +376,9 @@ public class JwtServiceImpl implements JwtService {
                     log.warn("Device fingerprint mismatch: token={}, request={}",
                             tokenDeviceFingerprint.substring(0, 8) + "...",
                             deviceFingerprint.substring(0, 8) + "...");
+                    jwtDiag("validate: rejected dfp tokenPrefix={} requestPrefix={}",
+                            tokenDeviceFingerprint.length() >= 8 ? tokenDeviceFingerprint.substring(0, 8) + "..." : tokenDeviceFingerprint,
+                            deviceFingerprint.length() >= 8 ? deviceFingerprint.substring(0, 8) + "..." : deviceFingerprint);
                     return false;
                 }
             }
@@ -349,11 +390,15 @@ public class JwtServiceImpl implements JwtService {
                     if (TOKEN_TYPE_REFRESH.equals(tokenType)) {
                         if (!activeSessionService.isCurrentRefreshToken(username, tokenId)) {
                             log.warn("Refresh token is not current for user: {}", username);
+                            jwtDiag("validate: rejected session tokenType=refresh subjectMasked={} jti={}",
+                                    maskEmail(username), jtiPrefix(tokenId));
                             return false;
                         }
                     } else {
                         if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {
                             log.warn("Access token is not current for user: {}", username);
+                            jwtDiag("validate: rejected session tokenType=access subjectMasked={} jti={}",
+                                    maskEmail(username), jtiPrefix(tokenId));
                             return false;
                         }
                     }
@@ -362,7 +407,7 @@ public class JwtServiceImpl implements JwtService {
                 log.warn("Could not verify active session: {}", e.getMessage());
             }
 
-            jwtDiag("Token validation successful for user={}", username);
+            jwtDiag("Token validation successful for user={}", maskEmail(username));
             return true;
         } catch (Exception e) {
             log.warn("[jwt-reject] phase=post_claims exType={} msg={}",
@@ -499,6 +544,72 @@ public class JwtServiceImpl implements JwtService {
             log.warn("Error checking blacklist: {}", e.getMessage());
             return false;
         }
+    }
+
+    @Override
+    public void logIssuedPairDiagnostics(String event, String subjectUsername, String accessToken, String refreshToken) {
+        if (!jwtDiagnosticLogging) {
+            return;
+        }
+        try {
+            Claims a = extractClaims(accessToken);
+            Claims r = extractClaims(refreshToken);
+            String issState = Objects.equals(jwtConfig.getIssuer(), a.getIssuer()) ? "iss_match" : "iss_mismatch_cfg_vs_token";
+            log.info(
+                    "[jwt-diag] issued event={} subjectMasked={} accessJti={} refreshJti={} accessExpEpochSec={} refreshExpEpochSec={} accessLen={} refreshLen={} issState={}",
+                    asciiSafeLog(event, 60),
+                    maskEmail(subjectUsername),
+                    jtiPrefix(a.getId()),
+                    jtiPrefix(r.getId()),
+                    a.getExpiration() != null ? a.getExpiration().getTime() / 1000L : -1L,
+                    r.getExpiration() != null ? r.getExpiration().getTime() / 1000L : -1L,
+                    accessToken.length(),
+                    refreshToken.length(),
+                    issState);
+        } catch (Exception e) {
+            log.warn("[jwt-diag] issued metadata parse failed event={} msg={}",
+                    asciiSafeLog(event, 60), asciiSafeLog(e.getMessage(), 200));
+        }
+    }
+
+    @Override
+    public void logInboundTokenDiagnostics(HttpServletRequest request, String token, String hint) {
+        if (!jwtDiagnosticLogging) {
+            return;
+        }
+        String reqDfp = generateDeviceFingerprint(request);
+        String reqDfpP = StringUtils.hasText(reqDfp) && reqDfp.length() >= 8
+                ? reqDfp.substring(0, 8) + "..." : "(none)";
+        if (!StringUtils.hasText(token)) {
+            log.info("[jwt-diag] inbound hint={} tokenEmpty=true requestDfpPrefix={} hasUserAgent={}",
+                    asciiSafeLog(hint, 160), reqDfpP, request.getHeader("User-Agent") != null);
+            return;
+        }
+        Claims c = extractClaimsIgnoreExpiration(token);
+        if (c == null) {
+            log.info("[jwt-diag] inbound hint={} tokenLen={} parts={} claimsDecodeSkipped requestDfpPrefix={}",
+                    asciiSafeLog(hint, 160), token.length(), tokenPartCount(token), reqDfpP);
+            return;
+        }
+        String tokenDfp = c.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class);
+        String tokenDfpP = StringUtils.hasText(tokenDfp) && tokenDfp.length() >= 8
+                ? tokenDfp.substring(0, 8) + "..." : "(none)";
+        String issState = Objects.equals(jwtConfig.getIssuer(), c.getIssuer()) ? "iss_match" : "iss_mismatch_cfg_vs_token";
+        boolean dfpComparable = StringUtils.hasText(tokenDfp) && StringUtils.hasText(reqDfp);
+        log.info(
+                "[jwt-diag] inbound hint={} tokenLen={} parts={} subjectMasked={} jti={} typ={} expEpochSec={} tokenDfpPrefix={} reqDfpPrefix={} dfpEqual={} issState={} xffPrefix={}",
+                asciiSafeLog(hint, 160),
+                token.length(),
+                tokenPartCount(token),
+                maskEmail(c.getSubject()),
+                jtiPrefix(c.getId()),
+                c.get(CLAIM_KEY_TOKEN_TYPE, String.class),
+                c.getExpiration() != null ? c.getExpiration().getTime() / 1000L : -1L,
+                tokenDfpP,
+                reqDfpP,
+                !dfpComparable ? "n/a" : Boolean.toString(tokenDfp.equals(reqDfp)),
+                issState,
+                asciiSafeLog(request.getHeader("X-Forwarded-For"), 80));
     }
 }
 

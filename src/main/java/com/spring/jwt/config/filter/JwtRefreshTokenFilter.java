@@ -38,6 +38,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
     private final UserDetailsServiceCustom userDetailsService;
     private final JwtConfig jwtConfig;
     private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
 
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
     private static final String CLAIM_KEY_TOKEN_TYPE = "token_type";
@@ -48,7 +49,8 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
                                 JwtConfig jwtConfig,
                                  JwtService jwtService,
                                  UserDetailsServiceCustom userDetailsService,
-                                 ActiveSessionService activeSessionService) {
+                                 ActiveSessionService activeSessionService,
+                                 boolean jwtDiagnosticLogging) {
         super(new AntPathRequestMatcher(jwtConfig.getRefreshUrl(), "POST"));
         setAuthenticationManager(manager);
         this.objectMapper = new ObjectMapper();
@@ -56,6 +58,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
         this.userDetailsService = userDetailsService;
         this.jwtConfig = jwtConfig;
         this.activeSessionService = activeSessionService;
+        this.jwtDiagnosticLogging = jwtDiagnosticLogging;
     }
 
     @Override
@@ -196,6 +199,10 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
             activeSessionService.replaceActiveSession(username, accessJti, refreshJti,
                     jwtService.extractClaims(newAccessToken).getExpiration().toInstant(),
                     jwtService.extractClaims(newRefreshToken).getExpiration().toInstant());
+
+            if (jwtDiagnosticLogging) {
+                jwtService.logIssuedPairDiagnostics("refresh", username, newAccessToken, newRefreshToken);
+            }
 
             Cookie refreshTokenCookie = createRefreshTokenCookie(newRefreshToken);
             response.addCookie(refreshTokenCookie);

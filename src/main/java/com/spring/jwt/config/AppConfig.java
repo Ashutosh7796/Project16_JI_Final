@@ -105,8 +105,10 @@ public class AppConfig {
             JwtService jwtService,
             UserDetailsServiceCustom userDetailsService,
             com.spring.jwt.jwt.ActiveSessionService activeSessionService) {
-        return new JwtRefreshTokenFilter(authenticationManager, jwtConfig, jwtService, userDetailsService, activeSessionService);
+        return new JwtRefreshTokenFilter(authenticationManager, jwtConfig, jwtService, userDetailsService,
+                activeSessionService, jwtDiagnosticLogging);
     }
+
 
     @Bean
     public ForwardedHeaderFilter forwardedHeaderFilter() {
@@ -245,7 +247,8 @@ public class AppConfig {
                         jwtConfig,
                         jwtService,
                         userRepository,
-                        activeSessionService
+                        activeSessionService,
+                        jwtDiagnosticLogging
                 );
 
         JwtRefreshTokenFilter refreshTokenFilter =
@@ -254,7 +257,8 @@ public class AppConfig {
                         jwtConfig,
                         jwtService,
                         userDetailsService(),
-                        activeSessionService
+                        activeSessionService,
+                        jwtDiagnosticLogging
                 );
 
         http.addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);

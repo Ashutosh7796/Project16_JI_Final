@@ -88,6 +88,10 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
         try {
             if (!jwtService.isValidToken(token)) {
                 String reason = getSpecificInvalidReason(token, request);
+                if (jwtDiagnosticLogging) {
+                    jwtService.logInboundTokenDiagnostics(request, token,
+                            "IS_VALID_TOKEN_FALSE; detail=" + reason);
+                }
                 logAuthFailure(request, token, "IS_VALID_TOKEN_FALSE", reason);
                 handleInvalidToken(response, reason);
                 return;
@@ -107,6 +111,10 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             }
 
             if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {
+                if (jwtDiagnosticLogging) {
+                    jwtService.logInboundTokenDiagnostics(request, token,
+                            "ACTIVE_SESSION_MISMATCH after isValidToken_true");
+                }
                 logAuthFailure(request, token, "ACTIVE_SESSION_MISMATCH",
                         "access jti not current for subject=" + maskUser(username));
                 handleInvalidToken(response,

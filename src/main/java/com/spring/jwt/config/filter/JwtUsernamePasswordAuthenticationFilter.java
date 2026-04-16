@@ -43,6 +43,7 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
     private final UserRepository userRepository;
     private final JwtConfig jwtConfig;
     private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
 
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
 
@@ -50,7 +51,8 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
                                                    JwtConfig jwtConfig,
                                                     JwtService jwtService,
                                                     UserRepository userRepository,
-                                                    ActiveSessionService activeSessionService){
+                                                    ActiveSessionService activeSessionService,
+                                                    boolean jwtDiagnosticLogging) {
         super(new AntPathRequestMatcher(jwtConfig.getUrl(), "POST"));
         setAuthenticationManager(manager);
         this.objectMapper = new ObjectMapper();
@@ -58,6 +60,7 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
         this.userRepository = userRepository;
         this.jwtConfig = jwtConfig;
         this.activeSessionService = activeSessionService;
+        this.jwtDiagnosticLogging = jwtDiagnosticLogging;
     }
 
     @Override
@@ -119,6 +122,10 @@ public class JwtUsernamePasswordAuthenticationFilter extends AbstractAuthenticat
                         jwtService.extractClaims(refreshToken).getExpiration().toInstant());
             } catch (Exception e) {
                 log.warn("Failed to register active session: {}", e.getMessage());
+            }
+
+            if (jwtDiagnosticLogging) {
+                jwtService.logIssuedPairDiagnostics("login", userDetailsCustom.getUsername(), accessToken, refreshToken);
             }
 
             Cookie refreshTokenCookie = createRefreshTokenCookie(refreshToken);

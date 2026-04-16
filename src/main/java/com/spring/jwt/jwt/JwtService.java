@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.security.Key;
 import java.util.Map;
 
+import org.springframework.lang.Nullable;
+
 public interface JwtService {
 
     Claims extractClaims(String token);
@@ -52,4 +54,16 @@ public interface JwtService {
      * @return true if the token is blacklisted
      */
     boolean isBlacklisted(String token);
+
+    /**
+     * When {@code app.security.jwt.diagnostic-logging=true}, logs non-sensitive metadata about
+     * newly issued access/refresh tokens (lengths, jti prefixes, exp). Never logs full tokens or secrets.
+     */
+    void logIssuedPairDiagnostics(String event, String subjectUsername, String accessToken, String refreshToken);
+
+    /**
+     * When diagnostic logging is enabled, logs what can be inferred from the inbound token and request
+     * (masked subject, jti prefix, exp, issuer vs config, device fingerprint prefixes). Safe for production triage.
+     */
+    void logInboundTokenDiagnostics(HttpServletRequest request, @Nullable String token, String hint);
 }
