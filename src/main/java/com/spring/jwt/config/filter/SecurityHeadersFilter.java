@@ -27,11 +27,7 @@ public class SecurityHeadersFilter implements Filter, Ordered {
         }
 
         httpResponse.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-        httpResponse.setHeader("Content-Security-Policy", 
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
-            "font-src 'self'; connect-src 'self'; frame-src 'self'; " +
-            "object-src 'none'; base-uri 'self'");
+        // CSP is set by SecurityHeadersConfig.cspNonceFilter (nonce-based) — do not duplicate here
 
         httpResponse.setHeader("X-Content-Type-Options", "nosniff");
 

@@ -5,6 +5,7 @@ import com.spring.jwt.jwt.JwtConfig;
 import com.spring.jwt.jwt.JwtService;
 import com.spring.jwt.repository.UserRepository;
 import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.SecurityAuditLogger;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -27,6 +28,7 @@ public class AuthController {
     private final JwtService jwtService;
     private final ActiveSessionService activeSessionService;
     private final UserRepository userRepository;
+    private final SecurityAuditLogger securityAuditLogger;
 
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
 
@@ -36,43 +38,74 @@ public class AuthController {
         log.info("Processing logout request");
 
         String username = null;
-        String token = request.getHeader("Authorization");
+        String accessToken = null;
+        String refreshToken = null;
 
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        } else {
-            Cookie[] cookies = request.getCookies();
-            if (cookies != null) {
-                for (Cookie c : cookies) {
-                    if ("access_token".equals(c.getName()) || REFRESH_TOKEN_COOKIE_NAME.equals(c.getName())) {
-                        token = c.getValue();
-                        break;
-                    }
+        // Extract access token from header or cookie
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            accessToken = authHeader.substring(7);
+        }
+        
+        // Extract tokens from cookies
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie c : cookies) {
+                if ("access_token".equals(c.getName()) && accessToken == null) {
+                    accessToken = c.getValue();
+                } else if (REFRESH_TOKEN_COOKIE_NAME.equals(c.getName())) {
+                    refreshToken = c.getValue();
                 }
             }
         }
 
-        if (token != null) {
+        // Extract username and blacklist access token
+        if (accessToken != null) {
             try {
-                io.jsonwebtoken.Claims claims = jwtService.extractClaimsIgnoreExpiration(token);
+                io.jsonwebtoken.Claims claims = jwtService.extractClaimsIgnoreExpiration(accessToken);
                 if (claims != null) {
                     username = claims.getSubject();
                 }
+                jwtService.blacklistToken(accessToken);
+                log.debug("Blacklisted access token during logout");
             } catch (Exception e) {
-                log.warn("Error extracting username during logout: {}", e.getMessage());
+                log.warn("Error processing access token during logout: {}", e.getMessage());
             }
         }
 
+        // Blacklist refresh token
+        if (refreshToken != null) {
+            try {
+                jwtService.blacklistToken(refreshToken);
+                log.debug("Blacklisted refresh token during logout");
+            } catch (Exception e) {
+                log.warn("Error blacklisting refresh token during logout: {}", e.getMessage());
+            }
+        }
+
+        // Remove active session
         if (username != null) {
             activeSessionService.removeActiveSession(username);
         }
 
-        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, "");
-        cookie.setMaxAge(0);
-        cookie.setPath("/");
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        response.addCookie(cookie);
+        // Clear refresh_token cookie
+        Cookie refreshCookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, "");
+        refreshCookie.setMaxAge(0);
+        refreshCookie.setPath("/");
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setSecure(true);
+        response.addCookie(refreshCookie);
+
+        // Clear access_token cookie
+        Cookie accessCookie = new Cookie("access_token", "");
+        accessCookie.setMaxAge(0);
+        accessCookie.setPath("/");
+        accessCookie.setHttpOnly(false);
+        accessCookie.setSecure(true);
+        response.addCookie(accessCookie);
+
+        // Audit log
+        securityAuditLogger.logLogout(username != null ? username : "unknown");
 
         SecurityContextHolder.clearContext();
 

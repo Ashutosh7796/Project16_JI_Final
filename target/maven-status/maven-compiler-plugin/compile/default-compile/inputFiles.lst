@@ -110,6 +110,7 @@ E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\EmployeeAt
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\ProductBuyPending\ProductBuyService.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\service\impl\FileStorageServiceImpl.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\EmployeeAttendance\AttendanceDashboardDTO.java
+E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\repository\SecurityAuditLogRepository.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\ProductPhoto\ProductPhotoRepository.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\EmployeeAttendance\Holiday\HolidayRepository.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Document\DocumentRepository.java
@@ -121,6 +122,7 @@ E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\jwt\TokenB
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\config\aspect\LoggingAspect.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\utils\EmailVerificationService\EmailUtils\EmailVerificationRequest.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\config\SchedulingConfig.java
+E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\entity\BlacklistedToken.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\mapper\DocumentResponseMapper.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\FarmerLabReport\FarmerLabReportViewDTO.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\entity\EmployeeAttendance.java
@@ -172,6 +174,7 @@ E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\repository
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\entity\ProductImage.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Product\ProductServiceImpl.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Attendance\dto\response\MonthlyAttendanceResponse.java
+E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\entity\SecurityAuditLog.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Document\Service\Impl\OptimizedFileProcessingServiceImpl.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\exception\PageNotFoundException.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\dto\DeviceInfo.java
@@ -230,6 +233,7 @@ E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Document\d
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\Payment\PaymentCallbackController.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\EmployeeAttendance\Holiday\CompanyWeeklyOffRepository.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\entity\DeliveryTrackingHistory.java
+E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\repository\BlacklistedTokenRepository.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\utils\StringEncryptConverter.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\config\AppConfig.java
 E:\Jioji\jiojiBackend\Project16_JI_Final\src\main\java\com\spring\jwt\exception\ExamTimeWindowException.java

@@ -20,6 +20,7 @@ com\spring\jwt\Attendance\dto\request\CheckOutRequest.class
 com\spring\jwt\exception\UserAlreadyExistException.class
 com\spring\jwt\FarmerSelfieEmployeeFarmerSurvey\FarmerSelfieEmployeeFarmerSurveyController.class
 com\spring\jwt\dto\SecureLoginRequest.class
+com\spring\jwt\entity\SecurityAuditLog.class
 com\spring\jwt\Document\domain\DocumentMetadata$DocumentMetadataBuilder.class
 com\spring\jwt\utils\EmailVerificationService\EmailUtils\ResponseMessage.class
 com\spring\jwt\Document\Service\Impl\FileProcessingServiceImpl.class
@@ -297,6 +298,7 @@ com\spring\jwt\config\filter\SqlInjectionFilter.class
 com\spring\jwt\Attendance\dto\response\MonthlyAttendanceResponse$AttendanceSummary.class
 com\spring\jwt\exception\DocumentExceptionHandler.class
 com\spring\jwt\Attendance\dto\response\LocationResponse$LocationResponseBuilder.class
+com\spring\jwt\entity\BlacklistedToken.class
 com\spring\jwt\dto\DeviceInfo.class
 com\spring\jwt\dto\EmployeeByRoleResponse$EmployeeByRoleResponseBuilder.class
 com\spring\jwt\Payment\CcAvenueConfig.class
@@ -312,12 +314,14 @@ com\spring\jwt\EmployeeAttendance\Holiday\WorkingDayUtil.class
 com\spring\jwt\FarmerPayment\BulkSurveyPaymentStatusRequestDTO.class
 com\spring\jwt\EmployeeAttendance\AttendanceAuditLogRepository.class
 com\spring\jwt\exception\CustomAccessDeniedHandler.class
+com\spring\jwt\repository\SecurityAuditLogRepository.class
 com\spring\jwt\Employee\EmployeeResponseDTO.class
 com\spring\jwt\FarmerLabReport\FarmerLabReportServiceImpl.class
 com\spring\jwt\EmployeeAttendance\Holiday\CompanyWeeklyOffRepository.class
 com\spring\jwt\EmployeeFarmerSurvey\SurveyIdResolver.class
 com\spring\jwt\jwt\impl\Utf8JwtClaimsSerializer.class
 com\spring\jwt\dto\OrderWeekPointDTO$OrderWeekPointDTOBuilder.class
+com\spring\jwt\repository\BlacklistedTokenRepository.class
 com\spring\jwt\Employee\UserListResponseDTO.class
 com\spring\jwt\EmployeeFarmerSurvey\JpaAuditConfig.class
 com\spring\jwt\entity\EmpDocument.class
@@ -331,7 +335,6 @@ com\spring\jwt\EmployeeAttendance\EmployeeMonthlyAttendanceReportDTO.class
 com\spring\jwt\Payment\PaymentCallbackController.class
 com\spring\jwt\ProductBuyConfirmed\ProductBuyConfirmedRepository.class
 com\spring\jwt\FarmerPayment\FarmerPaymentResponseDTO$FarmerPaymentResponseDTOBuilder.class
-com\spring\jwt\jwt\TokenBlacklistService$TokenInfo.class
 com\spring\jwt\Product\ProductService.class
 com\spring\jwt\exception\UserNotFoundExceptions.class
 com\spring\jwt\config\filter\SqlInjectionFilter$SqlInjectionRequestWrapper$1.class

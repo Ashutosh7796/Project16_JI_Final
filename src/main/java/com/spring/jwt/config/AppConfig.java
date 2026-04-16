@@ -139,8 +139,7 @@ public class AppConfig {
         http.headers(headers -> headers
                 .xssProtection(xss -> xss
                         .headerValue(XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
-                .contentSecurityPolicy(csp -> csp
-                        .policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'"))
+                // CSP is managed by SecurityHeadersConfig.cspNonceFilter (nonce-based)
                 .frameOptions(frame -> frame.deny())
                 .referrerPolicy(referrer -> referrer
                         .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))

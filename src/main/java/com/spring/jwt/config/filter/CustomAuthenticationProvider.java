@@ -31,6 +31,9 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
     @Override
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
         log.debug("Start actual authentication");
@@ -77,7 +80,6 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
         return auth;
     }
     private boolean passwordMatches(String rawPassword, String encodedPassword) {
-        BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
     private List<GrantedAuthority> getAuthorities(List<Role> roles) {

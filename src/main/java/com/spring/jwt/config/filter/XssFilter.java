@@ -17,7 +17,14 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Filter to protect against XSS attacks by sanitizing request parameters and form data
+ * Filter to protect against XSS attacks by sanitizing request parameters and form data.
+ * <p>
+ * Headers in {@code EXCLUDED_HEADERS} (Authorization, Cookie, etc.) are never sanitized
+ * because they carry opaque tokens whose content must not be mutated.
+ * <p>
+ * Parameter sanitization strips dangerous script/event patterns but preserves legitimate
+ * characters like {@code /}, {@code '}, and properly orders HTML entity encoding to
+ * prevent double-encoding.
  */
 @Component
 public class XssFilter implements Filter, Ordered {
@@ -76,22 +83,29 @@ public class XssFilter implements Filter, Ordered {
     private static class XssRequestWrapper extends HttpServletRequestWrapper {
 
         private static final Pattern[] XSS_PATTERNS = {
-
-                Pattern.compile("<script>(.*?)</script>", Pattern.CASE_INSENSITIVE),
-                Pattern.compile("src[\r\n]*=[\r\n]*\\\'(.*?)\\\'", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
-                Pattern.compile("src[\r\n]*=[\r\n]*\\\"(.*?)\\\"", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                // Script tags
+                Pattern.compile("<script[^>]*>(.*?)</script>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL),
+                // src attributes
+                Pattern.compile("src[\\r\\n]*=[\\r\\n]*\\'(.*?)\\'", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                Pattern.compile("src[\\r\\n]*=[\\r\\n]*\\\"(.*?)\\\"", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                // Event handlers (onclick, onerror, onload, etc.)
                 Pattern.compile("on\\w+\\s*=\\s*\".*?\"", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("on\\w+\\s*=\\s*'.*?'", Pattern.CASE_INSENSITIVE),
+                // javascript: protocol
                 Pattern.compile("javascript:", Pattern.CASE_INSENSITIVE),
+                // CSS expressions
                 Pattern.compile("expression\\(.*?\\)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
                 Pattern.compile("behavior\\s*:\\s*url\\(.*?\\)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
-                Pattern.compile("<.*?\\s+.*?\\s*=.*?>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                // Dangerous JS functions
                 Pattern.compile("eval\\((.*?)\\)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
-                Pattern.compile("alert\\((.*?)\\)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
                 Pattern.compile("document\\.write\\((.*?)\\)", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
                 Pattern.compile("document\\.cookie", Pattern.CASE_INSENSITIVE),
-                Pattern.compile("<iframe(.*?)>(.*?)</iframe>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
-                Pattern.compile("<form(.*?)>(.*?)</form>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL)
+                // Dangerous tags (not generic tag matching — only specific dangerous ones)
+                Pattern.compile("<iframe[^>]*>(.*?)</iframe>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                Pattern.compile("<object[^>]*>(.*?)</object>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                Pattern.compile("<embed[^>]*>", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("<applet[^>]*>(.*?)</applet>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
+                Pattern.compile("<form[^>]*>(.*?)</form>", Pattern.CASE_INSENSITIVE | Pattern.MULTILINE | Pattern.DOTALL),
         };
 
         private Map<String, String[]> sanitizedParameterMap;
@@ -174,7 +188,11 @@ public class XssFilter implements Filter, Ordered {
             };
         }
         /**
-         * Sanitizes the given value to prevent XSS attacks
+         * Sanitizes the given value to prevent XSS attacks.
+         * <p>
+         * Only strips known-dangerous patterns (script tags, event handlers, etc.).
+         * Does NOT blindly entity-encode all special characters — that would corrupt
+         * legitimate data like URLs, dates with slashes, names with apostrophes, etc.
          */
         private String sanitize(String value) {
             if (value == null) {
@@ -185,15 +203,18 @@ public class XssFilter implements Filter, Ordered {
             for (Pattern pattern : XSS_PATTERNS) {
                 sanitizedValue = pattern.matcher(sanitizedValue).replaceAll("");
             }
+
+            // Only encode actual HTML angle brackets to prevent tag injection.
+            // IMPORTANT: encode & FIRST to avoid double-encoding (&lt; → &amp;lt;)
             sanitizedValue = sanitizedValue
-                    .replaceAll("<", "&lt;")
-                    .replaceAll(">", "&gt;")
-                    .replaceAll("\"", "&quot;")
-                    .replaceAll("'", "&#x27;")
                     .replaceAll("&", "&amp;")
-                    .replaceAll("/", "&#x2F;");
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;");
+
+            // Do NOT encode: / (URLs, paths, dates), ' (names like O'Brien), " (common in text)
+            // Those are handled by output encoding at the view layer, not input filtering.
 
             return sanitizedValue;
         }
     }
-} 
+}

@@ -105,6 +105,7 @@ public class RegistrationController {
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
         )
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/admin/register")
     public ResponseEntity<BaseResponseDTO> registerAdmin(
             @Valid @RequestBody AdminRegistrationRequest request,

@@ -3,8 +3,10 @@ package com.spring.jwt.config.filter;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -13,12 +15,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Filter to prevent brute force attacks by implementing rate limiting
+ * Filter to prevent brute force attacks by implementing rate limiting.
+ * <p>
+ * Evicts stale entries every 5 minutes and caps map at {@code MAX_TRACKED_IPS}
+ * to prevent OOM under bot/scanner attacks.
  */
 @Component
+@Slf4j
 public class RateLimitingFilter implements Filter, Ordered {
 
     private static final int STATUS_TOO_MANY_REQUESTS = 429;
+    /** Hard cap — if exceeded, oldest entries evicted on next cleanup. */
+    private static final int MAX_TRACKED_IPS = 50_000;
 
     private final Map<String, RequestCounter> requestCounts = new ConcurrentHashMap<>();
     
@@ -79,6 +87,38 @@ public class RateLimitingFilter implements Filter, Ordered {
     @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE + 30;
+    }
+
+    /**
+     * Evict stale entries every 5 minutes to prevent unbounded memory growth.
+     * Also enforces MAX_TRACKED_IPS hard cap.
+     */
+    @Scheduled(fixedRate = 300_000)
+    public void evictStaleEntries() {
+        long now = System.currentTimeMillis();
+        long windowMs = TimeUnit.SECONDS.toMillis(refreshPeriod);
+        int before = requestCounts.size();
+
+        // Remove entries whose window has expired (no recent requests)
+        requestCounts.entrySet().removeIf(e ->
+                now - e.getValue().getWindowStart() > windowMs * 2);
+
+        // Hard cap: if still too many, remove oldest entries
+        if (requestCounts.size() > MAX_TRACKED_IPS) {
+            int toRemove = requestCounts.size() - MAX_TRACKED_IPS;
+            requestCounts.entrySet().stream()
+                    .sorted(Map.Entry.comparingByValue(
+                            (a, b) -> Long.compare(a.getWindowStart(), b.getWindowStart())))
+                    .limit(toRemove)
+                    .map(Map.Entry::getKey)
+                    .toList()
+                    .forEach(requestCounts::remove);
+        }
+
+        int evicted = before - requestCounts.size();
+        if (evicted > 0) {
+            log.debug("Rate limiter evicted {} stale entries, {} remaining", evicted, requestCounts.size());
+        }
     }
     
     /**
@@ -151,4 +191,4 @@ public class RateLimitingFilter implements Filter, Ordered {
             return windowStart;
         }
     }
-} 
+}

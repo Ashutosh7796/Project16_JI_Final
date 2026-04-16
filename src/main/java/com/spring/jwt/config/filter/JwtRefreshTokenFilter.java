@@ -211,7 +211,7 @@ public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilte
             accessTokenCookie.setHttpOnly(false);
             accessTokenCookie.setSecure(true);
             accessTokenCookie.setPath("/");
-            accessTokenCookie.setMaxAge((int) jwtConfig.getExpiration());
+            accessTokenCookie.setMaxAge((int) (jwtConfig.getExpiration() / 1000));
             response.addCookie(accessTokenCookie);
 
             Map<String, Object> tokens = new HashMap<>();

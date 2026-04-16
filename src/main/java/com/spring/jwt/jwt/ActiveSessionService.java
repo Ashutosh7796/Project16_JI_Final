@@ -78,11 +78,16 @@ public class ActiveSessionService {
 	@Scheduled(fixedRate = 3600000)
 	public void cleanupExpiredSessions() {
 		Instant now = Instant.now();
+		int before = usernameToSession.size();
 		usernameToSession.entrySet().removeIf(e -> {
 			SessionInfo s = e.getValue();
 			return (s.getRefreshExpiresAt() != null && s.getRefreshExpiresAt().isBefore(now))
 				|| (s.getAccessExpiresAt() != null && s.getAccessExpiresAt().isBefore(now));
 		});
+		int evicted = before - usernameToSession.size();
+		if (evicted > 0) {
+			log.info("Evicted {} expired sessions, {} remaining", evicted, usernameToSession.size());
+		}
 	}
 
 	private String shortId(String id) {

@@ -15,7 +15,13 @@ import java.util.regex.Pattern;
  * <p>
  * Headers that carry opaque bearer tokens or session cookies (Authorization, Cookie)
  * are <b>excluded</b> from sanitization because their base64url content can
- * accidentally match SQL keywords, corrupting JWTs and causing Malformed JWT errors.
+ * accidentally match SQL keywords, corrupting JWTs.
+ * <p>
+ * Parameter sanitization only targets clear SQL injection patterns (multi-statement,
+ * tautologies, UNION attacks). It does NOT strip legitimate characters like apostrophes,
+ * quotes, semicolons, or hashes — those break names (O'Brien), hashtags, and text input.
+ * SQL injection is properly prevented by parameterized queries (JPA/Hibernate), not
+ * by mangling user input.
  */
 @Component
 public class SqlInjectionFilter implements Filter, Ordered {
@@ -54,35 +60,37 @@ public class SqlInjectionFilter implements Filter, Ordered {
     }
     
     /**
-     * Request wrapper that sanitizes parameters to prevent SQL injection attacks
+     * Request wrapper that sanitizes parameters to prevent SQL injection attacks.
+     * <p>
+     * IMPORTANT: The primary defense against SQL injection is parameterized queries
+     * (JPA/Hibernate). This filter is a defense-in-depth measure that only targets
+     * clear attack patterns, not legitimate text containing SQL keywords.
      */
     private static class SqlInjectionRequestWrapper extends HttpServletRequestWrapper {
 
+        /**
+         * Only match clear SQL injection attack patterns — NOT isolated SQL keywords
+         * in normal text. A search field containing "select the best option from menu"
+         * should NOT be stripped.
+         */
         private static final Pattern[] SQL_INJECTION_PATTERNS = {
-            Pattern.compile("(?i)\\b(select|insert|update|delete|from|where|drop|alter|truncate|exec|union|create|table|into|procedure|schema)\\b.*?\\b(.*?)\\b"),
-            Pattern.compile("(?i)/\\*.*?\\*/|--.*?$"),
-            // SQL operators
-            Pattern.compile("(?i)\\b(and|or|not|like|between|in|is|null)\\b.*?\\b(.*?)\\b"),
-            // SQL functions
-            Pattern.compile("(?i)\\b(count|sum|avg|min|max)\\b.*?\\(.*?\\)"),
-            // Multiple statements
-            Pattern.compile(";.*?$"),
-            // Equals with quotes
-            Pattern.compile("'\\s*=\\s*'"),
-            // Always true conditions
-            Pattern.compile("'\\s*or\\s*'\\s*'\\s*=\\s*'"),
-            // Batched statements
-            Pattern.compile(";\\s*\\w+.*?"),
-            // UNION-based attacks
-            Pattern.compile("(?i)union\\s+all\\s+select"),
-            // Time-based blind attacks
-            Pattern.compile("(?i)sleep\\s*\\(\\s*\\d+\\s*\\)|benchmark\\s*\\("),
-            // Error-based attacks
-            Pattern.compile("(?i)extractvalue\\s*\\(|updatexml\\s*\\("),
-            // Stacked queries
-            Pattern.compile(";\\s*\\w+.*?"),
-            // Hex encoding
-            Pattern.compile("(?i)0x[0-9a-f]+")
+            // UNION-based injection (most common attack vector)
+            Pattern.compile("(?i)union\\s+(all\\s+)?select\\b"),
+            // Stacked queries: "; DROP TABLE" etc. (but not standalone semicolons)
+            Pattern.compile(";\\s*(drop|alter|truncate|delete|insert|update|create|exec)\\b", Pattern.CASE_INSENSITIVE),
+            // Always-true tautologies used in WHERE clause injection
+            Pattern.compile("'\\s*or\\s+'\\s*'\\s*=\\s*'", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("'\\s*or\\s+1\\s*=\\s*1", Pattern.CASE_INSENSITIVE),
+            Pattern.compile("\"\\s*or\\s+\"\\s*\"\\s*=\\s*\"", Pattern.CASE_INSENSITIVE),
+            // SQL comment injection (used to truncate queries)
+            Pattern.compile("(?i)/\\*.*?\\*/"),
+            Pattern.compile("--\\s+.*$", Pattern.MULTILINE),
+            // Time-based blind injection
+            Pattern.compile("(?i)\\bsleep\\s*\\(\\s*\\d+\\s*\\)"),
+            Pattern.compile("(?i)\\bbenchmark\\s*\\("),
+            // Error-based injection
+            Pattern.compile("(?i)\\bextractvalue\\s*\\("),
+            Pattern.compile("(?i)\\bupdatexml\\s*\\("),
         };
 
         private Map<String, String[]> sanitizedParameterMap;
@@ -172,7 +180,9 @@ public class SqlInjectionFilter implements Filter, Ordered {
         }
 
         /**
-         * Sanitizes the given value to prevent SQL injection attacks
+         * Strips only clear SQL injection attack patterns.
+         * Does NOT strip: apostrophes, quotes, semicolons, hashes, hex values.
+         * Those are legitimate in user text and handled by parameterized queries.
          */
         private String sanitize(String value) {
             if (value == null) {
@@ -183,17 +193,8 @@ public class SqlInjectionFilter implements Filter, Ordered {
             for (Pattern pattern : SQL_INJECTION_PATTERNS) {
                 sanitizedValue = pattern.matcher(sanitizedValue).replaceAll("");
             }
-
-            sanitizedValue = sanitizedValue
-                .replaceAll("'", "")
-                .replaceAll("\"", "")
-                .replaceAll(";", "")
-                .replaceAll("--", "")
-                .replaceAll("/\\*", "")
-                .replaceAll("\\*/", "")
-                .replaceAll("#", "");
             
             return sanitizedValue;
         }
     }
-} 
+}
