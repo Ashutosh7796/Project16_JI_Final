@@ -47,6 +47,8 @@ public class JwtServiceImpl implements JwtService {
     private final TokenBlacklistService tokenBlacklistService;
     private final ActiveSessionService activeSessionService;
     private final boolean jwtDiagnosticLogging;
+    /** When true, logs full JWT + decoded header/payload UTF-8 on parse failure only. Never logs signing secret. */
+    private final boolean insecureEmergencyJwtTrace;
 
     @Autowired
     public JwtServiceImpl(@Lazy UserDetailsService userDetailsService,
@@ -54,13 +56,15 @@ public class JwtServiceImpl implements JwtService {
                           @Lazy JwtConfig jwtConfig,
                           TokenBlacklistService tokenBlacklistService,
                           ActiveSessionService activeSessionService,
-                          @Value("${app.security.jwt.diagnostic-logging:false}") boolean jwtDiagnosticLogging) {
+                          @Value("${app.security.jwt.diagnostic-logging:false}") boolean jwtDiagnosticLogging,
+                          @Value("${app.security.jwt.insecure-emergency-trace:false}") boolean insecureEmergencyJwtTrace) {
         this.userDetailsService = userDetailsService;
         this.userRepository = userRepository;
         this.jwtConfig = jwtConfig;
         this.tokenBlacklistService = tokenBlacklistService;
         this.activeSessionService = activeSessionService;
         this.jwtDiagnosticLogging = jwtDiagnosticLogging;
+        this.insecureEmergencyJwtTrace = insecureEmergencyJwtTrace;
     }
 
     @PostConstruct
@@ -79,6 +83,10 @@ public class JwtServiceImpl implements JwtService {
                     jwtConfig.getRefreshExpiration(),
                     jwtConfig.getAllowedClockSkewSeconds(),
                     jwtConfig.isDeviceFingerprintingEnabled());
+            if (insecureEmergencyJwtTrace) {
+                log.error("app.security.jwt.insecure-emergency-trace=true: on JWT parse failure the server will log the FULL compact token and raw header/payload segments. "
+                        + "Signing secret is NEVER logged. Disable immediately after triage.");
+            }
         } catch (Exception e) {
             throw new IllegalStateException(
                     "Invalid jwt.secret: must be a Base64-encoded key (HS256, sufficient length). "
@@ -332,6 +340,14 @@ public class JwtServiceImpl implements JwtService {
                     e.getClass().getSimpleName(),
                     asciiSafeLog(tokenParseDetailForLogs(e), 400));
             jwtDiag("parse failure: {}", asciiSafeLog(tokenParseDetailForLogs(e), 400));
+            if (insecureEmergencyJwtTrace && StringUtils.hasText(token)) {
+                log.error("======== JWT_INSECURE_EMERGENCY_TRACE parse_failed (signing secret NOT logged) ========");
+                log.error("JWT_INSECURE_EMERGENCY_TRACE compact_token={}", token);
+                log.error("JWT_INSECURE_EMERGENCY_TRACE header_segment_decoded_utf8={}", jwtSegmentDecodedUtf8(token, 0));
+                log.error("JWT_INSECURE_EMERGENCY_TRACE payload_segment_decoded_utf8={}", jwtSegmentDecodedUtf8(token, 1));
+                log.error("JWT_INSECURE_EMERGENCY_TRACE exception_chain={}", asciiSafeLog(tokenParseDetailForLogs(e), 800));
+                log.error("======== END JWT_INSECURE_EMERGENCY_TRACE ========");
+            }
             return false;
         }
 
@@ -436,6 +452,22 @@ public class JwtServiceImpl implements JwtService {
             return "(none)";
         }
         return jti.length() <= 8 ? jti : jti.substring(0, 8) + "...";
+    }
+
+    /**
+     * Decode JWT segment (0=header, 1=payload) as UTF-8 for emergency trace only. Does not verify signature.
+     */
+    private static String jwtSegmentDecodedUtf8(String jwt, int segmentIndex) {
+        try {
+            String[] parts = jwt.split("\\.");
+            if (segmentIndex < 0 || segmentIndex >= parts.length) {
+                return "(no segment " + segmentIndex + ")";
+            }
+            byte[] raw = Decoders.BASE64URL.decode(parts[segmentIndex]);
+            return new String(raw, StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            return "(segment decode failed: " + ex.getMessage() + ")";
+        }
     }
 
     /**
