@@ -45,13 +45,8 @@ public class UserDetailsServiceCustom implements UserDetailsService {
         }
 
         List<GrantedAuthority> authorities = user.getRoles().stream()
-                .map(role -> {
-                    String roleName = role.getName();
-                    if (!roleName.startsWith("ROLE_")) {
-                        roleName = "ROLE_" + roleName;
-                    }
-                    return new SimpleGrantedAuthority(roleName);
-                })
+                .map(role -> new SimpleGrantedAuthority(
+                        AuthorityStrings.springAuthorityFromDatabaseRole(role.getName())))
                 .collect(Collectors.toList());
 
         Long userId = user.getUserId();

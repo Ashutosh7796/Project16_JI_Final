@@ -11,10 +11,19 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Filter to protect against SQL injection attacks by sanitizing request parameters
+ * Filter to protect against SQL injection attacks by sanitizing request parameters.
+ * <p>
+ * Headers that carry opaque bearer tokens or session cookies (Authorization, Cookie)
+ * are <b>excluded</b> from sanitization because their base64url content can
+ * accidentally match SQL keywords, corrupting JWTs and causing Malformed JWT errors.
  */
 @Component
 public class SqlInjectionFilter implements Filter, Ordered {
+
+    /** Headers whose values must never be mutated (lower-case for comparison). */
+    private static final Set<String> EXCLUDED_HEADERS = Set.of(
+            "authorization", "cookie", "set-cookie"
+    );
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
@@ -127,7 +136,14 @@ public class SqlInjectionFilter implements Filter, Ordered {
         @Override
         public String getHeader(String name) {
             String header = super.getHeader(name);
-            return header != null ? sanitize(header) : null;
+            if (header == null) {
+                return null;
+            }
+            // Never sanitize headers that carry opaque tokens (JWT, session cookies)
+            if (EXCLUDED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                return header;
+            }
+            return sanitize(header);
         }
 
         @Override
@@ -135,6 +151,11 @@ public class SqlInjectionFilter implements Filter, Ordered {
             Enumeration<String> headers = super.getHeaders(name);
             if (headers == null) {
                 return null;
+            }
+
+            // Never sanitize headers that carry opaque tokens
+            if (EXCLUDED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {
+                return headers;
             }
 
             return new Enumeration<String>() {
@@ -160,7 +181,7 @@ public class SqlInjectionFilter implements Filter, Ordered {
 
             String sanitizedValue = value;
             for (Pattern pattern : SQL_INJECTION_PATTERNS) {
-                sanitizedValue = pattern.matcher(sanitizedValue).replaceAll("INVALID");
+                sanitizedValue = pattern.matcher(sanitizedValue).replaceAll("");
             }
 
             sanitizedValue = sanitizedValue

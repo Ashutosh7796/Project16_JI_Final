@@ -6,6 +6,8 @@ import com.spring.jwt.jwt.JwtService;
 import com.spring.jwt.jwt.TokenBlacklistService;
 import com.spring.jwt.jwt.ActiveSessionService;
 import com.spring.jwt.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.spring.jwt.service.security.AuthorityStrings;
 import com.spring.jwt.service.security.UserDetailsCustom;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
@@ -24,6 +26,10 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.MessageDigest;
@@ -41,6 +47,7 @@ public class JwtServiceImpl implements JwtService {
     private static final String CLAIM_KEY_TOKEN_TYPE = "token_type";
     private static final String TOKEN_TYPE_ACCESS = "access";
     private static final String TOKEN_TYPE_REFRESH = "refresh";
+
     private final UserRepository userRepository;
     private final JwtConfig jwtConfig;
     private final UserDetailsService userDetailsService;
@@ -129,6 +136,109 @@ public class JwtServiceImpl implements JwtService {
         return Keys.hmacShaKeyFor(key);
     }
 
+    /**
+     * Resolves {@code authorities} for JWT signing: scalar JPQL first (fresh {@link String} values),
+     * then normalizes to strict ASCII Spring role tokens and copies through US_ASCII bytes so the JWT
+     * layer never retains Hibernate-managed character state.
+     */
+    private List<String> authorityClaimsForJwt(UserDetailsCustom userDetailsCustom) {
+        try {
+            List<String> roleNames = userRepository.findRoleNamesByUserId(userDetailsCustom.getUserId());
+            log.debug("authorityClaimsForJwt: userId={} roleNames={}", userDetailsCustom.getUserId(), roleNames);
+            
+            if (roleNames != null && !roleNames.isEmpty()) {
+                List<String> processed = new ArrayList<>();
+                for (String roleName : roleNames) {
+                    String afterSpring = AuthorityStrings.springAuthorityFromDatabaseRole(roleName);
+                    String afterIsolate = isolatedAsciiAuthority(afterSpring);
+                    processed.add(afterIsolate);
+                }
+                
+                List<String> result = processed.stream().distinct().collect(Collectors.toList());
+                log.debug("authorityClaimsForJwt: final result={}", result);
+                return result;
+            }
+        } catch (Exception ex) {
+            log.warn("JPQL role fetch for JWT failed; falling back. user={} msg={}",
+                    maskEmail(userDetailsCustom.getUsername()),
+                    asciiSafeLog(ex.getMessage(), 200));
+        }
+
+        Collection<? extends GrantedAuthority> source;
+        try {
+            UserDetails reloaded = userDetailsService.loadUserByUsername(userDetailsCustom.getUsername());
+            source = reloaded.getAuthorities();
+        } catch (Exception ex) {
+            log.warn("Could not reload authorities for JWT; using principal copy. user={} msg={}",
+                    maskEmail(userDetailsCustom.getUsername()),
+                    asciiSafeLog(ex.getMessage(), 200));
+            source = userDetailsCustom.getAuthorities();
+        }
+        if (source == null || source.isEmpty()) {
+            return List.of(isolatedAsciiAuthority(AuthorityStrings.forJwtClaim("ROLE_USER")));
+        }
+        return source.stream()
+                .map(GrantedAuthority::getAuthority)
+                .map(AuthorityStrings::forJwtClaim)
+                .map(JwtServiceImpl::isolatedAsciiAuthority)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private static String isolatedAsciiAuthority(String authority) {
+        String s = authority == null ? "" : authority;
+        if (!StringUtils.hasText(s)) {
+            s = AuthorityStrings.springAuthorityFromDatabaseRole("");
+        }
+        // AuthorityStrings.normalizeAuthorityToken already ensures only safe ASCII chars
+        // No need for US_ASCII conversion which can corrupt data
+        return s;
+    }
+
+    /**
+     * Ensures the signed payload decodes as strict UTF-8 and parses as JSON with a textual {@code authorities} array.
+     * Catches corrupt tokens before they leave the server.
+     */
+    private static void assertJwtPayloadWellFormed(String compact) {
+        String[] parts = compact.split("\\.");
+        if (parts.length < 2) {
+            throw new IllegalStateException("JWT has no payload segment");
+        }
+        byte[] raw = Decoders.BASE64URL.decode(parts[1]);
+        CharsetDecoder utf8 = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            utf8.decode(ByteBuffer.wrap(raw));
+        } catch (CharacterCodingException e) {
+            throw new IllegalStateException("JWT payload is not well-formed UTF-8", e);
+        }
+        try {
+            JsonNode root = Utf8JwtClaimsSerializer.mapper().readTree(raw);
+            JsonNode auth = root.get("authorities");
+            if (auth == null || !auth.isArray() || auth.isEmpty()) {
+                throw new IllegalStateException("authorities missing or not a non-empty JSON array");
+            }
+            for (JsonNode n : auth) {
+                if (!n.isTextual()) {
+                    throw new IllegalStateException("authorities must be an array of strings");
+                }
+                String t = n.asText();
+                for (int i = 0; i < t.length(); ) {
+                    int cp = t.codePointAt(i);
+                    if (cp < 0x20 || cp == 0x7f || cp > 0x7e) {
+                        throw new IllegalStateException("authority string must be printable ASCII only");
+                    }
+                    i += Character.charCount(cp);
+                }
+            }
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("JWT payload is not valid JSON", e);
+        }
+    }
+
     @Override
     public String generateToken(UserDetailsCustom userDetailsCustom) {
         return generateToken(userDetailsCustom, null);
@@ -137,13 +247,11 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String generateToken(UserDetailsCustom userDetailsCustom, String deviceFingerprint) {
         Instant now = Instant.now();
-        Instant notBefore = now; // Industrial standard: nbf should not be in the future
+        Instant notBefore = now;
 
-        List<String> roles = userDetailsCustom.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
+        List<String> roles = authorityClaimsForJwt(userDetailsCustom);
 
-        log.debug("Roles: {}", roles);
+        log.debug("Roles for JWT: {}", roles);
 
         Long userId = userDetailsCustom.getUserId();
 
@@ -159,15 +267,17 @@ public class JwtServiceImpl implements JwtService {
         } catch (BaseException ex) {
             throw ex;
         }
-            String firstName = userDetailsCustom.getFirstName();
+        String firstName = sanitizeForJson(userDetailsCustom.getFirstName());
         
         log.debug("Generating access token for user: {}, device: {}", 
                 userDetailsCustom.getUsername(), 
                 deviceFingerprint != null ? deviceFingerprint.substring(0, 8) + "..." : "none");
 
-            String accessJti = UUID.randomUUID().toString();
-            JwtBuilder jwtBuilder = Jwts.builder()
-                .setSubject(userDetailsCustom.getUsername())
+        String accessJti = UUID.randomUUID().toString();
+            
+        JwtBuilder jwtBuilder = Jwts.builder()
+                .serializeToJsonWith(Utf8JwtClaimsSerializer.INSTANCE)
+                .setSubject(sanitizeForJson(userDetailsCustom.getUsername()))
                 .setIssuer(jwtConfig.getIssuer())
                 .setAudience(jwtConfig.getAudience())
                 .setId(accessJti)
@@ -191,6 +301,14 @@ public class JwtServiceImpl implements JwtService {
         }
 
         String compact = jwtBuilder.compact();
+        
+        try {
+            assertJwtPayloadWellFormed(compact);
+        } catch (RuntimeException e) {
+            log.error("Signed access JWT failed UTF-8/JSON self-check userMasked={}", maskEmail(userDetailsCustom.getUsername()), e);
+            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()),
+                    "Could not build a valid access token (internal check failed).", e);
+        }
         long expSec = now.plusMillis(jwtConfig.getExpiration()).getEpochSecond();
         jwtDiag("signed access userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}",
                 maskEmail(userDetailsCustom.getUsername()),
@@ -204,19 +322,18 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String generateRefreshToken(UserDetailsCustom userDetailsCustom, String deviceFingerprint) {
         Instant now = Instant.now();
-        Instant notBefore = now; // Industrial standard: nbf should not be in the future
+        Instant notBefore = now;
         
         log.debug("Generating refresh token for user: {}, device: {}", 
                 userDetailsCustom.getUsername(), 
                 deviceFingerprint != null ? deviceFingerprint.substring(0, 8) + "..." : "none");
 
-        List<String> roles = userDetailsCustom.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
+        List<String> roles = authorityClaimsForJwt(userDetailsCustom);
 
             String refreshJti = UUID.randomUUID().toString();
             JwtBuilder jwtBuilder = Jwts.builder()
-                .setSubject(userDetailsCustom.getUsername())
+                .serializeToJsonWith(Utf8JwtClaimsSerializer.INSTANCE)
+                .setSubject(sanitizeForJson(userDetailsCustom.getUsername()))
                 .setIssuer(jwtConfig.getIssuer())
                 .setId(refreshJti)
                 .claim("userId", userDetailsCustom.getUserId())
@@ -239,6 +356,13 @@ public class JwtServiceImpl implements JwtService {
         }
 
         String compact = jwtBuilder.compact();
+        try {
+            assertJwtPayloadWellFormed(compact);
+        } catch (RuntimeException e) {
+            log.error("Signed refresh JWT failed UTF-8/JSON self-check userMasked={}", maskEmail(userDetailsCustom.getUsername()), e);
+            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()),
+                    "Could not build a valid refresh token (internal check failed).", e);
+        }
         long expSec = now.plusSeconds(jwtConfig.getRefreshExpiration()).getEpochSecond();
         jwtDiag("signed refresh userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}",
                 maskEmail(userDetailsCustom.getUsername()),
@@ -526,6 +650,37 @@ public class JwtServiceImpl implements JwtService {
         String local = username.substring(0, at);
         String tail = local.length() > 1 ? local.substring(0, 1) + "***" : "*";
         return tail + "@" + username.substring(at + 1);
+    }
+
+    /**
+     * Sanitize string for safe JSON serialization by removing non-printable and invalid UTF-8 characters.
+     * This prevents JWT parsing failures caused by corrupted character data in claims.
+     */
+    private String sanitizeForJson(String input) {
+        if (!StringUtils.hasText(input)) {
+            return input;
+        }
+        
+        // Remove any non-printable ASCII characters and invalid UTF-8 sequences
+        StringBuilder sanitized = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            // Keep only valid printable characters (ASCII 32-126) and common extended characters
+            if ((c >= 32 && c <= 126) || c >= 128) {
+                // For extended characters, verify they're valid UTF-16
+                if (Character.isDefined(c) && !Character.isISOControl(c)) {
+                    sanitized.append(c);
+                }
+            }
+        }
+        
+        String result = sanitized.toString();
+        if (!result.equals(input)) {
+            log.warn("Sanitized claim value from '{}' to '{}' - contained invalid characters", 
+                    asciiSafeLog(input, 100), asciiSafeLog(result, 100));
+        }
+        
+        return result;
     }
 
     private String extractUsername(String token){

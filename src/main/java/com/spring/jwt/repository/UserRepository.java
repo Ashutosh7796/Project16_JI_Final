@@ -60,4 +60,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
             WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN', 'ADMIN')
             """)
     List<User> findStaffRolesForAdminList();
+
+    /**
+     * Scalar role names for JWT signing — avoids reusing Hibernate-managed {@code Role#name} references.
+     */
+    @Query("SELECT DISTINCT r.name FROM User u JOIN u.roles r WHERE u.userId = :userId")
+    List<String> findRoleNamesByUserId(@Param("userId") Long userId);
 }

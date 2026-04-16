@@ -4,6 +4,7 @@ import com.spring.jwt.entity.Role;
 import com.spring.jwt.entity.User;
 import com.spring.jwt.exception.BaseException;
 import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.security.AuthorityStrings;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -89,9 +90,8 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
             });
         }
 
-        permissions.forEach(p->{
-            result.add(new SimpleGrantedAuthority(p));
-        });
+        permissions.forEach(p ->
+                result.add(new SimpleGrantedAuthority(AuthorityStrings.springAuthorityFromDatabaseRole(p))));
         return result;
     }
 
