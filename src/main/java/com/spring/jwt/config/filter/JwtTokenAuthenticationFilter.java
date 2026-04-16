@@ -183,14 +183,14 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
         if (!StringUtils.hasText(jti)) {
             return "(none)";
         }
-        return jti.length() <= 6 ? jti.substring(0, Math.min(3, jti.length())) + "…" : jti.substring(0, 6) + "…";
+        return jti.length() <= 6 ? jti.substring(0, Math.min(3, jti.length())) + "..." : jti.substring(0, 6) + "...";
     }
 
     private void logAuthFailure(HttpServletRequest request, String token, String stage, String detail) {
         int len = StringUtils.hasText(token) ? token.length() : 0;
         int parts = tokenPartCount(token);
         String xff = request.getHeader("X-Forwarded-For");
-        String xffShort = StringUtils.hasText(xff) && xff.length() > 60 ? xff.substring(0, 60) + "…" : xff;
+        String xffShort = StringUtils.hasText(xff) && xff.length() > 60 ? xff.substring(0, 60) + "..." : xff;
         log.warn("[auth-fail] stage={} method={} servletPath={} uri={} tokenLen={} tokenParts={} hasAccessCookie={} xForwardedFor={} detail={}",
                 stage,
                 request.getMethod(),
@@ -199,8 +199,8 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
                 len,
                 parts,
                 hasAccessTokenCookie(request),
-                xffShort,
-                detail);
+                asciiSafeLog(xffShort, 80),
+                asciiSafeLog(detail, 300));
     }
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -268,17 +268,36 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             }
             return "Token has expired. Please login again.";
         } catch (SignatureException e) {
-            log.warn("[jwt-reject] SignatureException in getSpecificInvalidReason — check jwt.secret / JWT_SECRET parity across pods");
+            log.warn("[jwt-reject] SignatureException in getSpecificInvalidReason - check jwt.secret / JWT_SECRET parity across pods");
             return "Invalid token signature. Re-login; if this persists, ensure every server instance uses the same jwt.secret (Base64).";
         } catch (JwtException e) {
             log.warn("[jwt-reject] JwtException in getSpecificInvalidReason type={} msg={}",
-                    e.getClass().getSimpleName(), e.getMessage());
+                    e.getClass().getSimpleName(), asciiSafeLog(e.getMessage(), 240));
             return "Malformed or invalid token. Please clear your browser data and login again.";
         } catch (Exception e) {
             log.warn("[jwt-reject] unexpected in getSpecificInvalidReason type={} msg={}",
-                    e.getClass().getSimpleName(), e.getMessage());
+                    e.getClass().getSimpleName(), asciiSafeLog(e.getMessage(), 240));
             return "Authentication failed. Please login again.";
         }
+    }
+
+    private static String asciiSafeLog(String s, int maxLen) {
+        if (!StringUtils.hasText(s)) {
+            return "";
+        }
+        int n = Math.min(s.length(), maxLen);
+        StringBuilder b = new StringBuilder(n);
+        for (int i = 0; i < n; i++) {
+            char c = s.charAt(i);
+            if (c == '\n' || c == '\r' || c == '\t') {
+                b.append(' ');
+            } else if (c >= 32 && c <= 126) {
+                b.append(c);
+            } else {
+                b.append('_');
+            }
+        }
+        return b.toString();
     }
 
     private void handleInvalidToken(HttpServletResponse response, String message)

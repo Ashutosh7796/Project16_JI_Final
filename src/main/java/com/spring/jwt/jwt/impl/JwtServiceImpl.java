@@ -300,8 +300,8 @@ public class JwtServiceImpl implements JwtService {
                     token != null ? token.length() : 0,
                     tokenPartCount(token),
                     e.getClass().getSimpleName(),
-                    e.getMessage());
-            jwtDiag("parse failure: {}", e.toString());
+                    asciiSafeLog(e.getMessage(), 240));
+            jwtDiag("parse failure: {}", asciiSafeLog(e.toString(), 400));
             return false;
         }
 
@@ -365,8 +365,10 @@ public class JwtServiceImpl implements JwtService {
             jwtDiag("Token validation successful for user={}", username);
             return true;
         } catch (Exception e) {
-            log.warn("[jwt-reject] phase=post_claims exType={} msg={}", e.getClass().getSimpleName(), e.getMessage());
-            jwtDiag("post-claims failure: {}", e.toString());
+            log.warn("[jwt-reject] phase=post_claims exType={} msg={}",
+                    e.getClass().getSimpleName(),
+                    asciiSafeLog(e.getMessage(), 240));
+            jwtDiag("post-claims failure: {}", asciiSafeLog(e.toString(), 400));
             return false;
         }
     }
@@ -388,7 +390,29 @@ public class JwtServiceImpl implements JwtService {
         if (!StringUtils.hasText(jti)) {
             return "(none)";
         }
-        return jti.length() <= 8 ? jti : jti.substring(0, 8) + "…";
+        return jti.length() <= 8 ? jti : jti.substring(0, 8) + "...";
+    }
+
+    /**
+     * Printable ASCII, single line — avoids journald/syslog treating log fields as binary blobs.
+     */
+    private static String asciiSafeLog(String s, int maxLen) {
+        if (!StringUtils.hasText(s)) {
+            return "";
+        }
+        int n = Math.min(s.length(), maxLen);
+        StringBuilder b = new StringBuilder(n);
+        for (int i = 0; i < n; i++) {
+            char c = s.charAt(i);
+            if (c == '\n' || c == '\r' || c == '\t') {
+                b.append(' ');
+            } else if (c >= 32 && c <= 126) {
+                b.append(c);
+            } else {
+                b.append('_');
+            }
+        }
+        return b.toString();
     }
 
     private static String maskEmail(String username) {
