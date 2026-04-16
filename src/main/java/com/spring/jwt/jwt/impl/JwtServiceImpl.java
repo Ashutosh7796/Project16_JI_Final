@@ -330,8 +330,8 @@ public class JwtServiceImpl implements JwtService {
                     token != null ? token.length() : 0,
                     tokenPartCount(token),
                     e.getClass().getSimpleName(),
-                    asciiSafeLog(e.getMessage(), 240));
-            jwtDiag("parse failure: {}", asciiSafeLog(e.toString(), 400));
+                    asciiSafeLog(tokenParseDetailForLogs(e), 400));
+            jwtDiag("parse failure: {}", asciiSafeLog(tokenParseDetailForLogs(e), 400));
             return false;
         }
 
@@ -439,6 +439,30 @@ public class JwtServiceImpl implements JwtService {
     }
 
     /**
+     * Full JWT parse failure text for logs (includes {@link BaseException} outcome + cause chain e.g. MalformedJwtException).
+     */
+    private static String tokenParseDetailForLogs(Throwable e) {
+        if (e instanceof BaseException be) {
+            StringBuilder sb = new StringBuilder(be.getOutcomeDescription());
+            Throwable c = be.getCause();
+            int depth = 0;
+            while (c != null && depth < 5) {
+                sb.append(" <- ").append(c.getClass().getSimpleName());
+                if (StringUtils.hasText(c.getMessage())) {
+                    sb.append(":").append(c.getMessage());
+                }
+                c = c.getCause();
+                depth++;
+            }
+            return sb.toString();
+        }
+        if (e.getMessage() != null) {
+            return e.getMessage();
+        }
+        return e.toString();
+    }
+
+    /**
      * Printable ASCII, single line — avoids journald/syslog treating log fields as binary blobs.
      */
     private static String asciiSafeLog(String s, int maxLen) {
@@ -491,18 +515,19 @@ public class JwtServiceImpl implements JwtService {
                     .build()
                     .parseClaimsJws(token)
                     .getBody();
-        }catch (ExpiredJwtException e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Token expiration");
-        }catch (UnsupportedJwtException e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Token's not supported");
-        }catch (MalformedJwtException e){
+        } catch (ExpiredJwtException e) {
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Token expiration", e);
+        } catch (UnsupportedJwtException e) {
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Token's not supported", e);
+        } catch (MalformedJwtException e) {
             // Three dot-separated segments does not guarantee valid Base64URL / JSON; do not imply "wrong part count".
             String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Malformed JWT: " + detail);
-        }catch (SignatureException e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Invalid JWT signature");
-        }catch (Exception e){
-            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), e.getLocalizedMessage());
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Malformed JWT: " + detail, e);
+        } catch (SignatureException e) {
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), "Invalid JWT signature", e);
+        } catch (Exception e) {
+            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()),
+                    e.getLocalizedMessage() != null ? e.getLocalizedMessage() : e.getClass().getSimpleName(), e);
         }
 
         return claims;
