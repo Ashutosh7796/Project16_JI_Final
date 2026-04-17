@@ -226,11 +226,14 @@ public class EmployeeServiceImpl implements EmployeeService {
         Page<User> usersPage;
 
         if (StringUtils.hasText(role)) {
-            // If role is specified, filter by that role
             String finalRole = role.toUpperCase();
-            usersPage = userRepository.findAllByRoleName(finalRole, pageable);
+            if ("ADMIN".equals(finalRole)) {
+                // Administrators are never listed via this endpoint
+                usersPage = Page.empty(pageable);
+            } else {
+                usersPage = userRepository.findAllByRoleNameExcludingAdminHolders(finalRole, pageable);
+            }
         } else {
-            // If no role specified, get all employees (SURVEYOR, LAB_TECHNICIAN)
             usersPage = userRepository.findAllEmployees(pageable);
         }
 
@@ -259,7 +262,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private PagedResponse<EmployeeByRoleResponse> fetchByRole(String role, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        Page<User> userPage = userRepository.findAllByRoleName(role, pageable);
+        Page<User> userPage = userRepository.findAllByRoleNameExcludingAdminHolders(role, pageable);
 
         List<EmployeeByRoleResponse> content = userPage.getContent()
                 .stream()

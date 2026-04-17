@@ -75,7 +75,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -155,16 +157,21 @@ public class UserFactory {
      * Validates that only ADMIN users can register MANAGER role
      */
     private void validateManagerRegistration() {
-        Authentication authentication = 
-            org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new AccessDeniedException("Authentication required to register MANAGER role");
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // AnonymousAuthenticationToken still reports isAuthenticated()==true in Spring Security.
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken
+                || "anonymousUser".equals(String.valueOf(authentication.getPrincipal()))) {
+            throw new AccessDeniedException(
+                    "Authentication required to register MANAGER role. "
+                            + "Send Authorization: Bearer <access_token> or the access_token cookie from an admin login.");
         }
-        
+
         boolean isAdmin = authentication.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
         if (!isAdmin) {
             throw new AccessDeniedException("Only ADMIN users can register MANAGER role");
         }

@@ -153,13 +153,17 @@ public class RateLimitingFilter implements Filter, Ordered {
      * Checks if the given path is a public endpoint that should not be rate limited
      */
     private boolean isPublicEndpoint(String path) {
-        return path.startsWith("/api/public/") || 
-               path.startsWith("/swagger-ui") || 
-               path.startsWith("/v3/api-docs") ||
-               path.startsWith("/h2-console") ||
-               path.equals("/api/auth/login") || 
-               path.equals("/api/auth/register") ||
-               path.equals("/api/auth/refresh");
+        return path.startsWith("/api/public/") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs") ||
+                path.startsWith("/h2-console") ||
+                path.equals("/api/auth/login") ||
+                path.equals("/api/auth/register") ||
+                path.equals("/api/auth/refresh") ||
+                // Actual app routes (JwtConfig defaults + RegistrationController)
+                path.equals("/jwt/login") ||
+                path.equals("/jwt/refresh") ||
+                path.startsWith("/api/auth/v1/register");
     }
     
     /**

@@ -61,28 +61,21 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String authHeader = request.getHeader(jwtConfig.getHeader());
-
-        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith(jwtConfig.getPrefix() + " ")) {
+        String token = getJwtFromRequest(request);
+        if (!StringUtils.hasText(token)) {
+            // No credentials: leave context anonymous (permitAll routes still work).
             filterChain.doFilter(request, response);
             return;
         }
 
         if (jwtDiagnosticLogging) {
-            log.info("[jwt-diag] bearer_present method={} servletPath={} requestURI={} authHeaderLen={} hasAccessCookie={}",
+            String authHeader = request.getHeader(jwtConfig.getHeader());
+            log.info("[jwt-diag] access_token_present method={} servletPath={} requestURI={} authHeaderLen={} hasAccessCookie={}",
                     request.getMethod(),
                     request.getServletPath(),
                     safeUriWithoutQuery(request),
                     authHeader != null ? authHeader.length() : 0,
                     hasAccessTokenCookie(request));
-        }
-
-        String token = getJwtFromRequest(request);
-        if (!StringUtils.hasText(token)) {
-            logAuthFailure(request, null, "EMPTY_TOKEN_AFTER_BEARER",
-                    "Authorization header had Bearer prefix but token body empty/whitespace only");
-            handleInvalidToken(response, "Missing access token after Bearer prefix. Send Authorization: Bearer <token>.");
-            return;
         }
 
         try {
@@ -215,10 +208,11 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
+        // Do NOT skip /api/auth/** — e.g. POST /api/auth/v1/register needs JWT applied when an admin
+        // registers a MANAGER (permitAll + SecurityContext must reflect Bearer or access_token cookie).
         return path.equals("/jwt/login")
                 || path.equals(jwtConfig.getUrl())
                 || path.equals(jwtConfig.getRefreshUrl())
-                || path.startsWith("/api/auth/")
                 || path.startsWith("/swagger")
                 || path.startsWith("/v3/api-docs");
     }

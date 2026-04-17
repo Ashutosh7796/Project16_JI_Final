@@ -39,11 +39,35 @@ public interface UserRepository extends JpaRepository<User, Long> {
             Pageable pageable
     );
 
+    /**
+     * Same as {@link #findAllByRoleName} but omits users who also hold {@code ADMIN} (multi-role safe).
+     */
     @Query("""
         SELECT DISTINCT u FROM User u
         JOIN u.roles r
-        WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN')
-    """)
+        WHERE r.name = :roleName
+        AND NOT EXISTS (
+            SELECT 1 FROM User uAdmin JOIN uAdmin.roles rAdmin
+            WHERE uAdmin.userId = u.userId AND rAdmin.name = 'ADMIN'
+        )
+        """)
+    Page<User> findAllByRoleNameExcludingAdminHolders(
+            @Param("roleName") String roleName,
+            Pageable pageable
+    );
+
+    /**
+     * Staff-facing list: surveyors, lab technicians, and managers — never administrator accounts.
+     */
+    @Query("""
+        SELECT DISTINCT u FROM User u
+        JOIN u.roles r
+        WHERE r.name IN ('SURVEYOR', 'LAB_TECHNICIAN', 'MANAGER')
+        AND NOT EXISTS (
+            SELECT 1 FROM User uAdmin JOIN uAdmin.roles rAdmin
+            WHERE uAdmin.userId = u.userId AND rAdmin.name = 'ADMIN'
+        )
+        """)
     Page<User> findAllEmployees(Pageable pageable);
 
     @Query("""

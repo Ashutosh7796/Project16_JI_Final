@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -106,10 +107,14 @@ public class EmployeeController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
+        Page<UserListResponseDTO> pageData = employeeService.getUsers(role, page, size);
+        String message = StringUtils.hasText(role)
+                ? "Accounts with role " + role + " retrieved successfully"
+                : "Staff accounts retrieved successfully (administrators excluded)";
         return ResponseEntity.ok(new BaseResponseDTO1<>(
                 "200",
-                "Account"+role+ "get successfully",
-                employeeService.getUsers(role, page, size)
+                message,
+                pageData
         ));
     }
 

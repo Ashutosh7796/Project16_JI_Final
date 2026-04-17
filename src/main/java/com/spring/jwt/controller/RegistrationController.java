@@ -71,7 +71,7 @@ public class RegistrationController {
     public ResponseEntity<BaseResponseDTO> registerUser(
             @Valid @RequestBody SecureUserRegistrationRequest request,
             HttpServletRequest httpRequest) {
-        
+
         log.info("User registration request received");
         BaseResponseDTO response = secureAuthenticationService.registerUser(request, httpRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
