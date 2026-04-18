@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Locale;
 
 import com.spring.jwt.exception.SecurityExceptionHandler;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableWebSecurity
@@ -75,9 +74,6 @@ public class AppConfig {
 
     @Autowired
     private com.spring.jwt.jwt.ActiveSessionService activeSessionService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @Value("${app.url.frontend:http://localhost:5173}")
     private String frontendUrl;
@@ -117,7 +113,8 @@ public class AppConfig {
 
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                  SecurityExceptionHandler securityExceptionHandler) throws Exception {
         log.debug("Configuring security filter chain");
         AuthenticationManager authManager = authenticationManager(http);
         http.csrf(csrf -> csrf
@@ -224,12 +221,17 @@ public class AppConfig {
 
                 // Catch-all for remaining /api/v1/** endpoints
                 .requestMatchers("/api/v1/**").permitAll()
-                .requestMatchers("/api/payment/queue/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/payment/queue/status").permitAll()
+                .requestMatchers("/api/payment/queue/**").hasRole("ADMIN")
                 .requestMatchers("/api/payment/product/**").permitAll()
                 .requestMatchers("/api/payment/farmer/**").permitAll()
 
 
                 .anyRequest().authenticated());
+
+        http.exceptionHandling(ex -> ex
+                .authenticationEntryPoint(securityExceptionHandler)
+                .accessDeniedHandler(securityExceptionHandler));
 
         log.debug("Configuring security filters");
         JwtTokenAuthenticationFilter jwtTokenFilter =
@@ -271,11 +273,6 @@ public class AppConfig {
         http.addFilterBefore(securityHeadersFilter, JwtTokenAuthenticationFilter.class);
         log.debug("Security configuration completed");
         return http.build();
-    }
-
-    @Bean
-    public SecurityExceptionHandler securityExceptionHandler() {
-        return new SecurityExceptionHandler(objectMapper);
     }
 
     @Bean

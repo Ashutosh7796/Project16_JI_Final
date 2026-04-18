@@ -2,14 +2,21 @@ package com.spring.jwt.EmployeeFarmerSurvey;
 
 import com.spring.jwt.Enums.FormStatus;
 import com.spring.jwt.entity.EmployeeFarmerSurvey;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
 public interface EmployeeFarmerSurveyRepository extends JpaRepository<EmployeeFarmerSurvey, Long> {
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM EmployeeFarmerSurvey s WHERE s.surveyId = :id")
+    Optional<EmployeeFarmerSurvey> findByIdForUpdate(@Param("id") Long id);
 
     Optional<EmployeeFarmerSurvey> findByFormNumber(String formNumber);
     Optional<EmployeeFarmerSurvey> findBySurveyPublicId(String surveyPublicId);

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -20,12 +21,14 @@ public class PaymentCallbackQueueService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public Long enqueue(String paymentType, String callbackType, String encResp, String clientIp) {
+    public PaymentCallbackEnqueueResult enqueue(String paymentType, String callbackType, String encResp, String clientIp) {
+        String statusToken = UUID.randomUUID().toString().replace("-", "");
         PaymentCallbackQueue item = PaymentCallbackQueue.builder()
                 .paymentType(paymentType)
                 .callbackType(callbackType)
                 .encResp(encResp)
                 .clientIp(clientIp)
+                .statusToken(statusToken)
                 .status("PENDING")
                 .attemptCount(0)
                 .nextAttemptAt(LocalDateTime.now())
@@ -45,26 +48,37 @@ public class PaymentCallbackQueueService {
         );
         log.info("Queued payment callback: queueId={}, paymentType={}, callbackType={}",
                 saved.getId(), paymentType, callbackType);
-        
+
         // Publish event for immediate processing (event-driven approach)
         eventPublisher.publishEvent(new PaymentCallbackEvent(this, saved.getId(), paymentType, callbackType));
-        
-        return saved.getId();
+
+        return new PaymentCallbackEnqueueResult(saved.getId(), saved.getStatusToken());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PaymentCallbackQueueStatusDTO> getStatusByPublicToken(String rawToken) {
+        String token = PaymentInputSanitizer.sanitizeOpaqueToken(rawToken);
+        if (token.isEmpty()) {
+            return Optional.empty();
+        }
+        return callbackQueueRepository.findByStatusToken(token).map(this::toStatusDto);
     }
 
     @Transactional(readOnly = true)
     public Optional<PaymentCallbackQueueStatusDTO> getStatus(Long queueId) {
-        return callbackQueueRepository.findById(queueId).map(item ->
-                PaymentCallbackQueueStatusDTO.builder()
-                        .queueId(item.getId())
-                        .paymentType(item.getPaymentType())
-                        .callbackType(item.getCallbackType())
-                        .status(item.getStatus())
-                        .attemptCount(item.getAttemptCount())
-                        .resultStatus(item.getResultStatus())
-                        .orderId(item.getOrderId())
-                        .message(item.getLastError())
-                        .build()
-        );
+        return callbackQueueRepository.findById(queueId).map(this::toStatusDto);
+    }
+
+    private PaymentCallbackQueueStatusDTO toStatusDto(PaymentCallbackQueue item) {
+        return PaymentCallbackQueueStatusDTO.builder()
+                .queueId(item.getId())
+                .paymentType(item.getPaymentType())
+                .callbackType(item.getCallbackType())
+                .status(item.getStatus())
+                .attemptCount(item.getAttemptCount())
+                .resultStatus(item.getResultStatus())
+                .orderId(item.getOrderId())
+                .message(item.getLastError())
+                .build();
     }
 }

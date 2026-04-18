@@ -162,7 +162,11 @@ public class GlobalExceptionHandler {
     private HttpStatus determineHttpStatus(BaseException ex) {
         String message = ex.getMessage() != null ? ex.getMessage().toLowerCase() : "";
         String code = ex.getCode() != null ? ex.getCode().toUpperCase() : "";
-        
+
+        if (code.contains("PAYMENT_IDEMPOTENCY_CONFLICT")) {
+            return HttpStatus.CONFLICT;
+        }
+
         // Check for specific error patterns
         if (message.contains("already registered") || message.contains("already exists") || 
             code.contains("ALREADY_EXISTS") || code.contains("DUPLICATE")) {

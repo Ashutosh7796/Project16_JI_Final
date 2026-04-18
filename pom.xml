@@ -254,13 +254,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Spring Boot test starter -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-
 		<!-- TestContainers for testing with real MySQL -->
 		<dependency>
 			<groupId>org.testcontainers</groupId>

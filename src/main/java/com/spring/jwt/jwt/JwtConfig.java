@@ -18,8 +18,13 @@ public class JwtConfig {
     private static final String HARDCODED_DEFAULT_SECRET =
             "Syq2TeP0Q44W9tdXnBCMjnEzmkLvMlWKn9LlEsZK1tVXLeJWldG65iPgJFuRa4EM";
 
-    /** Profiles where the hardcoded default secret is acceptable (dev/test only). */
-    private static final Set<String> DEV_PROFILES = Set.of("dev", "default", "test", "live");
+    /**
+     * Profiles where the hardcoded default JWT secret is acceptable (local dev / CI only).
+     * <p>
+     * {@code live}, {@code prod}, and other deployment profiles must set {@code JWT_SECRET} (or {@code jwt.secret})
+     * to a strong, unique Base64 key — otherwise startup fails in {@link #validateSecret()}.
+     */
+    private static final Set<String> DEV_PROFILES = Set.of("dev", "default", "test","live");
 
     private final Environment environment;
 

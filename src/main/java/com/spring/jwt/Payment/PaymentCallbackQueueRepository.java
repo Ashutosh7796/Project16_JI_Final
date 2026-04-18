@@ -10,8 +10,11 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface PaymentCallbackQueueRepository extends JpaRepository<PaymentCallbackQueue, Long> {
+
+    Optional<PaymentCallbackQueue> findByStatusToken(String statusToken);
 
     List<PaymentCallbackQueue> findByStatusInAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(
             Collection<String> statuses, LocalDateTime nextAttemptAt, Pageable pageable);

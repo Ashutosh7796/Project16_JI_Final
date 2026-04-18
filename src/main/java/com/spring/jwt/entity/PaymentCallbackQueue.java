@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 @Table(name = "payment_callback_queue", indexes = {
         @Index(name = "idx_pay_cbq_status_next", columnList = "status,next_attempt_at"),
         @Index(name = "idx_pay_cbq_created", columnList = "created_at")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_pay_cbq_status_token", columnNames = "status_token")
 })
 @Builder
 @AllArgsConstructor
@@ -34,6 +36,9 @@ public class PaymentCallbackQueue {
 
     @Column(name = "client_ip", length = 45)
     private String clientIp;
+
+    @Column(name = "status_token", nullable = false, length = 64, updatable = false)
+    private String statusToken;
 
     @Column(name = "status", nullable = false, length = 20)
     private String status;
@@ -69,6 +74,9 @@ public class PaymentCallbackQueue {
         if (this.nextAttemptAt == null) this.nextAttemptAt = now;
         if (this.status == null || this.status.isBlank()) this.status = "PENDING";
         if (this.attemptCount == null) this.attemptCount = 0;
+        if (this.statusToken == null || this.statusToken.isBlank()) {
+            this.statusToken = java.util.UUID.randomUUID().toString().replace("-", "");
+        }
     }
 
     @PreUpdate

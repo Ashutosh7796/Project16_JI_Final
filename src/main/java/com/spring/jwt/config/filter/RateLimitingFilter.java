@@ -157,6 +157,11 @@ public class RateLimitingFilter implements Filter, Ordered {
                 path.startsWith("/swagger-ui") ||
                 path.startsWith("/v3/api-docs") ||
                 path.startsWith("/h2-console") ||
+                path.startsWith("/actuator/") ||
+                // CCAvenue posts form-encoded bodies; shared egress IPs must not trip global IP limits
+                path.startsWith("/api/payment/product/") ||
+                path.startsWith("/api/payment/farmer/") ||
+                path.equals("/api/payment/queue/status") ||
                 path.equals("/api/auth/login") ||
                 path.equals("/api/auth/register") ||
                 path.equals("/api/auth/refresh") ||

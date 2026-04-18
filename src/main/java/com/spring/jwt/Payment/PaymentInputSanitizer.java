@@ -41,4 +41,14 @@ public final class PaymentInputSanitizer {
         if (input == null) return "";
         return input.replaceAll("[<>\"'&;]", "").trim();
     }
+
+    /** Callback queue polling token: alphanumeric, hyphens, underscores only (max 64). */
+    public static String sanitizeOpaqueToken(String token) {
+        if (token == null) return "";
+        String t = token.trim();
+        if (t.length() > 64) {
+            t = t.substring(0, 64);
+        }
+        return t.replaceAll("[^a-zA-Z0-9_-]", "");
+    }
 }

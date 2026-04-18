@@ -31,4 +31,9 @@ public class PaymentException extends BaseException {
     public static PaymentException paymentNotFound(String identifier) {
         return new PaymentException("PAYMENT_NOT_FOUND", "Payment not found: " + identifier);
     }
+
+    public static PaymentException idempotencySurveyMismatch() {
+        return new PaymentException("PAYMENT_IDEMPOTENCY_CONFLICT",
+                "Idempotency key is already associated with a different survey");
+    }
 }

@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class FarmerPaymentServiceImpl implements FarmerPaymentService {
 
+    private static final int MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS = 8;
+
     private final FarmerPaymentRepository farmerPaymentRepo;
     private final EmployeeFarmerSurveyRepository surveyRepo;
     private final SurveyIdResolver surveyIdResolver;
@@ -73,6 +75,9 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
         Optional<FarmerPayment> existing = farmerPaymentRepo.findByIdempotencyKey(sanitizedKey);
         if (existing.isPresent()) {
             FarmerPayment existingPayment = existing.get();
+            if (!existingPayment.getSurvey().getSurveyId().equals(surveyId)) {
+                throw PaymentException.idempotencySurveyMismatch();
+            }
             if (!isCurrentUserAdmin() && !existingPayment.getUser().getUserId().equals(currentUserId)) {
                 throw new AccessDeniedException("Idempotency key belongs to a different user");
             }
@@ -89,8 +94,8 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
             }
         }
 
-        // Validate survey exists
-        EmployeeFarmerSurvey survey = surveyRepo.findById(surveyId)
+        // Serialize initiations per survey (prevents duplicate SUCCESS under concurrent requests)
+        EmployeeFarmerSurvey survey = surveyRepo.findByIdForUpdate(surveyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Survey not found with ID: " + surveyId));
         if (!isCurrentUserAdmin() && !survey.getUser().getUserId().equals(currentUserId)) {
             throw new AccessDeniedException("You are not allowed to initiate payment for this survey");
@@ -162,6 +167,23 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
     @Override
     @Transactional
     public FarmerPaymentResponseDTO handleCallback(Map<String, String> ccAvenueParams, String clientIp) {
+        for (int attempt = 1; attempt <= MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS; attempt++) {
+            try {
+                return handleCallbackBody(ccAvenueParams, clientIp);
+            } catch (ObjectOptimisticLockingFailureException e) {
+                if (attempt >= MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS) {
+                    log.error("Farmer callback optimistic-lock retries exhausted (order_id hint: {})",
+                            ccAvenueParams != null ? ccAvenueParams.get("order_id") : null);
+                    throw e;
+                }
+                log.warn("Farmer callback optimistic lock conflict; retry {}/{}",
+                        attempt, MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS);
+            }
+        }
+        throw new IllegalStateException("Unreachable farmer callback retry loop");
+    }
+
+    private FarmerPaymentResponseDTO handleCallbackBody(Map<String, String> ccAvenueParams, String clientIp) {
         String orderId = ccAvenueParams.get("order_id");
         String orderStatus = ccAvenueParams.get("order_status");
         String trackingId = ccAvenueParams.get("tracking_id");
@@ -195,7 +217,6 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
 
         boolean amountMismatchDetected = false;
 
-        // Amount verification
         if (callbackAmount != null) {
             try {
                 BigDecimal returnedAmount = new BigDecimal(callbackAmount);
@@ -214,45 +235,68 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
 
         String oldStatus = payment.getPaymentStatus().name();
 
-        try {
-            if ("Success".equalsIgnoreCase(orderStatus) && !amountMismatchDetected) {
-                payment.setPaymentStatus(PaymentStatus.SUCCESS);
-            } else {
-                payment.setPaymentStatus(PaymentStatus.FAILED);
+        if ("Success".equalsIgnoreCase(orderStatus) && !amountMismatchDetected) {
+            Long surveyId = payment.getSurvey().getSurveyId();
+            surveyRepo.findByIdForUpdate(surveyId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Survey not found with ID: " + surveyId));
+
+            FarmerPayment locked = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)
+                    .orElseThrow(() -> PaymentException.paymentNotFound(sanitizedOrderId));
+
+            if (PaymentStatus.SUCCESS.equals(locked.getPaymentStatus())) {
+                log.warn("Duplicate callback after survey lock for order {}", sanitizedOrderId);
+                auditService.logEvent("FARMER", locked.getPaymentId(), sanitizedOrderId,
+                        "DUPLICATE_CALLBACK", "SUCCESS", "SUCCESS", null, clientIp, null);
+                return mapToResponseDTO(locked, null);
             }
 
-            payment.setTrackingId(trackingId);
-            payment.setBankRefNo(bankRefNo);
-            payment.setCcavenuePaymentMode(paymentMode);
-            payment.setStatusMessage(truncate(statusMessage, 500));
+            Optional<FarmerPayment> otherSuccess =
+                    farmerPaymentRepo.findBySurvey_SurveyIdAndPaymentStatus(surveyId, PaymentStatus.SUCCESS);
+            if (otherSuccess.isPresent() && !otherSuccess.get().getPaymentId().equals(locked.getPaymentId())) {
+                locked.setPaymentStatus(PaymentStatus.FAILED);
+                locked.setTrackingId(trackingId);
+                locked.setBankRefNo(bankRefNo);
+                locked.setCcavenuePaymentMode(paymentMode);
+                locked.setStatusMessage(truncate(
+                        "Survey already has a successful payment (order " + otherSuccess.get().getCcavenueOrderId() + ")",
+                        500));
+                farmerPaymentRepo.save(locked);
+                auditService.logEvent("FARMER", locked.getPaymentId(), sanitizedOrderId,
+                        "VERIFIED_FAILED", oldStatus, "FAILED", null, clientIp,
+                        "blocked_duplicate_survey_success");
+                log.warn("Farmer payment {} failed: another successful payment exists for survey {}",
+                        sanitizedOrderId, surveyId);
+                return mapToResponseDTO(locked, null);
+            }
 
-            farmerPaymentRepo.save(payment);
+            locked.setPaymentStatus(PaymentStatus.SUCCESS);
+            locked.setTrackingId(trackingId);
+            locked.setBankRefNo(bankRefNo);
+            locked.setCcavenuePaymentMode(paymentMode);
+            locked.setStatusMessage(truncate(statusMessage, 500));
+            farmerPaymentRepo.save(locked);
 
-            auditService.logEvent("FARMER", payment.getPaymentId(), sanitizedOrderId,
-                    "Success".equalsIgnoreCase(orderStatus) ? "VERIFIED_SUCCESS" : "VERIFIED_FAILED",
-                    oldStatus, payment.getPaymentStatus().name(), null, clientIp,
+            auditService.logEvent("FARMER", locked.getPaymentId(), sanitizedOrderId,
+                    "VERIFIED_SUCCESS", oldStatus, locked.getPaymentStatus().name(), null, clientIp,
                     "tracking_id=" + trackingId + ", bank_ref_no=" + bankRefNo);
-
             log.info("Farmer payment callback processed: paymentId={}, orderId={}, status={}",
-                    payment.getPaymentId(), sanitizedOrderId, payment.getPaymentStatus());
-
-        } catch (ObjectOptimisticLockingFailureException e) {
-            log.warn("Optimistic lock conflict for payment {}, retrying...", sanitizedOrderId);
-            return handleCallbackRetry(sanitizedOrderId, ccAvenueParams, clientIp);
+                    locked.getPaymentId(), sanitizedOrderId, locked.getPaymentStatus());
+            return mapToResponseDTO(locked, null);
         }
 
+        payment.setPaymentStatus(PaymentStatus.FAILED);
+        payment.setTrackingId(trackingId);
+        payment.setBankRefNo(bankRefNo);
+        payment.setCcavenuePaymentMode(paymentMode);
+        payment.setStatusMessage(truncate(statusMessage, 500));
+        farmerPaymentRepo.save(payment);
+
+        auditService.logEvent("FARMER", payment.getPaymentId(), sanitizedOrderId,
+                "VERIFIED_FAILED", oldStatus, payment.getPaymentStatus().name(), null, clientIp,
+                "tracking_id=" + trackingId + ", bank_ref_no=" + bankRefNo);
+        log.info("Farmer payment callback processed: paymentId={}, orderId={}, status={}",
+                payment.getPaymentId(), sanitizedOrderId, payment.getPaymentStatus());
         return mapToResponseDTO(payment, null);
-    }
-
-    private FarmerPaymentResponseDTO handleCallbackRetry(String orderId, Map<String, String> params, String clientIp) {
-        FarmerPayment payment = farmerPaymentRepo.findByCcavenueOrderId(orderId)
-                .orElseThrow(() -> PaymentException.paymentNotFound(orderId));
-
-        if (PaymentStatus.SUCCESS.equals(payment.getPaymentStatus())) {
-            return mapToResponseDTO(payment, null);
-        }
-
-        return handleCallback(params, clientIp);
     }
 
     @Override

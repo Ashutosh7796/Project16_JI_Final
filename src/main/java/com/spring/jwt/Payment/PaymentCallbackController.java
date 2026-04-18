@@ -6,9 +6,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/payment")
@@ -27,8 +30,8 @@ public class PaymentCallbackController {
                                       HttpServletResponse response) throws IOException {
         String clientIp = getClientIp(request);
         log.info("Product payment callback received from IP: {}", clientIp);
-        Long queueId = callbackQueueService.enqueue("PRODUCT", "PRODUCT_RESPONSE", encResp, clientIp);
-        response.sendRedirect(frontendUrl + "/payment/processing?queueId=" + queueId);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("PRODUCT", "PRODUCT_RESPONSE", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/payment/processing?cbToken=" + urlEncode(enqueued.statusToken()));
     }
 
 
@@ -38,8 +41,8 @@ public class PaymentCallbackController {
                                     HttpServletResponse response) throws IOException {
         String clientIp = getClientIp(request);
         log.info("Product payment cancelled from IP: {}", clientIp);
-        Long queueId = callbackQueueService.enqueue("PRODUCT", "PRODUCT_CANCEL", encResp, clientIp);
-        response.sendRedirect(frontendUrl + "/payment/cancelled?queueId=" + queueId);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("PRODUCT", "PRODUCT_CANCEL", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/payment/cancelled?cbToken=" + urlEncode(enqueued.statusToken()));
     }
 
     @PostMapping("/farmer/response")
@@ -48,8 +51,8 @@ public class PaymentCallbackController {
                                      HttpServletResponse response) throws IOException {
         String clientIp = getClientIp(request);
         log.info("Farmer payment callback received from IP: {}", clientIp);
-        Long queueId = callbackQueueService.enqueue("FARMER", "FARMER_RESPONSE", encResp, clientIp);
-        response.sendRedirect(frontendUrl + "/farmer-payment/processing?queueId=" + queueId);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("FARMER", "FARMER_RESPONSE", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/farmer-payment/processing?cbToken=" + urlEncode(enqueued.statusToken()));
     }
 
     @PostMapping("/farmer/cancel")
@@ -58,15 +61,31 @@ public class PaymentCallbackController {
                                    HttpServletResponse response) throws IOException {
         String clientIp = getClientIp(request);
         log.info("Farmer payment cancelled from IP: {}", clientIp);
-        Long queueId = callbackQueueService.enqueue("FARMER", "FARMER_CANCEL", encResp, clientIp);
-        response.sendRedirect(frontendUrl + "/farmer-payment/cancelled?queueId=" + queueId);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("FARMER", "FARMER_CANCEL", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/farmer-payment/cancelled?cbToken=" + urlEncode(enqueued.statusToken()));
+    }
+
+    /**
+     * Poll callback processing status using an opaque token (returned as {@code cbToken} on redirect from CCAvenue).
+     */
+    @GetMapping("/queue/status")
+    public ResponseEntity<PaymentCallbackQueueStatusDTO> getQueueStatusByToken(
+            @RequestParam("cbToken") String cbToken) {
+        return callbackQueueService.getStatusByPublicToken(cbToken)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/queue/{queueId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PaymentCallbackQueueStatusDTO> getQueueStatus(@PathVariable Long queueId) {
         return callbackQueueService.getStatus(queueId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    private static String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private String getClientIp(HttpServletRequest request)
