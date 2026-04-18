@@ -81,6 +81,13 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
         try {
             if (!jwtService.isValidToken(token)) {
                 String reason = getSpecificInvalidReason(token, request);
+                if (isOptionalJwtPublicAuthPath(request)) {
+                    log.warn("[jwt-opt-out] ignoring invalid or stale token on public auth endpoint path={} detail={}",
+                            request.getServletPath(), asciiSafeLog(reason, 220));
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 if (jwtDiagnosticLogging) {
                     jwtService.logInboundTokenDiagnostics(request, token,
                             "IS_VALID_TOKEN_FALSE; detail=" + reason);
@@ -104,6 +111,13 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             }
 
             if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {
+                if (isOptionalJwtPublicAuthPath(request)) {
+                    log.warn("[jwt-opt-out] ignoring non-current access token on public auth endpoint path={} subjectMasked={}",
+                            request.getServletPath(), maskUser(username));
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 if (jwtDiagnosticLogging) {
                     jwtService.logInboundTokenDiagnostics(request, token,
                             "ACTIVE_SESSION_MISMATCH after isValidToken_true");
@@ -144,6 +158,21 @@ public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
             logAuthFailure(request, token, "UNEXPECTED", ex.getClass().getSimpleName() + ": " + ex.getMessage());
             handleAuthenticationException(response, ex);
         }
+    }
+
+    /**
+     * {@code permitAll} registration endpoints where a browser may still send an old {@code access_token}
+     * cookie (wrong signature after secret rotation, another environment, etc.). JWT must not block the request.
+     * For {@code POST /api/auth/v1/register} with {@code role=MANAGER}, send {@code Authorization: Bearer} so a
+     * valid admin token is still applied when the cookie is ignored.
+     */
+    private static boolean isOptionalJwtPublicAuthPath(HttpServletRequest request) {
+        if (!"POST".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String path = request.getServletPath();
+        return "/api/auth/v1/register".equals(path)
+                || "/api/auth/v1/admin/register".equals(path);
     }
 
     private static String safeUriWithoutQuery(HttpServletRequest request) {
