@@ -24,7 +24,7 @@ public class JwtConfig {
      * {@code live}, {@code prod}, and other deployment profiles must set {@code JWT_SECRET} (or {@code jwt.secret})
      * to a strong, unique Base64 key — otherwise startup fails in {@link #validateSecret()}.
      */
-    private static final Set<String> DEV_PROFILES = Set.of("dev", "default", "test","live","prod");
+    private static final Set<String> DEV_PROFILES = Set.of("dev", "default", "test","live");
 
     private final Environment environment;
 
