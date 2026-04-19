@@ -21,6 +21,8 @@ public interface CheckoutService {
 
     CheckoutOrderResponse getOrder(Long userId, Long orderId);
     
+    CheckoutOrderResponse adminGetOrder(Long orderId);
+    
     void syncPaymentStatusIfPending(Long userId, Long orderId);
 
     /** Recent checkout orders for the signed-in user (newest first). */

@@ -579,6 +579,14 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public CheckoutOrderResponse adminGetOrder(Long orderId) {
+        CheckoutOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Checkout order not found"));
+        return mapOrder(order);
+    }
+
+    @Override
     @Transactional
     public void adminMarkRefunded(Long orderId, Long adminId, String notes) {
         checkoutRefundLifecycleService.adminMarkOrderRefundedLegacy(orderId, adminId, notes);

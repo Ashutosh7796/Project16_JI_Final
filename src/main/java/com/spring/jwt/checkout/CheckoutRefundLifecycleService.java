@@ -93,27 +93,47 @@ public class CheckoutRefundLifecycleService {
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcileOneRefund(Long refundId) {
-        CheckoutRefund refund = refundRepository.findByIdForUpdateWithOrder(refundId)
-                .orElse(null);
-        if (refund == null) {
+        // First read WITHOUT a lock to check eligibility and get the merchant ORder ID
+        CheckoutRefund refundOpt = refundRepository.findById(refundId).orElse(null);
+        if (refundOpt == null) return;
+        
+        if (refundOpt.getStatus() != CheckoutRefundRecordStatus.INITIATED
+                && refundOpt.getStatus() != CheckoutRefundRecordStatus.PENDING_GATEWAY) {
             return;
         }
+        int max = checkoutProperties.getRefund().getMaxAutoRetries();
+        if (refundOpt.getRetryCount() != null && refundOpt.getRetryCount() >= max) {
+            return;
+        }
+        if (!eligibleForReconcile(refundOpt)) {
+            return;
+        }
+
+        // NO LOCK HELD: Make the slow gateway API call
+        String merchantOrderId = refundOpt.getOrder().getMerchantOrderId();
+        Optional<JsonNode> statusJson = Optional.empty();
+        try {
+            statusJson = ccAvenueOrderStatusClient.fetchDecryptedOrderStatusJson(merchantOrderId);
+        } catch (Exception e) {
+            log.warn("ccAvenueOrderStatusClient fetch failed for refund {}: {}", refundId, e.getMessage());
+        }
+
+        // Apply state transitions under lock
+        self.applyReconciledStatus(refundId, statusJson);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void applyReconciledStatus(Long refundId, Optional<JsonNode> statusJson) {
+        CheckoutRefund refund = refundRepository.findByIdForUpdateWithOrder(refundId)
+                .orElse(null);
+        if (refund == null) return;
+        
+        // Re-verify after gaining lock to avoid race conditions
         if (refund.getStatus() != CheckoutRefundRecordStatus.INITIATED
                 && refund.getStatus() != CheckoutRefundRecordStatus.PENDING_GATEWAY) {
             return;
         }
-        int max = checkoutProperties.getRefund().getMaxAutoRetries();
-        if (refund.getRetryCount() != null && refund.getRetryCount() >= max) {
-            return;
-        }
-        if (!eligibleForReconcile(refund)) {
-            return;
-        }
-
-        CheckoutOrder order = refund.getOrder();
-        Optional<JsonNode> statusJson = ccAvenueOrderStatusClient.fetchDecryptedOrderStatusJson(order.getMerchantOrderId());
 
         int nextRetry = Optional.ofNullable(refund.getRetryCount()).orElse(0) + 1;
         refund.setRetryCount(nextRetry);

@@ -30,6 +30,11 @@ public class CheckoutAdminController {
         return checkoutService.adminListAllOrders(limit);
     }
 
+    @GetMapping("/{orderId}")
+    public CheckoutOrderResponse getOrderById(@PathVariable Long orderId) {
+        return checkoutService.adminGetOrder(orderId);
+    }
+
     @PostMapping("/{orderId}/cancel")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void adminCancel(
