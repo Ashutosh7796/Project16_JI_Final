@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RegistrationController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.controller</a> &gt; <span class="el_source">RegistrationController.java</span></div><h1>RegistrationController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.controller;
+
+import com.spring.jwt.dto.*;
+import com.spring.jwt.service.SecureAuthenticationService;
+import com.spring.jwt.service.UserService;
+import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.ErrorResponseDto;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+@Tag(
+    name = &quot;Secure Authentication API&quot;,
+    description = &quot;Secure authentication endpoints with device fingerprinting and role-based access control&quot;
+)
+@RestController
+@RequestMapping(&quot;/api/auth/v1&quot;)
+<span class="nc" id="L31">@RequiredArgsConstructor</span>
+@Validated
+<span class="nc" id="L33">@Slf4j</span>
+@CrossOrigin(origins = &quot;${app.cors.allowed-origins}&quot;, maxAge = 3600)
+public class RegistrationController {
+
+    private final SecureAuthenticationService secureAuthenticationService;
+
+///////////////////////////////////////////////////////////////////////////////////
+//
+//      File Name    : UserController
+//      Description  : registerUser
+//      Author       : Ashutosh Shedge
+//      Date         : 24/12/2025
+//
+//////////////////////////////////////////////////////////////////////////////////
+
+    @Operation(
+        summary = &quot;Register a new user account&quot;,
+        description = &quot;Creates a new user account with enhanced security validations. Role is automatically set to USER.&quot;,
+        tags = {&quot;User Registration&quot;}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;201&quot;,
+            description = &quot;User account created successfully&quot;,
+            content = @Content(schema = @Schema(implementation = BaseResponseDTO.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;400&quot;,
+            description = &quot;Invalid input data or account already exists&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;500&quot;,
+            description = &quot;Internal server error&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        )
+    })
+    @PostMapping(&quot;/register&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; registerUser(
+            @Valid @RequestBody SecureUserRegistrationRequest request,
+            HttpServletRequest httpRequest) {
+
+<span class="nc" id="L75">        log.info(&quot;User registration request received&quot;);</span>
+<span class="nc" id="L76">        BaseResponseDTO response = secureAuthenticationService.registerUser(request, httpRequest);</span>
+<span class="nc" id="L77">        return ResponseEntity.status(HttpStatus.CREATED).body(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Register a new admin account (Restricted Access)&quot;,
+        description = &quot;Creates a new admin account with restricted access. Requires valid admin secret key.&quot;,
+        tags = {&quot;Admin Registration&quot;},
+        security = {@SecurityRequirement(name = &quot;admin-secret&quot;)}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;201&quot;,
+            description = &quot;Admin account created successfully&quot;,
+            content = @Content(schema = @Schema(implementation = BaseResponseDTO.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;400&quot;,
+            description = &quot;Invalid input data or account already exists&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;403&quot;,
+            description = &quot;Invalid admin secret key&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;500&quot;,
+            description = &quot;Internal server error&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        )
+    })
+//    @PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+    @PostMapping(&quot;/admin/register&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; registerAdmin(
+            @Valid @RequestBody AdminRegistrationRequest request,
+            HttpServletRequest httpRequest) {
+        
+<span class="nc" id="L114">        log.info(&quot;Admin registration request received&quot;);</span>
+<span class="nc" id="L115">        BaseResponseDTO response = secureAuthenticationService.registerAdmin(request, httpRequest);</span>
+<span class="nc" id="L116">        return ResponseEntity.status(HttpStatus.CREATED).body(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Authenticate user with device fingerprinting&quot;,
+        description = &quot;Authenticates user and creates device fingerprint for enhanced security&quot;,
+        tags = {&quot;Authentication&quot;}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;200&quot;,
+            description = &quot;Authentication successful&quot;,
+            content = @Content(schema = @Schema(implementation = BaseResponseDTO.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;401&quot;,
+            description = &quot;Invalid credentials&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;423&quot;,
+            description = &quot;Account locked due to multiple failed attempts&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;500&quot;,
+            description = &quot;Internal server error&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        )
+    })
+    @PostMapping(&quot;/authenticate&quot;)
+    @PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; authenticateUser(
+            @Valid @RequestBody SecureLoginRequest request,
+            HttpServletRequest httpRequest) {
+
+<span class="nc" id="L152">        log.info(&quot;User authentication request received&quot;);</span>
+<span class="nc" id="L153">        BaseResponseDTO response = secureAuthenticationService.authenticateUser(request, httpRequest);</span>
+<span class="nc" id="L154">        return ResponseEntity.ok(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Check account lock status&quot;,
+        description = &quot;Checks if a user account is currently locked&quot;,
+        tags = {&quot;Security&quot;}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;200&quot;,
+            description = &quot;Account status retrieved successfully&quot;
+        ),
+        @ApiResponse(
+            responseCode = &quot;400&quot;,
+            description = &quot;Invalid email format&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        )
+    })
+    @GetMapping(&quot;/account-status&quot;)
+    @PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; checkAccountStatus(
+            @RequestParam String email) {
+        
+<span class="nc" id="L178">        boolean isLocked = secureAuthenticationService.isAccountLocked(email);</span>
+        
+<span class="nc" id="L180">        BaseResponseDTO response = new BaseResponseDTO();</span>
+<span class="nc" id="L181">        response.setCode(String.valueOf(HttpStatus.OK.value()));</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        response.setMessage(isLocked ? &quot;Account is locked&quot; : &quot;Account is active&quot;);</span>
+        
+<span class="nc" id="L184">        return ResponseEntity.ok(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Unlock user account (Admin Only)&quot;,
+        description = &quot;Unlocks a user account and resets failed login attempts&quot;,
+        tags = {&quot;Admin Operations&quot;},
+        security = {@SecurityRequirement(name = &quot;bearer-jwt&quot;)}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;200&quot;,
+            description = &quot;Account unlocked successfully&quot;
+        ),
+        @ApiResponse(
+            responseCode = &quot;403&quot;,
+            description = &quot;Insufficient permissions&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        ),
+        @ApiResponse(
+            responseCode = &quot;401&quot;,
+            description = &quot;Unauthorized&quot;,
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class))
+        )
+    })
+    @PostMapping(&quot;/admin/unlock-account&quot;)
+    @PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; unlockAccount(
+            @RequestParam String email) {
+        
+<span class="nc" id="L214">        log.info(&quot;Admin unlock account request for email: {}&quot;, email);</span>
+<span class="nc" id="L215">        secureAuthenticationService.resetFailedLoginAttempts(email);</span>
+        
+<span class="nc" id="L217">        BaseResponseDTO response = new BaseResponseDTO();</span>
+<span class="nc" id="L218">        response.setCode(String.valueOf(HttpStatus.OK.value()));</span>
+<span class="nc" id="L219">        response.setMessage(&quot;Account unlocked successfully&quot;);</span>
+        
+<span class="nc" id="L221">        return ResponseEntity.ok(response);</span>
+    }
+
+    @Operation(
+        summary = &quot;Validate admin secret key&quot;,
+        description = &quot;Validates if the provided admin secret key is correct&quot;,
+        tags = {&quot;Admin Operations&quot;}
+    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = &quot;200&quot;,
+            description = &quot;Secret key validation result&quot;
+        )
+    })
+    @PostMapping(&quot;/admin/validate-secret&quot;)
+    @PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; validateAdminSecret(
+            @RequestParam String secretKey) {
+        
+<span class="nc" id="L240">        boolean isValid = secureAuthenticationService.validateAdminSecretKey(secretKey);</span>
+        
+<span class="nc" id="L242">        BaseResponseDTO response = new BaseResponseDTO();</span>
+<span class="nc" id="L243">        response.setCode(String.valueOf(HttpStatus.OK.value()));</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">        response.setMessage(isValid ? &quot;Valid admin secret key&quot; : &quot;Invalid admin secret key&quot;);</span>
+        
+<span class="nc" id="L246">        return ResponseEntity.ok(response);</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

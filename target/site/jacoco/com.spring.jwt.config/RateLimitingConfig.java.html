@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RateLimitingConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">RateLimitingConfig.java</span></div><h1>RateLimitingConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
+
+@Configuration
+<span class="nc" id="L13">public class RateLimitingConfig {</span>
+
+    @Value(&quot;${app.rate-limiting.enabled:true}&quot;)
+    private boolean rateLimitingEnabled;
+
+    @Value(&quot;${app.rate-limiting.limit-for-period:200}&quot;)
+    private int limitForPeriod;
+
+    @Value(&quot;${app.rate-limiting.refresh-period:600}&quot;)
+    private int refreshPeriod;
+
+    @Value(&quot;${app.rate-limiting.timeout-duration:3000}&quot;)
+    private int timeoutDuration;
+
+    @Bean
+    public RateLimiter authenticationRateLimiter() {
+<span class="nc" id="L29">        RateLimiterConfig config = RateLimiterConfig.custom()</span>
+<span class="nc" id="L30">                .limitRefreshPeriod(Duration.ofSeconds(refreshPeriod))</span>
+<span class="nc" id="L31">                .limitForPeriod(limitForPeriod)</span>
+<span class="nc" id="L32">                .timeoutDuration(Duration.ofSeconds(timeoutDuration))</span>
+<span class="nc" id="L33">                .build();</span>
+        
+<span class="nc" id="L35">        RateLimiterRegistry registry = RateLimiterRegistry.of(config);</span>
+<span class="nc" id="L36">        return registry.rateLimiter(&quot;authenticationLimiter&quot;);</span>
+    }
+    
+    @Bean
+    public RateLimiter apiRateLimiter() {
+<span class="nc" id="L41">        RateLimiterConfig config = RateLimiterConfig.custom()</span>
+<span class="nc" id="L42">                .limitRefreshPeriod(Duration.ofSeconds(refreshPeriod))</span>
+<span class="nc" id="L43">                .limitForPeriod(limitForPeriod)</span>
+<span class="nc" id="L44">                .timeoutDuration(Duration.ofSeconds(timeoutDuration))</span>
+<span class="nc" id="L45">                .build();</span>
+        
+<span class="nc" id="L47">        RateLimiterRegistry registry = RateLimiterRegistry.of(config);</span>
+<span class="nc" id="L48">        return registry.rateLimiter(&quot;apiLimiter&quot;);</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerSelfieEmployeeFarmerSurveyController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.FarmerSelfieEmployeeFarmerSurvey</a> &gt; <span class="el_source">FarmerSelfieEmployeeFarmerSurveyController.java</span></div><h1>FarmerSelfieEmployeeFarmerSurveyController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.FarmerSelfieEmployeeFarmerSurvey;
+
+import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
+import com.spring.jwt.Enums.PhotoType;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * REST Controller responsible for handling Farmer Selfie operations
+ * related to Employee Farmer Survey.
+ *
+ * This controller supports:
+ *  - Uploading farmer selfie images
+ *  - Fetching selfie details by selfie ID
+ *  - Fetching selfie details by survey ID
+ *  - Updating (patching) the selfie image only
+ *
+ * All responses are wrapped using BaseResponseDTO1 for consistency
+ * across the application.
+ */
+@RestController
+@RequestMapping(&quot;/api/v1/farmer_selfie_Survey&quot;)
+<span class="nc" id="L27">@RequiredArgsConstructor</span>
+public class FarmerSelfieEmployeeFarmerSurveyController {
+
+    /**
+     * Service layer dependency handling all business logic
+     * related to farmer selfie operations.
+     */
+    private final FarmerSelfieEmployeeFarmerSurveyService selfieService;
+    private final SurveyIdResolver surveyIdResolver;
+
+
+    /**
+     * Upload a farmer selfie for a specific survey and photo type.
+     *
+     * This API:
+     * - Accepts multipart image upload
+     * - Associates selfie with a survey
+     * - Differentiates selfie using PhotoType (FRONT / LEFT / RIGHT etc.)
+     * - Prevents duplicate uploads for same survey + photoType
+     *
+     * HTTP Method: POST
+     * URL: /api/v1/farmer-selfie/upload
+     */
+    @PostMapping(&quot;/upload&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseUploadDTO&gt;&gt; uploadSelfie(
+
+            @RequestParam String surveyId,
+            @RequestParam PhotoType photoType,
+            @RequestParam MultipartFile file) {
+<span class="nc" id="L56">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+        // Delegate business logic to service layer
+<span class="nc" id="L59">        FarmerSelfieResponseUploadDTO response =</span>
+<span class="nc" id="L60">                selfieService.uploadSelfie(internalSurveyId, photoType, file);</span>
+
+        // Return CREATED (201) status with standardized response wrapper
+<span class="nc" id="L63">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L64">                .body(new BaseResponseDTO1&lt;&gt;(</span>
+                        &quot;201&quot;,
+                        &quot;Farmer selfie uploaded successfully&quot;,
+                        response
+                ));
+    }
+
+
+
+
+    /**
+     * Fetch farmer selfie details using selfieId.
+     *
+     * Use case:
+     * - Admin or mobile app wants selfie details using unique selfie identifier
+     *
+     * HTTP Method: GET
+     * URL: /api/v1/farmer-selfie/{selfieId}
+     */
+    @GetMapping(&quot;/{selfieId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseDTO&gt;&gt; getBySelfieId(
+
+            // Unique ID of the selfie
+            @PathVariable Long selfieId) {
+
+        // Fetch selfie details from service
+<span class="nc" id="L90">        FarmerSelfieResponseDTO response =</span>
+<span class="nc" id="L91">                selfieService.getSelfieById(selfieId);</span>
+
+        // Return OK (200) with response data
+<span class="nc" id="L94">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Farmer selfie fetched successfully&quot;,
+                        response
+                )
+        );
+    }
+
+
+
+    /**
+     * Fetch farmer selfie using selfieId and photoType.
+     *
+     * Use case:
+     * - Same selfieId may contain multiple photo types
+     * - Client explicitly wants a specific photoType
+     *
+     * HTTP Method: GET
+     * URL: /api/v1/farmer-selfie/{selfieId}/photo-type/{photoType}
+     */
+    @GetMapping(&quot;/{selfieId}/photo-type/{photoType}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseDTO&gt;&gt; getBySelfieIdAndPhotoType(
+
+            // Selfie primary identifier
+            @PathVariable Long selfieId,
+
+            // Enum path variable (validated automatically by Spring)
+            @PathVariable PhotoType photoType) {
+
+        // Service fetch with composite condition
+<span class="nc" id="L125">        FarmerSelfieResponseDTO response =</span>
+<span class="nc" id="L126">                selfieService.getSelfieByIdAndPhotoType(selfieId, photoType);</span>
+
+        // Return successful response
+<span class="nc" id="L129">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Farmer selfie fetched successfully by selfieId and photoType&quot;,
+                        response
+                )
+        );
+    }
+
+
+    /**
+     * Fetch farmer selfie using surveyId.
+     *
+     * Use case:
+     * - While viewing survey details, display associated selfie
+     *
+     * HTTP Method: GET
+     * URL: /api/v1/farmer-selfie/survey/{surveyId}
+     */
+    @GetMapping(&quot;/survey/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseDTO&gt;&gt; getBySurveyId(
+
+            // Survey identifier
+            @PathVariable String surveyId) {
+<span class="nc" id="L153">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+        // Retrieve selfie associated with the survey
+<span class="nc" id="L156">        FarmerSelfieResponseDTO response =</span>
+<span class="nc" id="L157">                selfieService.getSelfieBySurveyId(internalSurveyId);</span>
+
+<span class="nc" id="L159">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Farmer selfie fetched successfully by surveyId&quot;,
+                        response
+                )
+        );
+    }
+
+
+
+    /**
+     * Fetch farmer selfie using surveyId and photoType.
+     *
+     * Use case:
+     * - Survey may have multiple selfies
+     * - Client needs a specific selfie angle/type
+     *
+     * HTTP Method: GET
+     * URL: /api/v1/farmer-selfie/survey/{surveyId}/photo-type/{photoType}
+     */
+    @GetMapping(&quot;/survey/{surveyId}/photo-type/{photoType}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseDTO&gt;&gt; getBySurveyIdAndPhotoType(
+
+            // Survey identifier
+            @PathVariable String surveyId,
+
+            // Enum representing selfie type
+            @PathVariable PhotoType photoType) {
+
+        // Fetch selfie based on survey + photoType
+<span class="nc" id="L190">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+<span class="nc" id="L191">        FarmerSelfieResponseDTO response =</span>
+<span class="nc" id="L192">                selfieService.getSelfieBySurveyIdAndPhotoType(internalSurveyId, photoType);</span>
+
+<span class="nc" id="L194">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Farmer selfie fetched successfully by surveyId and photoType&quot;,
+                        response
+                )
+        );
+    }
+
+
+    /**
+     * Update (replace) selfie image.
+     *
+     * Notes:
+     * - Only image is updated
+     * - photoType and survey mapping remain unchanged
+     * - PATCH is used as this is a partial update
+     *
+     * HTTP Method: PATCH
+     * URL: /api/v1/farmer-selfie/{selfieId}
+     */
+    @PatchMapping(&quot;/{selfieId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerSelfieResponseDTO&gt;&gt; updateSelfieImage(
+
+            // Selfie identifier whose image is to be replaced
+            @PathVariable Long selfieId,
+
+            // New image file
+            @RequestParam MultipartFile image) {
+
+        // Perform image replacement
+<span class="nc" id="L225">        FarmerSelfieResponseDTO response =</span>
+<span class="nc" id="L226">                selfieService.updateSelfieImage(selfieId, image);</span>
+
+<span class="nc" id="L228">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Farmer selfie image updated successfully&quot;,
+                        response
+                )
+        );
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

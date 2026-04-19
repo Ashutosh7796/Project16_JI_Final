@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HolidayServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeAttendance.Holiday</a> &gt; <span class="el_source">HolidayServiceImpl.java</span></div><h1>HolidayServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeAttendance.Holiday;
+
+import com.spring.jwt.exception.ResourceNotFoundException;
+import com.spring.jwt.exception.UserAlreadyExistException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+@Service
+<span class="nc" id="L11">@RequiredArgsConstructor</span>
+public class HolidayServiceImpl implements HolidayService {
+
+    private final HolidayRepository holidayRepository;
+
+    @Override
+    public HolidayDTO createHoliday(HolidayDTO dto) {
+
+<span class="nc bnc" id="L19" title="All 2 branches missed.">        if (holidayRepository.existsByHolidayDate(dto.getHolidayDate())) {</span>
+<span class="nc" id="L20">            throw new UserAlreadyExistException(</span>
+                    &quot;Holiday already exists for date: &quot;
+<span class="nc" id="L22">                            + dto.getHolidayDate());</span>
+        }
+
+<span class="nc" id="L25">        Holiday holiday = new Holiday();</span>
+<span class="nc" id="L26">        holiday.setHolidayDate(dto.getHolidayDate());</span>
+<span class="nc" id="L27">        holiday.setDescription(dto.getDescription());</span>
+
+<span class="nc" id="L29">        return toDto(holidayRepository.save(holiday));</span>
+    }
+
+    @Override
+    public HolidayDTO updateHoliday(Long id, HolidayDTO dto) {
+
+<span class="nc" id="L35">        Holiday holiday = holidayRepository.findById(id)</span>
+<span class="nc" id="L36">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L37">                        new ResourceNotFoundException(</span>
+                                &quot;Holiday not found with ID: &quot; + id));
+
+<span class="nc" id="L40">        holiday.setHolidayDate(dto.getHolidayDate());</span>
+<span class="nc" id="L41">        holiday.setDescription(dto.getDescription());</span>
+
+<span class="nc" id="L43">        return toDto(holidayRepository.save(holiday));</span>
+    }
+
+    @Override
+    public HolidayDTO getHolidayById(Long id) {
+
+<span class="nc" id="L49">        Holiday holiday = holidayRepository.findById(id)</span>
+<span class="nc" id="L50">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L51">                        new ResourceNotFoundException(</span>
+                                &quot;Holiday not found with ID: &quot; + id));
+
+<span class="nc" id="L54">        return toDto(holiday);</span>
+    }
+
+    @Override
+    public Page&lt;HolidayDTO&gt; getAllHolidays(Pageable pageable) {
+
+<span class="nc" id="L60">        Page&lt;Holiday&gt; page =</span>
+<span class="nc" id="L61">                holidayRepository.findAll(pageable);</span>
+
+<span class="nc bnc" id="L63" title="All 2 branches missed.">        if (page.isEmpty()) {</span>
+<span class="nc" id="L64">            throw new ResourceNotFoundException(</span>
+                    &quot;No holidays found&quot;);
+        }
+
+<span class="nc" id="L68">        return page.map(this::toDto);</span>
+    }
+
+    @Override
+    public void deleteHoliday(Long id) {
+
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        if (!holidayRepository.existsById(id)) {</span>
+<span class="nc" id="L75">            throw new ResourceNotFoundException(</span>
+                    &quot;Holiday not found with ID: &quot; + id);
+        }
+
+<span class="nc" id="L79">        holidayRepository.deleteById(id);</span>
+<span class="nc" id="L80">    }</span>
+
+    private HolidayDTO toDto(Holiday holiday) {
+
+<span class="nc" id="L84">        HolidayDTO dto = new HolidayDTO();</span>
+<span class="nc" id="L85">        dto.setId(holiday.getId());</span>
+<span class="nc" id="L86">        dto.setHolidayDate(holiday.getHolidayDate());</span>
+<span class="nc" id="L87">        dto.setDescription(holiday.getDescription());</span>
+<span class="nc" id="L88">        return dto;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CacheUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">CacheUtils.java</span></div><h1>CacheUtils.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.stereotype.Component;
+
+/**
+ * Utility class for cache operations across the application.
+ * Provides centralized cache management and monitoring capabilities.
+ */
+@Component
+<span class="nc" id="L14">@RequiredArgsConstructor</span>
+<span class="nc" id="L15">@Slf4j</span>
+public class CacheUtils {
+
+    private final CacheManager cacheManager;
+
+    /**
+     * Cache names used across the application.
+     */
+<span class="nc" id="L23">    public static class CacheNames {</span>
+        // Profile module
+        public static final String PROFILES = &quot;profiles&quot;;
+        public static final String PUBLIC_PROFILES = &quot;publicProfiles&quot;;
+        public static final String PROFILE_STATS = &quot;profileStats&quot;;
+        
+        // Horoscope module
+        public static final String HOROSCOPES = &quot;horoscopes&quot;;
+        public static final String HOROSCOPE_STATS = &quot;horoscopeStats&quot;;
+        
+        // User module
+        public static final String USERS = &quot;users&quot;;
+        public static final String USER_DETAILS = &quot;userDetails&quot;;
+        
+        // Other modules
+
+        public static final String EXPRESS_INTEREST = &quot;expressInterests&quot;;
+        public static final String EDUCATION_PROFILES = &quot;educationProfiles&quot;;
+        public static final String FAMILY_BACKGROUNDS = &quot;familyBackgrounds&quot;;
+        public static final String PARTNER_PREFERENCES = &quot;partnerPreferences&quot;;
+        public static final String CONTACT_DETAILS = &quot;contactDetails&quot;;
+        public static final String COMPLETE_PROFILES = &quot;completeProfiles&quot;;
+        
+        // System caches
+        public static final String APPLICATION_SETTINGS = &quot;applicationSettings&quot;;
+        public static final String LOOKUP_DATA = &quot;lookupData&quot;;
+    }
+
+    /**
+     * Evict a specific cache entry.
+     *
+     * @param cacheName the cache name
+     * @param key       the cache key
+     */
+    public void evict(String cacheName, Object key) {
+        try {
+<span class="nc" id="L59">            Cache cache = cacheManager.getCache(cacheName);</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">            if (cache != null) {</span>
+<span class="nc" id="L61">                cache.evict(key);</span>
+<span class="nc" id="L62">                log.debug(&quot;Evicted cache entry: cache={}, key={}&quot;, cacheName, key);</span>
+            }
+<span class="nc" id="L64">        } catch (Exception e) {</span>
+<span class="nc" id="L65">            log.warn(&quot;Failed to evict cache entry: cache={}, key={}, error={}&quot;, cacheName, key, e.getMessage());</span>
+<span class="nc" id="L66">        }</span>
+<span class="nc" id="L67">    }</span>
+
+    /**
+     * Clear all entries from a specific cache.
+     *
+     * @param cacheName the cache name
+     */
+    public void clear(String cacheName) {
+        try {
+<span class="nc" id="L76">            Cache cache = cacheManager.getCache(cacheName);</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">            if (cache != null) {</span>
+<span class="nc" id="L78">                cache.clear();</span>
+<span class="nc" id="L79">                log.info(&quot;Cleared cache: {}&quot;, cacheName);</span>
+            }
+<span class="nc" id="L81">        } catch (Exception e) {</span>
+<span class="nc" id="L82">            log.warn(&quot;Failed to clear cache: cache={}, error={}&quot;, cacheName, e.getMessage());</span>
+<span class="nc" id="L83">        }</span>
+<span class="nc" id="L84">    }</span>
+
+    /**
+     * Clear all caches in the application.
+     */
+    public void clearAll() {
+        try {
+<span class="nc" id="L91">            cacheManager.getCacheNames().forEach(this::clear);</span>
+<span class="nc" id="L92">            log.info(&quot;Cleared all application caches&quot;);</span>
+<span class="nc" id="L93">        } catch (Exception e) {</span>
+<span class="nc" id="L94">            log.error(&quot;Failed to clear all caches: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L95">        }</span>
+<span class="nc" id="L96">    }</span>
+
+    /**
+     * Get cache statistics (if supported by the cache implementation).
+     *
+     * @param cacheName the cache name
+     * @return cache statistics as string
+     */
+    public String getCacheStats(String cacheName) {
+        try {
+<span class="nc" id="L106">            Cache cache = cacheManager.getCache(cacheName);</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">            if (cache != null) {</span>
+<span class="nc" id="L108">                return String.format(&quot;Cache: %s, Native Cache: %s&quot;, cacheName, cache.getNativeCache().getClass().getSimpleName());</span>
+            }
+<span class="nc" id="L110">            return &quot;Cache not found: &quot; + cacheName;</span>
+<span class="nc" id="L111">        } catch (Exception e) {</span>
+<span class="nc" id="L112">            return &quot;Error getting cache stats: &quot; + e.getMessage();</span>
+        }
+    }
+
+    /**
+     * Check if a cache exists.
+     *
+     * @param cacheName the cache name
+     * @return true if cache exists
+     */
+    public boolean cacheExists(String cacheName) {
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        return cacheManager.getCache(cacheName) != null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

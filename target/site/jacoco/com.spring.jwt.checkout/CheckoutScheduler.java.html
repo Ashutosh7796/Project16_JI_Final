@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckoutScheduler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.checkout</a> &gt; <span class="el_source">CheckoutScheduler.java</span></div><h1>CheckoutScheduler.java</h1><pre class="source lang-java linenums">package com.spring.jwt.checkout;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="nc" id="L10">@RequiredArgsConstructor</span>
+<span class="nc" id="L11">@Slf4j</span>
+public class CheckoutScheduler {
+
+    private final CheckoutService checkoutService;
+
+    /**
+     * Releases reservations for abandoned checkouts (UPI / net banking timeouts, closed tabs).
+     */
+    @Scheduled(cron = &quot;${app.checkout.expire-cron:0 */1 * * * *}&quot;)
+    @SchedulerLock(name = &quot;checkoutReservationExpiry&quot;, lockAtLeastFor = &quot;10s&quot;, lockAtMostFor = &quot;5m&quot;)
+    public void expireStalePaymentPending() {
+<span class="nc" id="L22">        checkoutService.expireDuePaymentPendingOrders();</span>
+<span class="nc" id="L23">    }</span>
+
+    /**
+     * Polls CCAvenue for orders stuck in PAYMENT_PENDING when webhooks are missing.
+     */
+    @Scheduled(cron = &quot;${app.checkout.reconcile-cron:0 */5 * * * *}&quot;)
+    @SchedulerLock(name = &quot;checkoutPaymentReconciliation&quot;, lockAtLeastFor = &quot;30s&quot;, lockAtMostFor = &quot;9m&quot;)
+    public void reconcilePayments() {
+<span class="nc" id="L31">        checkoutService.reconcileStalePaymentPendingOrders();</span>
+<span class="nc" id="L32">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

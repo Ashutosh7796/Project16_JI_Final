@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerPayment.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.entity</a> &gt; <span class="el_source">FarmerPayment.java</span></div><h1>FarmerPayment.java</h1><pre class="source lang-java linenums">package com.spring.jwt.entity;
+
+import com.spring.jwt.Enums.PaymentStatus;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+<span class="nc bnc" id="L16" title="All 150 branches missed.">@Data</span>
+@Entity
+@Table(name = &quot;farmer_payment&quot;, indexes = {
+        @Index(name = &quot;idx_farmer_payment_survey&quot;, columnList = &quot;survey_id&quot;),
+        @Index(name = &quot;idx_farmer_payment_user&quot;, columnList = &quot;user_id&quot;),
+        @Index(name = &quot;idx_farmer_payment_tracking&quot;, columnList = &quot;tracking_id&quot;),
+        @Index(name = &quot;idx_farmer_payment_idempotency&quot;, columnList = &quot;idempotency_key&quot;),
+        @Index(name = &quot;idx_farmer_payment_order&quot;, columnList = &quot;ccavenue_order_id&quot;)
+}, uniqueConstraints = {
+        @UniqueConstraint(name = &quot;uk_farmer_payment_idempotency&quot;, columnNames = &quot;idempotency_key&quot;),
+        @UniqueConstraint(name = &quot;uk_farmer_payment_order&quot;, columnNames = &quot;ccavenue_order_id&quot;)
+})
+<span class="nc" id="L28">@Builder</span>
+<span class="nc" id="L29">@AllArgsConstructor</span>
+<span class="nc" id="L30">@NoArgsConstructor</span>
+public class FarmerPayment {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = &quot;payment_id&quot;)
+<span class="nc" id="L36">    private Long paymentId;</span>
+
+    @Column(name = &quot;payment_public_id&quot;, unique = true, updatable = false, length = 40)
+<span class="nc" id="L39">    private String paymentPublicId;</span>
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = &quot;survey_id&quot;, nullable = false)
+<span class="nc" id="L43">    private EmployeeFarmerSurvey survey;</span>
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = &quot;user_id&quot;, referencedColumnName = &quot;user_id&quot;, nullable = false)
+<span class="nc" id="L47">    private User user;</span>
+
+    @Column(name = &quot;amount&quot;, nullable = false, precision = 10, scale = 2)
+<span class="nc" id="L50">    private BigDecimal amount;</span>
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = &quot;payment_status&quot;, nullable = false, length = 20)
+<span class="nc" id="L54">    private PaymentStatus paymentStatus;</span>
+
+    @Column(name = &quot;tracking_id&quot;, length = 100)
+<span class="nc" id="L57">    private String trackingId;</span>
+
+    @Column(name = &quot;bank_ref_no&quot;, length = 100)
+<span class="nc" id="L60">    private String bankRefNo;</span>
+
+    @Column(name = &quot;ccavenue_payment_mode&quot;, length = 50)
+<span class="nc" id="L63">    private String ccavenuePaymentMode;</span>
+
+    @Column(name = &quot;ccavenue_order_id&quot;, nullable = false, length = 100)
+<span class="nc" id="L66">    private String ccavenueOrderId;</span>
+
+    @Column(name = &quot;status_message&quot;, length = 500)
+<span class="nc" id="L69">    private String statusMessage;</span>
+
+    @Column(name = &quot;idempotency_key&quot;, nullable = false, length = 100)
+<span class="nc" id="L72">    private String idempotencyKey;</span>
+
+    @Version
+<span class="nc" id="L75">    private Long version;</span>
+
+    @Column(name = &quot;initiator_ip&quot;, length = 45)
+<span class="nc" id="L78">    private String initiatorIp;</span>
+
+    @Column(name = &quot;user_agent&quot;, length = 500)
+<span class="nc" id="L81">    private String userAgent;</span>
+
+    @Column(name = &quot;attempt_count&quot;)
+<span class="nc" id="L84">    private Integer attemptCount;</span>
+
+    @CreationTimestamp
+    @Column(name = &quot;created_at&quot;, nullable = false, updatable = false)
+<span class="nc" id="L88">    private LocalDateTime createdAt;</span>
+
+    @UpdateTimestamp
+    @Column(name = &quot;updated_at&quot;)
+<span class="nc" id="L92">    private LocalDateTime updatedAt;</span>
+
+    @PrePersist
+    private void assignPublicIdIfMissing() {
+<span class="nc bnc" id="L96" title="All 4 branches missed.">        if (this.paymentPublicId == null || this.paymentPublicId.isBlank()) {</span>
+<span class="nc" id="L97">            this.paymentPublicId = &quot;pay_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+        }
+<span class="nc" id="L99">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

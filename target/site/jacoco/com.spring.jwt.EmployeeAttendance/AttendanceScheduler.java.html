@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AttendanceScheduler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeAttendance</a> &gt; <span class="el_source">AttendanceScheduler.java</span></div><h1>AttendanceScheduler.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeAttendance;
+
+import lombok.RequiredArgsConstructor;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDate;
+
+@Component(&quot;employeeAttendanceScheduler&quot;)
+<span class="nc" id="L11">@RequiredArgsConstructor</span>
+public class AttendanceScheduler {
+
+    private final EmployeeAttendanceService attendanceService;
+
+    /**
+     * 23:58 — staggered from location-based attendance (23:59) to reduce DB contention.
+     */
+    @Scheduled(cron = &quot;0 58 23 * * ?&quot;, zone = &quot;Asia/Kolkata&quot;)
+    @SchedulerLock(name = &quot;employeeAttendanceMarkAbsent&quot;, lockAtLeastFor = &quot;30s&quot;, lockAtMostFor = &quot;25m&quot;)
+    public void markDailyAbsent() {
+<span class="nc" id="L22">        attendanceService.autoMarkAbsentForDate(LocalDate.now());</span>
+<span class="nc" id="L23">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

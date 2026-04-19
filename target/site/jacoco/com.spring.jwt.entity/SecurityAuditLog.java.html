@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecurityAuditLog.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.entity</a> &gt; <span class="el_source">SecurityAuditLog.java</span></div><h1>SecurityAuditLog.java</h1><pre class="source lang-java linenums">package com.spring.jwt.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+
+/**
+ * Enterprise-grade security audit log entry.
+ * Captures authentication events, token lifecycle, access denials, and config changes.
+ * High-write table — no FK constraints, no cascades.
+ */
+@Entity
+@Table(name = &quot;security_audit_log&quot;,
+        indexes = {
+                @Index(name = &quot;idx_audit_event_type&quot;, columnList = &quot;event_type&quot;),
+                @Index(name = &quot;idx_audit_username&quot;, columnList = &quot;username&quot;),
+                @Index(name = &quot;idx_audit_created_at&quot;, columnList = &quot;created_at&quot;),
+                @Index(name = &quot;idx_audit_client_ip&quot;, columnList = &quot;client_ip&quot;)
+        })
+<span class="nc bnc" id="L23" title="All 90 branches missed.">@Data</span>
+<span class="nc" id="L24">@AllArgsConstructor</span>
+<span class="nc" id="L25">@NoArgsConstructor</span>
+public class SecurityAuditLog {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+<span class="nc" id="L30">    private Long id;</span>
+
+    /**
+     * Event type: AUTH_SUCCESS, AUTH_FAILURE, TOKEN_BLACKLIST, TOKEN_REUSE,
+     * ACCESS_DENIED, LOGOUT, PERMISSION_CHANGE, CONFIG_CHANGE
+     */
+    @Column(name = &quot;event_type&quot;, nullable = false, length = 50)
+<span class="nc" id="L37">    private String eventType;</span>
+
+    @Column(name = &quot;username&quot;)
+<span class="nc" id="L40">    private String username;</span>
+
+    @Column(name = &quot;client_ip&quot;, length = 45)
+<span class="nc" id="L43">    private String clientIp;</span>
+
+    @Column(name = &quot;user_agent&quot;, length = 512)
+<span class="nc" id="L46">    private String userAgent;</span>
+
+    @Column(name = &quot;request_uri&quot;, length = 1024)
+<span class="nc" id="L49">    private String requestUri;</span>
+
+    @Column(name = &quot;request_method&quot;, length = 10)
+<span class="nc" id="L52">    private String requestMethod;</span>
+
+    /** Masked jti if relevant */
+    @Column(name = &quot;token_id&quot;)
+<span class="nc" id="L56">    private String tokenId;</span>
+
+    /** Additional context — reason, resource, required authority, etc. */
+    @Column(name = &quot;detail&quot;, length = 2000)
+<span class="nc" id="L60">    private String detail;</span>
+
+<span class="nc" id="L62">    @Column(name = &quot;success&quot;, nullable = false)</span>
+<span class="nc" id="L63">    private boolean success = true;</span>
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+<span class="nc" id="L66">    private Instant createdAt;</span>
+
+    @PrePersist
+    protected void onCreate() {
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        if (createdAt == null) {</span>
+<span class="nc" id="L71">            createdAt = Instant.now();</span>
+        }
+<span class="nc" id="L73">    }</span>
+
+    /**
+     * Builder-style factory for common event types.
+     */
+    public static SecurityAuditLog of(String eventType, String username, boolean success) {
+<span class="nc" id="L79">        SecurityAuditLog log = new SecurityAuditLog();</span>
+<span class="nc" id="L80">        log.eventType = eventType;</span>
+<span class="nc" id="L81">        log.username = username;</span>
+<span class="nc" id="L82">        log.success = success;</span>
+<span class="nc" id="L83">        log.createdAt = Instant.now();</span>
+<span class="nc" id="L84">        return log;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

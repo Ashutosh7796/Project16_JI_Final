@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.jwt</a> &gt; <span class="el_source">JwtConfig.java</span></div><h1>JwtConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.jwt;
+
+import jakarta.annotation.PostConstruct;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.Set;
+
+<span class="nc bnc" id="L13" title="All 84 branches missed.">@Data</span>
+@Component
+<span class="nc" id="L15">@Slf4j</span>
+public class JwtConfig {
+
+    private static final String HARDCODED_DEFAULT_SECRET =
+            &quot;Syq2TeP0Q44W9tdXnBCMjnEzmkLvMlWKn9LlEsZK1tVXLeJWldG65iPgJFuRa4EM&quot;;
+
+    /**
+     * Profiles where the hardcoded default JWT secret is acceptable (local dev / CI only).
+     * &lt;p&gt;
+     * {@code live}, {@code prod}, and other deployment profiles must set {@code JWT_SECRET} (or {@code jwt.secret})
+     * to a strong, unique Base64 key — otherwise startup fails in {@link #validateSecret()}.
+     */
+<span class="nc" id="L27">    private static final Set&lt;String&gt; DEV_PROFILES = Set.of(&quot;dev&quot;, &quot;default&quot;, &quot;test&quot;,&quot;live&quot;);</span>
+
+<span class="nc" id="L29">    private final Environment environment;</span>
+
+    @Value(&quot;${jwt.url:/jwt/login}&quot;)
+<span class="nc" id="L32">    private String url;</span>
+
+    @Value(&quot;${jwt.refresh-url:/jwt/refresh}&quot;)
+<span class="nc" id="L35">    private String refreshUrl;</span>
+
+    @Value(&quot;${jwt.header:Authorization}&quot;)
+<span class="nc" id="L38">    private String header;</span>
+
+    @Value(&quot;${jwt.prefix:Bearer}&quot;)
+<span class="nc" id="L41">    private String prefix;</span>
+
+    @Value(&quot;${jwt.expiration:#{60 * 60 * 1000*12}}&quot;)
+<span class="nc" id="L44">    private long expiration;</span>
+
+    @Value(&quot;${jwt.refresh-expiration:#{7*24*60*60}}&quot;)
+<span class="nc" id="L47">    private int refreshExpiration;</span>
+
+    @Value(&quot;${jwt.not-before:#{1}}&quot;)
+<span class="nc" id="L50">    private int notBefore;</span>
+
+	@Value(&quot;${jwt.allowed-clock-skew-seconds:5}&quot;)
+<span class="nc" id="L53">	private int allowedClockSkewSeconds;</span>
+
+    @Value(&quot;${jwt.secret:Syq2TeP0Q44W9tdXnBCMjnEzmkLvMlWKn9LlEsZK1tVXLeJWldG65iPgJFuRa4EM}&quot;)
+<span class="nc" id="L56">    private String secret;</span>
+
+    @Value(&quot;${jwt.issuer:Ashutosh}&quot;)
+<span class="nc" id="L59">    private String issuer;</span>
+
+    @Value(&quot;${jwt.audience:Ashutosh-client Side}&quot;)
+<span class="nc" id="L62">    private String audience;</span>
+
+    @Value(&quot;${jwt.device-fingerprinting-enabled:true}&quot;)
+<span class="nc" id="L65">    private boolean deviceFingerprintingEnabled;</span>
+
+    @Value(&quot;${jwt.max-active-sessions:5}&quot;)
+<span class="nc" id="L68">    private int maxActiveSessions;</span>
+
+<span class="nc" id="L70">    public JwtConfig(Environment environment) {</span>
+<span class="nc" id="L71">        this.environment = environment;</span>
+<span class="nc" id="L72">    }</span>
+
+    /**
+     * Fail-fast: if a non-dev profile is active and the JWT secret is still the
+     * hardcoded default, refuse to start. An attacker with repo access could forge
+     * any token using the known default key.
+     */
+    @PostConstruct
+    void validateSecret() {
+<span class="nc" id="L81">        String[] activeProfiles = environment.getActiveProfiles();</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        boolean isDev = activeProfiles.length == 0</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">                || Arrays.stream(activeProfiles).anyMatch(DEV_PROFILES::contains);</span>
+
+<span class="nc bnc" id="L85" title="All 4 branches missed.">        if (!isDev &amp;&amp; HARDCODED_DEFAULT_SECRET.equals(secret)) {</span>
+<span class="nc" id="L86">            throw new IllegalStateException(</span>
+                    &quot;FATAL: JWT secret is the hardcoded default. &quot;
+                  + &quot;Set the JWT_SECRET environment variable to a unique, random value &quot;
+<span class="nc" id="L89">                  + &quot;before running with profile: &quot; + Arrays.toString(activeProfiles));</span>
+        }
+
+<span class="nc bnc" id="L92" title="All 4 branches missed.">        if (isDev &amp;&amp; HARDCODED_DEFAULT_SECRET.equals(secret)) {</span>
+<span class="nc" id="L93">            log.warn(&quot;JWT secret is the hardcoded default — acceptable for dev only. &quot;</span>
+                   + &quot;NEVER deploy to production with this secret.&quot;);
+        }
+<span class="nc" id="L96">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

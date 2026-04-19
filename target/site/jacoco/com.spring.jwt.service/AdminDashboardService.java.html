@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminDashboardService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.service</a> &gt; <span class="el_source">AdminDashboardService.java</span></div><h1>AdminDashboardService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.service;
+
+import com.spring.jwt.dto.AdminDashboardStatsDTO;
+import com.spring.jwt.dto.OrderWeekPointDTO;
+import com.spring.jwt.EmployeeFarmerSurvey.EmployeeFarmerSurveyRepository;
+import com.spring.jwt.Product.ProductRepository;
+import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedRepository;
+import com.spring.jwt.ProductBuyPending.ProductBuyPendingRepository;
+import com.spring.jwt.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L24">@RequiredArgsConstructor</span>
+public class AdminDashboardService {
+
+    private final UserRepository userRepository;
+    private final EmployeeFarmerSurveyRepository employeeFarmerSurveyRepository;
+    private final ProductRepository productRepository;
+    private final ProductBuyPendingRepository productBuyPendingRepository;
+    private final ProductBuyConfirmedRepository productBuyConfirmedRepository;
+
+    @Autowired
+    @Qualifier(&quot;dashboardStatsExecutor&quot;)
+    private Executor dashboardStatsExecutor;
+
+    /**
+     * Runs independent counts and weekly buckets in parallel (bounded executor, not ForkJoinPool.commonPool).
+     * Each repository call runs in its own short transaction (no single enclosing read transaction).
+     */
+    public AdminDashboardStatsDTO buildStats() {
+<span class="nc" id="L42">        final LocalDate today = LocalDate.now();</span>
+<span class="nc" id="L43">        final LocalDateTime newestEndExclusive = today.plusDays(1).atStartOfDay();</span>
+<span class="nc" id="L44">        Executor ex = dashboardStatsExecutor;</span>
+
+<span class="nc" id="L46">        CompletableFuture&lt;Long&gt; farmers =</span>
+<span class="nc" id="L47">                CompletableFuture.supplyAsync(() -&gt; employeeFarmerSurveyRepository.count(), ex);</span>
+<span class="nc" id="L48">        CompletableFuture&lt;Long&gt; employees =</span>
+<span class="nc" id="L49">                CompletableFuture.supplyAsync(() -&gt; userRepository.countActiveStaffUsers(), ex);</span>
+<span class="nc" id="L50">        CompletableFuture&lt;Long&gt; products =</span>
+<span class="nc" id="L51">                CompletableFuture.supplyAsync(() -&gt; productRepository.count(), ex);</span>
+<span class="nc" id="L52">        CompletableFuture&lt;Long&gt; pending =</span>
+<span class="nc" id="L53">                CompletableFuture.supplyAsync(() -&gt; productBuyPendingRepository.count(), ex);</span>
+<span class="nc" id="L54">        CompletableFuture&lt;Long&gt; confirmed =</span>
+<span class="nc" id="L55">                CompletableFuture.supplyAsync(() -&gt; productBuyConfirmedRepository.count(), ex);</span>
+
+<span class="nc" id="L57">        List&lt;CompletableFuture&lt;OrderWeekPointDTO&gt;&gt; weekFutures = new ArrayList&lt;&gt;(8);</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        for (int w = 0; w &lt; 8; w++) {</span>
+<span class="nc" id="L59">            final int wi = w;</span>
+<span class="nc" id="L60">            weekFutures.add(</span>
+<span class="nc" id="L61">                    CompletableFuture.supplyAsync(</span>
+                            () -&gt; {
+<span class="nc" id="L63">                                LocalDateTime endExclusive =</span>
+<span class="nc" id="L64">                                        newestEndExclusive.minusDays(7L * (7 - wi));</span>
+<span class="nc" id="L65">                                LocalDateTime startInclusive = endExclusive.minusDays(7);</span>
+<span class="nc" id="L66">                                long actual =</span>
+<span class="nc" id="L67">                                        productBuyPendingRepository.countAllOrdersBetween(</span>
+                                                startInclusive, endExclusive);
+<span class="nc" id="L69">                                long plan = computePlanTarget(actual);</span>
+<span class="nc" id="L70">                                return OrderWeekPointDTO.builder()</span>
+<span class="nc" id="L71">                                        .label(&quot;Wk &quot; + (wi + 1))</span>
+<span class="nc" id="L72">                                        .plan(plan)</span>
+<span class="nc" id="L73">                                        .actual(actual)</span>
+<span class="nc" id="L74">                                        .build();</span>
+                            }, ex));
+        }
+
+<span class="nc" id="L78">        CompletableFuture&lt;Void&gt; weeksDone =</span>
+<span class="nc" id="L79">                CompletableFuture.allOf(weekFutures.toArray(new CompletableFuture[0]));</span>
+<span class="nc" id="L80">        CompletableFuture.allOf(farmers, employees, products, pending, confirmed, weeksDone)</span>
+<span class="nc" id="L81">                .join();</span>
+
+<span class="nc" id="L83">        List&lt;OrderWeekPointDTO&gt; orderTrack = weekFutures.stream()</span>
+<span class="nc" id="L84">                .map(CompletableFuture::join)</span>
+<span class="nc" id="L85">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L87">        long farmersCount = farmers.join();</span>
+<span class="nc" id="L88">        long orders = pending.join() + confirmed.join();</span>
+
+<span class="nc" id="L90">        return AdminDashboardStatsDTO.builder()</span>
+<span class="nc" id="L91">                .totalUsers(farmersCount)</span>
+<span class="nc" id="L92">                .farmers(farmersCount)</span>
+<span class="nc" id="L93">                .employees(employees.join())</span>
+<span class="nc" id="L94">                .products(products.join())</span>
+<span class="nc" id="L95">                .orders(orders)</span>
+<span class="nc" id="L96">                .orderTrack(orderTrack)</span>
+<span class="nc" id="L97">                .build();</span>
+    }
+
+    private static long computePlanTarget(long actual) {
+<span class="nc bnc" id="L101" title="All 2 branches missed.">        if (actual &lt;= 0) {</span>
+<span class="nc" id="L102">            return 0L;</span>
+        }
+<span class="nc" id="L104">        long uplifted = Math.round(actual * 1.18) + 2L;</span>
+<span class="nc" id="L105">        return Math.max(actual + 1, uplifted);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeFarmerSurveyDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeFarmerSurvey</a> &gt; <span class="el_source">EmployeeFarmerSurveyDTO.java</span></div><h1>EmployeeFarmerSurveyDTO.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeFarmerSurvey;
+
+import com.spring.jwt.Enums.FormStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+<span class="nc bnc" id="L15" title="All 150 branches missed.">@Data</span>
+<span class="nc" id="L16">@NoArgsConstructor</span>
+<span class="nc" id="L17">@AllArgsConstructor</span>
+public class EmployeeFarmerSurveyDTO {
+
+<span class="nc" id="L20">    private String surveyId;</span>
+
+    @NotBlank(message = &quot;Form Number is required&quot;)
+    @Schema(description = &quot;Form No Must Be Unique&quot;, example = &quot;FORM-1001&quot;)
+<span class="nc" id="L24">    private String formNumber;</span>
+
+    @NotBlank(message = &quot;Farmer name is required&quot;)
+    @Pattern(
+            regexp = &quot;^[A-Za-z][A-Za-z ]{1,49}$&quot;,
+            message = &quot;Farmer name must contain only letters and spaces (2–50 characters), no numbers or special characters&quot;
+    )
+    @Schema(description = &quot;Name of the farmer&quot;, example = &quot;ramesh patil&quot;)
+<span class="nc" id="L32">    private String farmerName;</span>
+
+    @NotBlank(message = &quot;Mobile number is required&quot;)
+    @Pattern(
+            regexp = &quot;^[6-9]\\d{9}$&quot;,
+            message = &quot;Please enter valid 10 digit mobile number (e.g. 9766431234)&quot;
+    )
+    @Schema(description = &quot;Farmer mobile number&quot;, example = &quot;9766431234&quot;)
+<span class="nc" id="L40">    private String farmerMobile;</span>
+
+    @NotBlank(message = &quot;Farmer area is required&quot;)
+    @Pattern(
+            regexp = &quot;^\\d+(\\.\\d{1,2})?$&quot;,
+            message = &quot;Land area must be a valid number (example: 2 or 2.5)&quot;
+    )
+    @Schema(description = &quot;Total land area owned by farmer (in Acres)&quot;, example = &quot;2.5&quot;)
+<span class="nc" id="L48">    private String landArea;</span>
+
+    @NotBlank(message = &quot;village is required&quot;)
+    @Schema(description = &quot;Farmer village&quot;, example = &quot;Nashik&quot;)
+<span class="nc" id="L52">    private String village;</span>
+
+    @NotBlank(message = &quot;Address is required&quot;)
+    @Schema(description = &quot;Farmer address&quot;, example = &quot;Village Mulshi, Pune&quot;)
+<span class="nc" id="L56">    private String address;</span>
+
+    @NotBlank(message = &quot;Taluka is required&quot;)
+    @Schema(description = &quot;Name of Taluka&quot;, example = &quot;Mulshi&quot;)
+<span class="nc" id="L60">    private String taluka;</span>
+
+    @NotBlank(message = &quot;District is required&quot;)
+    @Schema(description = &quot;Name of District&quot;, example = &quot;Pune&quot;)
+<span class="nc" id="L64">    private String district;</span>
+
+    /* ========= NEW FIELDS (From Entity) ========= */
+
+    @Schema(description = &quot;Additional farm related information&quot;,
+            example = &quot;Irrigated land with drip system&quot;)
+<span class="nc" id="L70">    private String farmInformation;</span>
+
+    @Schema(description = &quot;Crop details grown by farmer&quot;,
+            example = &quot;[\&quot;Wheat\&quot;, \&quot;Sugarcane\&quot;]&quot;)
+<span class="nc" id="L74">    private List&lt;String&gt; cropDetails;</span>
+
+    @Schema(description = &quot;Livestock details owned by farmer&quot;,
+            example = &quot;[\&quot;Cow\&quot;, \&quot;Buffalo\&quot;]&quot;)
+<span class="nc" id="L78">    private List&lt;String&gt; livestockDetails;</span>
+
+    @Schema(description = &quot;Production equipment used by farmer&quot;,
+            example = &quot;[\&quot;Tractor\&quot;, \&quot;Sprayer\&quot;]&quot;)
+<span class="nc" id="L82">    private List&lt;String&gt; productionEquipment;</span>
+
+
+    @NotNull(message = &quot;Sample status is required&quot;)
+    @Schema(description = &quot;Sample collected status&quot;, example = &quot;true&quot;)
+<span class="nc" id="L87">    private Boolean sampleCollected;</span>
+
+
+    @NotNull(message = &quot;User ID (Employee ID) is required&quot;)
+    @Schema(description = &quot;Employee(User) ID who filled the survey&quot;,
+            example = &quot;10005&quot;)
+<span class="nc" id="L93">    private Long userId;</span>
+
+<span class="nc" id="L95">    private FormStatus formStatus;</span>
+
+<span class="nc" id="L97">    private FarmerSelfieDTO farmerSelfie;</span>
+
+<span class="nc" id="L99">    private LocalDateTime createdAt;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

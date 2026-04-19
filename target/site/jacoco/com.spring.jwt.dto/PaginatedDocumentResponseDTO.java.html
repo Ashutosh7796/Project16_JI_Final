@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PaginatedDocumentResponseDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">PaginatedDocumentResponseDTO.java</span></div><h1>PaginatedDocumentResponseDTO.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+
+/**
+ * Paginated response DTO for document listings
+ * Provides comprehensive pagination information following REST API best practices
+ */
+<span class="nc bnc" id="L14" title="All 44 branches missed.">@Data</span>
+<span class="nc" id="L15">@Builder</span>
+<span class="nc" id="L16">@NoArgsConstructor</span>
+<span class="nc" id="L17">@AllArgsConstructor</span>
+public class PaginatedDocumentResponseDTO {
+    
+    /**
+     * List of documents for the current page
+     */
+<span class="nc" id="L23">    private List&lt;DocumentResponseDTO&gt; documents;</span>
+    
+    /**
+     * Current page number (0-based)
+     */
+<span class="nc" id="L28">    private int currentPage;</span>
+    
+    /**
+     * Number of items per page
+     */
+<span class="nc" id="L33">    private int pageSize;</span>
+    
+    /**
+     * Total number of documents across all pages
+     */
+<span class="nc" id="L38">    private long totalElements;</span>
+    
+    /**
+     * Total number of pages
+     */
+<span class="nc" id="L43">    private int totalPages;</span>
+    
+    /**
+     * Whether this is the first page
+     */
+<span class="nc" id="L48">    private boolean first;</span>
+    
+    /**
+     * Whether this is the last page
+     */
+<span class="nc" id="L53">    private boolean last;</span>
+    
+    /**
+     * Whether there is a next page
+     */
+<span class="nc" id="L58">    private boolean hasNext;</span>
+    
+    /**
+     * Whether there is a previous page
+     */
+<span class="nc" id="L63">    private boolean hasPrevious;</span>
+    
+    /**
+     * Number of elements in the current page
+     */
+<span class="nc" id="L68">    private int numberOfElements;</span>
+    
+    /**
+     * Whether the current page is empty
+     */
+<span class="nc" id="L73">    private boolean empty;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

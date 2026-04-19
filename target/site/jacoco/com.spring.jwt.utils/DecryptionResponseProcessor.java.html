@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DecryptionResponseProcessor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">DecryptionResponseProcessor.java</span></div><h1>DecryptionResponseProcessor.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spring.jwt.dto.ResponseAllUsersDto;
+import com.spring.jwt.dto.UserDTO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.MethodParameter;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * This class intercepts responses from USER controllers only and ensures sensitive
+ * data is decrypted.
+ * 
+ * IMPORTANT: Only applies to controllers in the specified base packages.
+ * This prevents unnecessary processing of non-user related responses.
+ */
+@ControllerAdvice(basePackages = {
+    &quot;com.spring.jwt.controller&quot;  // Only user-related controllers
+})
+<span class="nc" id="L29">@RequiredArgsConstructor</span>
+<span class="nc" id="L30">@Slf4j</span>
+public class DecryptionResponseProcessor implements ResponseBodyAdvice&lt;Object&gt; {
+
+    private final EncryptionUtil encryptionUtil;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    public boolean supports(MethodParameter returnType, Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; converterType) {
+        // Only process if the response contains User-related data
+<span class="nc" id="L39">        Class&lt;?&gt; returnTypeClass = returnType.getParameterType();</span>
+        
+        // Check if return type is User-related
+<span class="nc" id="L42">        boolean isUserRelated = </span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">            UserDTO.class.isAssignableFrom(returnTypeClass) ||</span>
+<span class="nc bnc" id="L44" title="All 2 branches missed.">            ResponseAllUsersDto.class.isAssignableFrom(returnTypeClass) ||</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">            returnTypeClass.getName().contains(&quot;UserDTO&quot;) ||</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">            returnTypeClass.getName().contains(&quot;ResponseAllUsersDto&quot;);</span>
+        
+<span class="nc bnc" id="L48" title="All 2 branches missed.">        if (isUserRelated) {</span>
+<span class="nc" id="L49">            log.debug(&quot;DecryptionResponseProcessor will process response of type: {}&quot;, returnTypeClass.getName());</span>
+        }
+        
+<span class="nc" id="L52">        return isUserRelated;</span>
+    }
+
+    @Override
+    public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType,
+            Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; selectedConverterType,
+            ServerHttpRequest request, ServerHttpResponse response) {
+
+        try {
+<span class="nc" id="L61">            log.debug(&quot;Processing user response for decryption: {}&quot;, body.getClass().getName());</span>
+<span class="nc" id="L62">            return processResponse(body);</span>
+<span class="nc" id="L63">        } catch (Exception e) {</span>
+<span class="nc" id="L64">            log.error(&quot;Error processing response for decryption: {}&quot;, e.getMessage(), e);</span>
+<span class="nc" id="L65">            return body;</span>
+        }
+    }
+
+    private Object processResponse(Object body) {
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        if (body == null) {</span>
+<span class="nc" id="L71">            return null;</span>
+        }
+
+        // Skip non-user related responses
+<span class="nc" id="L75">        String className = body.getClass().getName();</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        if (className.contains(&quot;DocumentResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">            className.contains(&quot;DocumentDetailResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">            className.contains(&quot;PaginatedDocumentResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">            className.contains(&quot;EmployeeFarmerSurvey&quot;) ||</span>
+<span class="nc bnc" id="L80" title="All 2 branches missed.">            className.contains(&quot;BaseResponseDTO&quot;)) {</span>
+<span class="nc" id="L81">            return body;</span>
+        }
+
+        // Handle ApiResponse wrapper
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (body instanceof ApiResponse) {</span>
+<span class="nc" id="L86">            ApiResponse&lt;?&gt; response = (ApiResponse&lt;?&gt;) body;</span>
+<span class="nc" id="L87">            Object data = response.getData();</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">            if (data != null) {</span>
+<span class="nc" id="L89">                String dataClassName = data.getClass().getName();</span>
+<span class="nc bnc" id="L90" title="All 2 branches missed.">                if (dataClassName.contains(&quot;DocumentResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                    dataClassName.contains(&quot;DocumentDetailResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">                    dataClassName.contains(&quot;PaginatedDocumentResponseDTO&quot;) ||</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">                    dataClassName.contains(&quot;EmployeeFarmerSurvey&quot;)) {</span>
+<span class="nc" id="L94">                    return body;</span>
+                }
+            }
+        }
+
+<span class="nc bnc" id="L99" title="All 2 branches missed.">        if (body instanceof ResponseAllUsersDto) {</span>
+<span class="nc" id="L100">            ResponseAllUsersDto responseDto = (ResponseAllUsersDto) body;</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">            if (responseDto.getList() != null) {</span>
+<span class="nc" id="L102">                log.debug(&quot;Processing ResponseAllUsersDto with {} items&quot;, responseDto.getList().size());</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">                for (UserDTO user : responseDto.getList()) {</span>
+<span class="nc" id="L104">                    decryptUserDTO(user);</span>
+<span class="nc" id="L105">                }</span>
+            }
+<span class="nc" id="L107">            return body;</span>
+        }
+
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        if (body instanceof UserDTO) {</span>
+<span class="nc" id="L111">            decryptUserDTO((UserDTO) body);</span>
+<span class="nc" id="L112">            return body;</span>
+        }
+
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (body instanceof List&lt;?&gt;) {</span>
+<span class="nc" id="L116">            List&lt;?&gt; list = (List&lt;?&gt;) body;</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">            for (Object item : list) {</span>
+<span class="nc bnc" id="L118" title="All 2 branches missed.">                if (item instanceof UserDTO) {</span>
+<span class="nc" id="L119">                    decryptUserDTO((UserDTO) item);</span>
+                }
+<span class="nc" id="L121">            }</span>
+<span class="nc" id="L122">            return body;</span>
+        }
+
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (body instanceof Map) {</span>
+<span class="nc" id="L126">            Map&lt;?, ?&gt; map = (Map&lt;?, ?&gt;) body;</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            for (Object value : map.values()) {</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">                if (value instanceof UserDTO) {</span>
+<span class="nc" id="L129">                    decryptUserDTO((UserDTO) value);</span>
+<span class="nc bnc" id="L130" title="All 2 branches missed.">                } else if (value instanceof List) {</span>
+<span class="nc" id="L131">                    processResponse(value);</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">                } else if (value instanceof Map) {</span>
+<span class="nc" id="L133">                    processResponse(value);</span>
+                }
+<span class="nc" id="L135">            }</span>
+<span class="nc" id="L136">            return body;</span>
+        }
+
+<span class="nc" id="L139">        return body;</span>
+    }
+
+    private void decryptUserDTO(UserDTO user) {
+        // Decryption logic is currently commented out
+        // Uncomment when encryption is fully implemented
+        
+        // try {
+        //     if (user.getFirstName() != null &amp;&amp; !user.getFirstName().isEmpty()) {
+        //         user.setFirstName(encryptionUtil.decrypt(user.getFirstName()));
+        //     }
+        //
+        //     if (user.getLastName() != null &amp;&amp; !user.getLastName().isEmpty()) {
+        //         user.setLastName(encryptionUtil.decrypt(user.getLastName()));
+        //     }
+        //
+        //     if (user.getAddress() != null &amp;&amp; !user.getAddress().isEmpty()) {
+        //         user.setAddress(encryptionUtil.decrypt(user.getAddress()));
+        //     }
+        // } catch (Exception e) {
+        //     log.error(&quot;Error decrypting user data: {}&quot;, e.getMessage());
+        // }
+<span class="nc" id="L161">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

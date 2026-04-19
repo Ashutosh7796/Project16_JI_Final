@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PaymentInputSanitizer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Payment</a> &gt; <span class="el_source">PaymentInputSanitizer.java</span></div><h1>PaymentInputSanitizer.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Payment;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public final class PaymentInputSanitizer {
+
+    private PaymentInputSanitizer() {}
+
+    public static String sanitizeName(String name) {
+<span class="nc bnc" id="L11" title="All 2 branches missed.">        if (name == null) return &quot;&quot;;</span>
+<span class="nc" id="L12">        return name.replaceAll(&quot;[&lt;&gt;\&quot;'&amp;;(){}\\[\\]]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    public static String sanitizePhone(String phone) {
+<span class="nc bnc" id="L16" title="All 2 branches missed.">        if (phone == null) return &quot;&quot;;</span>
+<span class="nc" id="L17">        return phone.replaceAll(&quot;[^0-9+\\-() ]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    public static String sanitizeAddress(String address) {
+<span class="nc bnc" id="L21" title="All 2 branches missed.">        if (address == null) return &quot;&quot;;</span>
+<span class="nc" id="L22">        return address.replaceAll(&quot;[&lt;&gt;\&quot;'&amp;;(){}\\[\\]]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    public static BigDecimal sanitizeAmount(BigDecimal amount, BigDecimal maxAllowed) {
+<span class="nc bnc" id="L26" title="All 4 branches missed.">        if (amount == null || amount.compareTo(BigDecimal.ZERO) &lt;= 0) {</span>
+<span class="nc" id="L27">            throw new IllegalArgumentException(&quot;Payment amount must be positive&quot;);</span>
+        }
+<span class="nc bnc" id="L29" title="All 4 branches missed.">        if (maxAllowed != null &amp;&amp; amount.compareTo(maxAllowed) &gt; 0) {</span>
+<span class="nc" id="L30">            throw new IllegalArgumentException(&quot;Payment amount exceeds maximum allowed: &quot; + maxAllowed);</span>
+        }
+<span class="nc" id="L32">        return amount.setScale(2, RoundingMode.HALF_UP);</span>
+    }
+
+    public static String sanitizeOrderId(String orderId) {
+<span class="nc bnc" id="L36" title="All 2 branches missed.">        if (orderId == null) return &quot;&quot;;</span>
+<span class="nc" id="L37">        return orderId.replaceAll(&quot;[^a-zA-Z0-9_\\-]&quot;, &quot;&quot;);</span>
+    }
+
+    public static String sanitizeGeneral(String input) {
+<span class="nc bnc" id="L41" title="All 2 branches missed.">        if (input == null) return &quot;&quot;;</span>
+<span class="nc" id="L42">        return input.replaceAll(&quot;[&lt;&gt;\&quot;'&amp;;]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    /** Callback queue polling token: alphanumeric, hyphens, underscores only (max 64). */
+    public static String sanitizeOpaqueToken(String token) {
+<span class="nc bnc" id="L47" title="All 2 branches missed.">        if (token == null) return &quot;&quot;;</span>
+<span class="nc" id="L48">        String t = token.trim();</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (t.length() &gt; 64) {</span>
+<span class="nc" id="L50">            t = t.substring(0, 64);</span>
+        }
+<span class="nc" id="L52">        return t.replaceAll(&quot;[^a-zA-Z0-9_-]&quot;, &quot;&quot;);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

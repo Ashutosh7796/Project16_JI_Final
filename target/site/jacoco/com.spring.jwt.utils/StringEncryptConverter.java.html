@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StringEncryptConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">StringEncryptConverter.java</span></div><h1>StringEncryptConverter.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import jakarta.persistence.AttributeConverter;
+import jakarta.persistence.Converter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Converter
+@Component
+<span class="nc" id="L11">@Slf4j</span>
+public class StringEncryptConverter implements AttributeConverter&lt;String, String&gt; {
+
+    private final EncryptionUtil encryptionUtil;
+
+    @Autowired
+<span class="nc" id="L17">    public StringEncryptConverter(EncryptionUtil encryptionUtil) {</span>
+<span class="nc" id="L18">        this.encryptionUtil = encryptionUtil;</span>
+<span class="nc" id="L19">        log.info(&quot;StringEncryptConverter initialized&quot;);</span>
+<span class="nc" id="L20">    }</span>
+
+    @Override
+    public String convertToDatabaseColumn(String attribute) {
+<span class="nc bnc" id="L24" title="All 4 branches missed.">        if (attribute == null || attribute.isEmpty()) {</span>
+<span class="nc" id="L25">            return attribute;</span>
+        }
+        
+        try {
+<span class="nc" id="L29">            log.debug(&quot;Encrypting data for storage&quot;);</span>
+<span class="nc" id="L30">            return encryptionUtil.encrypt(attribute);</span>
+<span class="nc" id="L31">        } catch (Exception e) {</span>
+<span class="nc" id="L32">            log.error(&quot;Error encrypting data: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L33">            return attribute;</span>
+        }
+    }
+
+    @Override
+    public String convertToEntityAttribute(String dbData) {
+<span class="nc bnc" id="L39" title="All 4 branches missed.">        if (dbData == null || dbData.isEmpty()) {</span>
+<span class="nc" id="L40">            return dbData;</span>
+        }
+        
+        try {
+<span class="nc" id="L44">            log.debug(&quot;Decrypting data from storage&quot;);</span>
+<span class="nc" id="L45">            return encryptionUtil.decrypt(dbData);</span>
+<span class="nc" id="L46">        } catch (Exception e) {</span>
+<span class="nc" id="L47">            log.warn(&quot;Unable to decrypt data, assuming it's plain text: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L48">            return dbData;</span>
+        }
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

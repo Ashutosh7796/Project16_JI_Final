@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeMapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Employee</a> &gt; <span class="el_source">EmployeeMapper.java</span></div><h1>EmployeeMapper.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Employee;
+
+
+import com.spring.jwt.entity.Employee;
+import com.spring.jwt.entity.User;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="nc" id="L9">public class EmployeeMapper {</span>
+
+    public Employee toEntity(EmployeeCreateUpdateDTO dto, User user) {
+
+<span class="nc" id="L13">        Employee emp = new Employee();</span>
+<span class="nc" id="L14">        emp.setUser(user);</span>
+<span class="nc" id="L15">        emp.setEmployeeCode(dto.getEmployeeCode());</span>
+<span class="nc" id="L16">        emp.setCompanyName(dto.getCompanyName());</span>
+<span class="nc" id="L17">        emp.setAddress(dto.getAddress());</span>
+<span class="nc" id="L18">        emp.setPermanentAddress(dto.getPermanentAddress());</span>
+<span class="nc" id="L19">        emp.setCity(dto.getCity());</span>
+<span class="nc" id="L20">        emp.setDistrict(dto.getDistrict());</span>
+<span class="nc" id="L21">        emp.setState(dto.getState());</span>
+<span class="nc" id="L22">        emp.setAccountNumber(dto.getAccountNumber());</span>
+<span class="nc" id="L23">        emp.setIfscCode(dto.getIfscCode());</span>
+<span class="nc" id="L24">        emp.setPfNumber(dto.getPfNumber());</span>
+<span class="nc" id="L25">        emp.setInsuranceNumber(dto.getInsuranceNumber());</span>
+<span class="nc" id="L26">        emp.setPanNumber(dto.getPanNumber());</span>
+<span class="nc" id="L27">        emp.setVehicleNumber(dto.getVehicleNumber());</span>
+<span class="nc" id="L28">        emp.setDescription(dto.getDescription());</span>
+<span class="nc" id="L29">        return emp;</span>
+    }
+
+    public EmployeeResponseDTO toDto(Employee emp) {
+
+<span class="nc" id="L34">        EmployeeResponseDTO dto = new EmployeeResponseDTO();</span>
+<span class="nc" id="L35">        dto.setEmployeeId(emp.getEmployeeId());</span>
+<span class="nc" id="L36">        dto.setUserId(emp.getUser().getUserId());</span>
+<span class="nc" id="L37">        dto.setUserEmail(emp.getUser().getEmail());</span>
+<span class="nc" id="L38">        dto.setUserMobile(emp.getUser().getMobileNumber());</span>
+<span class="nc" id="L39">        dto.setEmployeeCode(emp.getEmployeeCode());</span>
+<span class="nc" id="L40">        dto.setCompanyName(emp.getCompanyName());</span>
+<span class="nc" id="L41">        dto.setAddress(emp.getAddress());</span>
+<span class="nc" id="L42">        dto.setPermanentAddress(emp.getPermanentAddress());</span>
+<span class="nc" id="L43">        dto.setCity(emp.getCity());</span>
+<span class="nc" id="L44">        dto.setDistrict(emp.getDistrict());</span>
+<span class="nc" id="L45">        dto.setState(emp.getState());</span>
+<span class="nc" id="L46">        dto.setAccountNumber(emp.getAccountNumber());</span>
+<span class="nc" id="L47">        dto.setIfscCode(emp.getIfscCode());</span>
+<span class="nc" id="L48">        dto.setPfNumber(emp.getPfNumber());</span>
+<span class="nc" id="L49">        dto.setInsuranceNumber(emp.getInsuranceNumber());</span>
+<span class="nc" id="L50">        dto.setPanNumber(emp.getPanNumber());</span>
+<span class="nc" id="L51">        dto.setVehicleNumber(emp.getVehicleNumber());</span>
+<span class="nc" id="L52">        dto.setDescription(emp.getDescription());</span>
+
+<span class="nc" id="L54">        return dto;</span>
+    }
+
+    private EmployeeResponseDTO mapToResponse(Employee employee) {
+
+<span class="nc" id="L59">        EmployeeResponseDTO dto = new EmployeeResponseDTO();</span>
+<span class="nc" id="L60">        User user = employee.getUser();</span>
+
+        // ---------- IDS ----------
+<span class="nc" id="L63">        dto.setEmployeeId(employee.getEmployeeId());</span>
+<span class="nc" id="L64">        dto.setUserId(user.getUserId());</span>
+
+        // ---------- USER ----------
+      ;
+
+        // ---------- EMPLOYEE ----------
+<span class="nc" id="L70">        dto.setEmployeeCode(employee.getEmployeeCode());</span>
+<span class="nc" id="L71">        dto.setCompanyName(employee.getCompanyName());</span>
+<span class="nc" id="L72">        dto.setAddress(employee.getAddress());</span>
+<span class="nc" id="L73">        dto.setPermanentAddress(employee.getPermanentAddress());</span>
+<span class="nc" id="L74">        dto.setCity(employee.getCity());</span>
+<span class="nc" id="L75">        dto.setDistrict(employee.getDistrict());</span>
+<span class="nc" id="L76">        dto.setState(employee.getState());</span>
+<span class="nc" id="L77">        dto.setAccountNumber(employee.getAccountNumber());</span>
+<span class="nc" id="L78">        dto.setIfscCode(employee.getIfscCode());</span>
+<span class="nc" id="L79">        dto.setPfNumber(employee.getPfNumber());</span>
+<span class="nc" id="L80">        dto.setInsuranceNumber(employee.getInsuranceNumber());</span>
+<span class="nc" id="L81">        dto.setPanNumber(employee.getPanNumber());</span>
+<span class="nc" id="L82">        dto.setVehicleNumber(employee.getVehicleNumber());</span>
+<span class="nc" id="L83">        dto.setDescription(employee.getDescription());</span>
+
+<span class="nc" id="L85">        return dto;</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

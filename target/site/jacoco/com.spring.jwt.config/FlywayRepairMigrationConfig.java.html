@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FlywayRepairMigrationConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">FlywayRepairMigrationConfig.java</span></div><h1>FlywayRepairMigrationConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import org.flywaydb.core.Flyway;
+import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/**
+ * Runs {@link Flyway#repair()} before {@link Flyway#migrate()} on startup.
+ * &lt;p&gt;
+ * Flyway validates applied migrations against file checksums before migrating; if an applied
+ * script was edited locally, validation throws {@code FlywayValidateException} before migrate
+ * (so {@code spring.flyway.repair-on-migrate} alone does not always help). Repair realigns
+ * {@code flyway_schema_history} with the current files. Prefer never editing applied migrations;
+ * add a new versioned script instead when possible.
+ */
+@Configuration
+<span class="nc" id="L18">public class FlywayRepairMigrationConfig {</span>
+
+    @Bean
+    public FlywayMigrationStrategy flywayMigrationStrategy() {
+<span class="nc" id="L22">        return flyway -&gt; {</span>
+<span class="nc" id="L23">            flyway.repair();</span>
+<span class="nc" id="L24">            flyway.migrate();</span>
+<span class="nc" id="L25">        };</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

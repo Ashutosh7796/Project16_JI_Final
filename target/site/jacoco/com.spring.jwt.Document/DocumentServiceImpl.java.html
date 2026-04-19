@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Document</a> &gt; <span class="el_source">DocumentServiceImpl.java</span></div><h1>DocumentServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Document;
+
+import com.spring.jwt.Document.Service.DocumentSecurityService;
+import com.spring.jwt.Document.Service.DocumentServiceHelper;
+import com.spring.jwt.Document.Service.FileProcessingService;
+import com.spring.jwt.Document.Service.FileValidationService;
+import com.spring.jwt.Document.domain.DocumentMetadata;
+import com.spring.jwt.Document.domain.FileProcessingResult;
+import com.spring.jwt.Enums.DocumentType;
+import com.spring.jwt.config.DocumentProperties;
+import com.spring.jwt.dto.DocumentDetailResponseDTO;
+import com.spring.jwt.dto.DocumentResponseDTO;
+import com.spring.jwt.dto.PaginatedDocumentResponseDTO;
+import com.spring.jwt.entity.Document;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.DocumentNotFoundException;
+import com.spring.jwt.exception.DocumentProcessingException;
+import com.spring.jwt.exception.UnauthorizedAccessException;
+import com.spring.jwt.mapper.DocumentResponseMapper;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+<span class="nc" id="L35">@Slf4j</span>
+<span class="nc" id="L36">@RequiredArgsConstructor</span>
+public class DocumentServiceImpl implements DocumentService {
+
+    private final DocumentRepository documentRepository;
+    private final DocumentResponseMapper documentResponseMapper;
+    private final FileValidationService fileValidationService;
+    private final FileProcessingService fileProcessingService;
+    private final DocumentSecurityService documentSecurityService;
+    private final DocumentProperties documentProperties;
+    private final DocumentServiceHelper documentServiceHelper;
+
+    @Override
+    @Transactional
+    public DocumentResponseDTO uploadDocument(Long userId, MultipartFile file,
+            DocumentType documentType, String description) {
+<span class="nc" id="L51">        documentServiceHelper.validateUploadInputs(userId, file, documentType);</span>
+
+<span class="nc" id="L53">        User user = documentServiceHelper.getUserById(userId);</span>
+
+<span class="nc" id="L55">        fileValidationService.validateFileForDocumentType(file, documentType);</span>
+
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (!documentSecurityService.allowsMultipleUploads(documentType))</span>
+        {
+<span class="nc" id="L59">            Optional&lt;Document&gt; existing = documentRepository.findByUserIdAndDocumentType(userId, documentType);</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">            if (existing.isPresent())</span>
+            {
+                // Admin can replace any document; regular users get a clear error
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                if (isCurrentUserAdmin()) {</span>
+<span class="nc" id="L64">                    log.info(&quot;Admin replacing existing document of type {} for user {}&quot;, documentType, userId);</span>
+<span class="nc" id="L65">                    return updateDocument(userId, existing.get().getDocumentId(), file, description);</span>
+                }
+<span class="nc" id="L67">                throw new com.spring.jwt.exception.DocumentAlreadyExistsException(</span>
+<span class="nc" id="L68">                        String.format(&quot;Document type %s already exists for user %d. Use the replace endpoint to update it.&quot;, documentType, userId));</span>
+            }
+        }
+
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        if (!documentSecurityService.canUploadDocument(userId, documentType))</span>
+        {
+<span class="nc" id="L74">            throw new UnauthorizedAccessException(</span>
+<span class="nc" id="L75">                    String.format(&quot;User %d is not authorized to upload document type %s&quot;,</span>
+                            userId, documentType));
+        }
+
+        try {
+<span class="nc" id="L80">            long startTime = System.currentTimeMillis();</span>
+
+<span class="nc" id="L82">            FileProcessingResult fileProcessingResult = fileProcessingService</span>
+<span class="nc" id="L83">                    .processFile(file, documentType)</span>
+<span class="nc" id="L84">                    .join();</span>
+
+<span class="nc" id="L86">            Document document = documentServiceHelper.createDocumentEntity(user, file, documentType, description,</span>
+                    fileProcessingResult);
+<span class="nc" id="L88">            Document savedDocument = documentRepository.save(document);</span>
+
+<span class="nc" id="L90">            long totalTime = System.currentTimeMillis() - startTime;</span>
+<span class="nc" id="L91">            log.info(&quot;Document '{}' uploaded successfully for user {} with ID {} in {}ms ({})&quot;,</span>
+<span class="nc" id="L92">                    file.getOriginalFilename(), userId, savedDocument.getDocumentId(), totalTime,</span>
+<span class="nc" id="L93">                    fileProcessingResult.getProcessingSummary());</span>
+<span class="nc" id="L94">            return documentResponseMapper.toResponseDTO(savedDocument)</span>
+<span class="nc" id="L95">                    .orElseThrow(() -&gt; new DocumentProcessingException(&quot;Failed to map saved document to DTO&quot;));</span>
+<span class="nc" id="L96">        } catch (Exception e)</span>
+        {
+<span class="nc" id="L98">            log.error(&quot;Document upload failed for user {}: {}&quot;, userId, e.getMessage(), e);</span>
+<span class="nc" id="L99">            throw new DocumentProcessingException(&quot;Failed to upload document: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    public DocumentDetailResponseDTO getDocumentById(Long userId, Integer documentId)
+    {
+<span class="nc" id="L106">        log.debug(&quot;Fetching document {} for user {}&quot;, documentId, userId);</span>
+
+<span class="nc" id="L108">        documentSecurityService.validateDocumentOwnership(userId, documentId);</span>
+<span class="nc" id="L109">        Document document = getDocumentEntityById(documentId);</span>
+<span class="nc" id="L110">        return documentResponseMapper.toDetailResponseDTO(document)</span>
+<span class="nc" id="L111">                .orElseThrow(() -&gt; new DocumentNotFoundException(&quot;Document not found with ID: &quot; + documentId));</span>
+    }
+
+    @Override
+    public DocumentDetailResponseDTO getDocumentByType(Long userId, DocumentType documentType)
+    {
+<span class="nc" id="L117">        log.debug(&quot;Fetching document of type {} for user {}&quot;, documentType, userId);</span>
+<span class="nc" id="L118">        documentServiceHelper.validateUserId(userId);</span>
+
+<span class="nc" id="L120">        Document document = documentRepository.findByUserIdAndDocumentType(userId, documentType)</span>
+<span class="nc" id="L121">                .orElseThrow(() -&gt; new DocumentNotFoundException(</span>
+<span class="nc" id="L122">                        String.format(&quot;Document of type %s not found for user %d&quot;, documentType, userId)));</span>
+
+<span class="nc" id="L124">        return documentResponseMapper.toDetailResponseDTO(document)</span>
+<span class="nc" id="L125">                .orElseThrow(() -&gt; new DocumentNotFoundException(</span>
+<span class="nc" id="L126">                        String.format(&quot;Document of type %s not found for user %d&quot;, documentType, userId)));</span>
+    }
+
+    @Override
+    public List&lt;DocumentResponseDTO&gt; getAllDocumentsByUserId(Long userId)
+    {
+<span class="nc" id="L132">        log.debug(&quot;Fetching all documents for user {}&quot;, userId);</span>
+<span class="nc" id="L133">        documentServiceHelper.validateUserId(userId);</span>
+
+<span class="nc" id="L135">        List&lt;Document&gt; documents = documentRepository.findByUserIdOrderByUploadedAtDesc(userId);</span>
+<span class="nc" id="L136">        return documentResponseMapper.toResponseDTOList(documents);</span>
+    }
+
+    @Override
+    public List&lt;DocumentResponseDTO&gt; getDocumentsByTypes(Long userId, List&lt;DocumentType&gt; documentTypes)
+    {
+<span class="nc" id="L142">        log.debug(&quot;Fetching documents of types {} for user {}&quot;, documentTypes, userId);</span>
+<span class="nc" id="L143">        documentServiceHelper.validateUserId(userId);</span>
+
+<span class="nc bnc" id="L145" title="All 4 branches missed.">        if (documentTypes == null || documentTypes.isEmpty())</span>
+        {
+<span class="nc" id="L147">            return getAllDocumentsByUserId(userId);</span>
+        }
+
+<span class="nc" id="L150">        List&lt;Document&gt; documents = documentRepository.findByUserIdAndDocumentTypeIn(userId, documentTypes);</span>
+<span class="nc" id="L151">        return documentResponseMapper.toResponseDTOList(documents);</span>
+    }
+
+    @Override
+    public DocumentResponseDTO updateDocument(Long userId, Integer documentId, MultipartFile file,
+            String description)
+    {
+<span class="nc" id="L158">        log.info(&quot;Updating document {} for user {}&quot;, documentId, userId);</span>
+
+<span class="nc" id="L160">        documentSecurityService.validateDocumentOwnership(userId, documentId);</span>
+
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (!documentSecurityService.canModifyDocument(userId, documentId))</span>
+        {
+<span class="nc" id="L164">            throw new UnauthorizedAccessException(</span>
+<span class="nc" id="L165">                    String.format(&quot;User %d is not authorized to modify document %d&quot;, userId, documentId));</span>
+        }
+<span class="nc" id="L167">        Document existingDocument = getDocumentEntityById(documentId);</span>
+
+        try {
+<span class="nc" id="L170">            boolean fileUpdated = false;</span>
+
+<span class="nc bnc" id="L172" title="All 4 branches missed.">            if (file != null &amp;&amp; !file.isEmpty())</span>
+            {
+<span class="nc" id="L174">                fileValidationService.validateFileForDocumentType(file, existingDocument.getDocumentType());</span>
+
+<span class="nc" id="L176">                FileProcessingResult processingResult = fileProcessingService</span>
+<span class="nc" id="L177">                        .processFile(file, existingDocument.getDocumentType())</span>
+<span class="nc" id="L178">                        .join();</span>
+
+<span class="nc" id="L180">                documentServiceHelper.updateDocumentFileData(existingDocument, file, processingResult);</span>
+<span class="nc" id="L181">                fileUpdated = true;</span>
+            }
+<span class="nc bnc" id="L183" title="All 4 branches missed.">            if (description != null &amp;&amp; !description.trim().isEmpty())</span>
+            {
+<span class="nc" id="L185">                existingDocument.setDescription(description.trim());</span>
+            }
+<span class="nc" id="L187">            Document updatedDocument = documentRepository.save(existingDocument);</span>
+
+<span class="nc" id="L189">            log.info(&quot;Document {} updated successfully for user {} (file updated: {})&quot;,</span>
+<span class="nc" id="L190">                    documentId, userId, fileUpdated);</span>
+
+<span class="nc" id="L192">            return documentResponseMapper.toResponseDTO(updatedDocument)</span>
+<span class="nc" id="L193">                    .orElseThrow(() -&gt; new DocumentProcessingException(&quot;Failed to map updated document to DTO&quot;));</span>
+<span class="nc" id="L194">        } catch (Exception e) {</span>
+<span class="nc" id="L195">            log.error(&quot;Document update failed for user {}: {}&quot;, userId, e.getMessage(), e);</span>
+<span class="nc" id="L196">            throw new DocumentProcessingException(&quot;Failed to update document: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteDocument(Long userId, Integer documentId)
+    {
+<span class="nc" id="L204">        log.info(&quot;Deleting document {} for user {}&quot;, documentId, userId);</span>
+
+<span class="nc" id="L206">        documentSecurityService.validateDocumentOwnership(userId, documentId);</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">        if (!documentSecurityService.canDeleteDocument(userId, documentId))</span>
+        {
+<span class="nc" id="L209">            throw new UnauthorizedAccessException(</span>
+<span class="nc" id="L210">                    String.format(&quot;User %d is not authorized to delete document %d&quot;, userId, documentId));</span>
+        }
+<span class="nc" id="L212">        Document document = getDocumentEntityById(documentId);</span>
+<span class="nc" id="L213">        documentRepository.delete(document);</span>
+
+<span class="nc" id="L215">        log.info(&quot;Document {} deleted successfully for user {}&quot;, documentId, userId);</span>
+<span class="nc" id="L216">    }</span>
+
+    @Override
+    public void deleteDocumentByType(Long userId, DocumentType documentType)
+    {
+<span class="nc" id="L221">        log.info(&quot;Deleting document of type {} for user {}&quot;, documentType, userId);</span>
+<span class="nc" id="L222">        documentServiceHelper.validateUserId(userId);</span>
+
+<span class="nc" id="L224">        documentRepository.deleteByUserIdAndDocumentType(userId, documentType);</span>
+<span class="nc" id="L225">        log.info(&quot;Document of type {} deleted successfully for user {}&quot;, documentType, userId);</span>
+<span class="nc" id="L226">    }</span>
+
+    @Override
+    public boolean documentExists(Long userId, DocumentType documentType)
+    {
+<span class="nc" id="L231">        return documentRepository.existsByUserIdAndDocumentType(userId, documentType);</span>
+    }
+
+    @Override
+    public long getDocumentCount(Long userId)
+    {
+<span class="nc" id="L237">        return documentRepository.countByUserId(userId);</span>
+    }
+
+    @Override
+    public Optional&lt;DocumentMetadata&gt; getDocumentMetadata(Long userId, Integer documentId)
+    {
+<span class="nc" id="L243">        log.debug(&quot;Fetching document metadata {} for user {}&quot;, documentId, userId);</span>
+
+        try {
+<span class="nc" id="L246">            documentSecurityService.validateDocumentOwnership(userId, documentId);</span>
+<span class="nc" id="L247">            Document document = getDocumentEntityById(documentId);</span>
+<span class="nc" id="L248">            return Optional.of(DocumentMetadata.from(document));</span>
+<span class="nc" id="L249">        } catch (DocumentNotFoundException | UnauthorizedAccessException e)</span>
+        {
+<span class="nc" id="L251">            log.warn(&quot;Cannot fetch document metadata: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L252">            return Optional.empty();</span>
+        }
+    }
+
+    @Override
+    public PaginatedDocumentResponseDTO getDocumentsPaginated(Long userId, int page, int size)
+    {
+<span class="nc" id="L259">        log.debug(&quot;Fetching documents for user {} (page: {}, size: {})&quot;, userId, page, size);</span>
+
+<span class="nc" id="L261">        documentServiceHelper.validateUserId(userId);</span>
+<span class="nc" id="L262">        documentServiceHelper.validatePaginationParameters(page, size, documentProperties.getDatabase().getBatchSize());</span>
+
+<span class="nc" id="L264">        Pageable pageable = PageRequest.of(page, size);</span>
+<span class="nc" id="L265">        Page&lt;Document&gt; documentPage = documentRepository.findDocumentsByUserIdWithPagination(userId, pageable);</span>
+
+<span class="nc" id="L267">        return documentResponseMapper.toPaginatedResponseDTO(documentPage);</span>
+    }
+
+    @Override
+    public DocumentResponseDTO replaceDocument(Long userId, MultipartFile file, DocumentType documentType,
+            String description)
+    {
+<span class="nc" id="L274">        log.info(&quot;Replacing document of type {} for user {}&quot;, documentType, userId);</span>
+
+<span class="nc" id="L276">        Optional&lt;Document&gt; existingDocument = documentRepository.findByUserIdAndDocumentType(userId, documentType);</span>
+
+<span class="nc bnc" id="L278" title="All 2 branches missed.">        if (existingDocument.isPresent())</span>
+        {
+<span class="nc" id="L280">            return updateDocument(userId, existingDocument.get().getDocumentId(), file, description);</span>
+        } else
+        {
+<span class="nc" id="L283">            return uploadDocument(userId, file, documentType, description);</span>
+        }
+    }
+
+    @Override
+    @Transactional
+    public byte[] downloadDocument(Long userId, Integer documentId)
+    {
+<span class="nc" id="L291">        log.info(&quot;Download request: user={}, documentId={}&quot;, userId, documentId);</span>
+
+<span class="nc" id="L293">        documentSecurityService.validateDocumentOwnership(userId, documentId);</span>
+
+<span class="nc" id="L295">        Document document = getDocumentEntityById(documentId);</span>
+
+<span class="nc bnc" id="L297" title="All 4 branches missed.">        if (document.getFileData() == null || document.getFileData().length == 0)</span>
+        {
+<span class="nc" id="L299">            throw new DocumentProcessingException(</span>
+<span class="nc" id="L300">                    String.format(&quot;Document %d has no file data&quot;, documentId));</span>
+        }
+
+<span class="nc" id="L303">        log.debug(&quot;Document downloaded: id={}, size={}KB&quot;,</span>
+<span class="nc" id="L304">                documentId, document.getFileData().length / 1024);</span>
+
+<span class="nc" id="L306">        return document.getFileData();</span>
+    }
+
+    private Document getDocumentEntityById(Integer documentId)
+    {
+<span class="nc" id="L311">        return documentRepository.findById(documentId)</span>
+<span class="nc" id="L312">                .orElseThrow(() -&gt; new DocumentNotFoundException(&quot;Document not found with ID: &quot; + documentId));</span>
+    }
+
+    private boolean isCurrentUserAdmin() {
+<span class="nc" id="L316">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L317" title="All 4 branches missed.">        if (auth == null || !auth.isAuthenticated()) {</span>
+<span class="nc" id="L318">            return false;</span>
+        }
+<span class="nc" id="L320">        return auth.getAuthorities().stream()</span>
+<span class="nc bnc" id="L321" title="All 4 branches missed.">                .anyMatch(a -&gt; a.getAuthority().equals(&quot;ROLE_ADMIN&quot;) || a.getAuthority().equals(&quot;ROLE_MANAGER&quot;));</span>
+    }
+
+    /**
+     * Admin-only: get all documents for any user by their userId.
+     * Validates caller is ADMIN before proceeding.
+     */
+    public List&lt;DocumentResponseDTO&gt; getAllDocumentsByUserIdForAdmin(Long targetUserId) {
+<span class="nc" id="L329">        log.info(&quot;Admin fetching all documents for user {}&quot;, targetUserId);</span>
+
+<span class="nc bnc" id="L331" title="All 2 branches missed.">        if (!isCurrentUserAdmin()) {</span>
+<span class="nc" id="L332">            throw new UnauthorizedAccessException(&quot;Only admins and managers can access documents of other users&quot;);</span>
+        }
+
+<span class="nc" id="L335">        documentServiceHelper.validateUserId(targetUserId);</span>
+
+<span class="nc" id="L337">        List&lt;Document&gt; documents = documentRepository.findByUserIdOrderByUploadedAtDesc(targetUserId);</span>
+<span class="nc" id="L338">        log.debug(&quot;Found {} documents for user {}&quot;, documents.size(), targetUserId);</span>
+<span class="nc" id="L339">        return documentResponseMapper.toResponseDTOList(documents);</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

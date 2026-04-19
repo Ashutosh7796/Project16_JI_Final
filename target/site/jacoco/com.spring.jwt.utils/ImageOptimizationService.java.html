@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ImageOptimizationService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">ImageOptimizationService.java</span></div><h1>ImageOptimizationService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import com.itextpdf.io.image.ImageData;
+import com.itextpdf.io.image.ImageDataFactory;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfName;
+import com.itextpdf.kernel.pdf.PdfObject;
+import com.itextpdf.kernel.pdf.PdfPage;
+import com.itextpdf.kernel.pdf.PdfReader;
+import com.itextpdf.kernel.pdf.PdfStream;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.kernel.pdf.WriterProperties;
+import com.itextpdf.kernel.pdf.xobject.PdfImageXObject;
+import com.itextpdf.kernel.pdf.PdfDictionary;
+import com.spring.jwt.config.DocumentProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.coobird.thumbnailator.Thumbnails;
+import org.springframework.stereotype.Service;
+
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+
+/**
+ * Service for optimized image and PDF processing.
+ * Utilizes DocumentProperties for centralized configuration.
+ * Adheres to industrial standards and OOP principles.
+ */
+@Service
+<span class="nc" id="L42">@Slf4j</span>
+<span class="nc" id="L43">@RequiredArgsConstructor</span>
+public class ImageOptimizationService {
+
+    private final DocumentProperties documentProperties;
+
+    static {
+<span class="nc" id="L49">        ImageIO.setUseCache(false);</span>
+<span class="nc" id="L50">    }</span>
+
+    /**
+     * Unified method to process documents (Images &amp; PDFs) to a target size
+     */
+    public byte[] processDocument(byte[] fileData, String contentType, String documentType) throws IOException {
+<span class="nc" id="L56">        long targetSizeBytes = documentProperties.getFileSize().getTargetFileSizeKb() * 1024;</span>
+
+<span class="nc" id="L58">        log.info(&quot;TIMING-START-DOC: Processing document type {}, size {}KB&quot;, documentType, fileData.length / 1024);</span>
+
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        if (fileData.length &lt;= targetSizeBytes) {</span>
+<span class="nc" id="L61">            log.info(&quot;TIMING-SKIP: File size {}KB is already within target {}KB&quot;, fileData.length / 1024,</span>
+<span class="nc" id="L62">                    targetSizeBytes / 1024);</span>
+<span class="nc" id="L63">            return fileData;</span>
+        }
+
+<span class="nc bnc" id="L66" title="All 4 branches missed.">        if (contentType != null &amp;&amp; contentType.startsWith(&quot;image/&quot;)) {</span>
+<span class="nc" id="L67">            return compressImageIteratively(fileData, documentType, targetSizeBytes);</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        } else if (&quot;application/pdf&quot;.equals(contentType)) {</span>
+<span class="nc" id="L69">            return compressPdf(fileData);</span>
+        }
+
+<span class="nc" id="L72">        return fileData;</span>
+    }
+
+    /**
+     * Optimized image compression V5: Source Subsampling + Efficient Resizing +
+     * TIMING LOGS
+     */
+    private byte[] compressImageIteratively(byte[] originalImageBytes, String documentType, long targetSizeBytes)
+            throws IOException {
+<span class="nc" id="L81">        long startTime = System.currentTimeMillis();</span>
+
+<span class="nc bnc" id="L83" title="All 4 branches missed.">        if (originalImageBytes == null || originalImageBytes.length == 0)</span>
+<span class="nc" id="L84">            return originalImageBytes;</span>
+
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        int maxWidth = &quot;PROFILE_PHOTO&quot;.equalsIgnoreCase(documentType)</span>
+<span class="nc" id="L87">                ? documentProperties.getImage().getProfilePhotoSize()</span>
+<span class="nc" id="L88">                : documentProperties.getImage().getMaxWidth();</span>
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        int maxHeight = &quot;PROFILE_PHOTO&quot;.equalsIgnoreCase(documentType)</span>
+<span class="nc" id="L90">                ? documentProperties.getImage().getProfilePhotoSize()</span>
+<span class="nc" id="L91">                : documentProperties.getImage().getMaxHeight();</span>
+
+<span class="nc" id="L93">        long decodeStart = System.currentTimeMillis();</span>
+<span class="nc" id="L94">        BufferedImage currentImage = decodeCompressed(originalImageBytes, maxWidth, maxHeight);</span>
+<span class="nc" id="L95">        long decodeTime = System.currentTimeMillis() - decodeStart;</span>
+
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        if (currentImage == null) {</span>
+<span class="nc" id="L98">            log.warn(&quot;Failed to decode image efficiently, falling back to original&quot;);</span>
+<span class="nc" id="L99">            return originalImageBytes;</span>
+        }
+
+<span class="nc" id="L102">        log.info(&quot;TIMING-DECODE: Decoded in {}ms. Resulting size: {}x{}&quot;, decodeTime, currentImage.getWidth(),</span>
+<span class="nc" id="L103">                currentImage.getHeight());</span>
+
+<span class="nc" id="L105">        int currentWidth = currentImage.getWidth();</span>
+
+<span class="nc" id="L107">        byte[] compressedBytes = originalImageBytes;</span>
+        // User requested &gt; 1.3MB. Starting at 0.95 (High Quality).
+<span class="nc" id="L109">        float quality = 0.95f;</span>
+
+<span class="nc" id="L111">        long compressStart = System.currentTimeMillis();</span>
+<span class="nc" id="L112">        byte[] fastAttempt = compressWithFixedQuality(currentImage, quality);</span>
+<span class="nc" id="L113">        long compressTime = System.currentTimeMillis() - compressStart;</span>
+<span class="nc" id="L114">        log.info(&quot;TIMING-COMPRESS-1: First pass (Q={}) took {}ms. Size: {}KB&quot;, quality, compressTime,</span>
+<span class="nc" id="L115">                fastAttempt.length / 1024);</span>
+
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (fastAttempt.length &lt;= targetSizeBytes) {</span>
+<span class="nc" id="L118">            log.info(&quot;TIMING-TOTAL: Fnished in {}ms&quot;, System.currentTimeMillis() - startTime);</span>
+<span class="nc" id="L119">            return fastAttempt;</span>
+        }
+
+        // Attempt 2: Drop to 0.85 (Medium) instead of drastic 0.70
+<span class="nc" id="L123">        quality = 0.85f;</span>
+<span class="nc" id="L124">        currentImage = Thumbnails.of(currentImage).scale(0.9).asBufferedImage();</span>
+
+<span class="nc" id="L126">        compressStart = System.currentTimeMillis();</span>
+<span class="nc" id="L127">        compressedBytes = compressWithFixedQuality(currentImage, quality);</span>
+<span class="nc" id="L128">        log.info(&quot;TIMING-COMPRESS-2: Second pass (Q={}, Scale=0.9) took {}ms. Size: {}KB&quot;, quality,</span>
+<span class="nc" id="L129">                System.currentTimeMillis() - compressStart, compressedBytes.length / 1024);</span>
+
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        if (compressedBytes.length &gt; targetSizeBytes) {</span>
+<span class="nc" id="L132">            quality = 0.60f;</span>
+<span class="nc" id="L133">            currentImage = Thumbnails.of(currentImage).scale(0.9).asBufferedImage();</span>
+<span class="nc" id="L134">            compressStart = System.currentTimeMillis();</span>
+<span class="nc" id="L135">            byte[] lastAttempt = compressWithFixedQuality(currentImage, quality);</span>
+<span class="nc" id="L136">            log.info(&quot;TIMING-COMPRESS-3: Third pass (Q={}, Scale=0.9) took {}ms. Size: {}KB&quot;, quality,</span>
+<span class="nc" id="L137">                    System.currentTimeMillis() - compressStart, lastAttempt.length / 1024);</span>
+
+<span class="nc bnc" id="L139" title="All 2 branches missed.">            if (lastAttempt.length &lt; compressedBytes.length) {</span>
+<span class="nc" id="L140">                compressedBytes = lastAttempt;</span>
+            }
+        }
+
+<span class="nc" id="L144">        log.info(&quot;TIMING-TOTAL: Loop finished in {}ms&quot;, System.currentTimeMillis() - startTime);</span>
+<span class="nc" id="L145">        return compressedBytes;</span>
+    }
+
+    private BufferedImage decodeCompressed(byte[] imageBytes, int maxWidth, int maxHeight) throws IOException {
+<span class="nc" id="L149">        long start = System.currentTimeMillis();</span>
+<span class="nc" id="L150">        try (ByteArrayInputStream bis = new ByteArrayInputStream(imageBytes);</span>
+<span class="nc" id="L151">                javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(bis)) {</span>
+
+<span class="nc" id="L153">            Iterator&lt;ImageReader&gt; readers = ImageIO.getImageReaders(iis);</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (!readers.hasNext())</span>
+<span class="nc" id="L155">                return null;</span>
+
+<span class="nc" id="L157">            ImageReader reader = readers.next();</span>
+<span class="nc" id="L158">            reader.setInput(iis);</span>
+
+<span class="nc" id="L160">            int originalWidth = reader.getWidth(0);</span>
+<span class="nc" id="L161">            int originalHeight = reader.getHeight(0);</span>
+
+<span class="nc" id="L163">            int sampleWidth = originalWidth / maxWidth;</span>
+<span class="nc" id="L164">            int sampleHeight = originalHeight / maxHeight;</span>
+<span class="nc" id="L165">            int subsampling = Math.max(1, Math.max(sampleWidth, sampleHeight));</span>
+
+<span class="nc" id="L167">            ImageReadParam param = reader.getDefaultReadParam();</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">            if (subsampling &gt; 1) {</span>
+<span class="nc" id="L169">                log.info(&quot;TIMING-SUBSAMPLE: Using subsampling {} for {}x{}&quot;, subsampling, originalWidth,</span>
+<span class="nc" id="L170">                        originalHeight);</span>
+<span class="nc" id="L171">                param.setSourceSubsampling(subsampling, subsampling, 0, 0);</span>
+            }
+
+<span class="nc" id="L174">            BufferedImage result = reader.read(0, param);</span>
+<span class="nc" id="L175">            log.info(&quot;TIMING-READ: decodeCompressed took {}ms&quot;, System.currentTimeMillis() - start);</span>
+<span class="nc" id="L176">            return result;</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        } catch (Exception e) {</span>
+<span class="nc" id="L178">            log.warn(&quot;Subsampling decode failed after {}ms, trying standard read&quot;, System.currentTimeMillis() - start,</span>
+                    e);
+<span class="nc" id="L180">            return ImageIO.read(new ByteArrayInputStream(imageBytes));</span>
+        }
+    }
+
+    /**
+     * Simple one-shot compression (Legacy support / fallback)
+     */
+    public byte[] compressImage(byte[] originalImageBytes, String documentType) throws IOException {
+<span class="nc" id="L188">        long targetSizeBytes = documentProperties.getFileSize().getTargetFileSizeKb() * 1024;</span>
+<span class="nc" id="L189">        return compressImageIteratively(originalImageBytes, documentType, targetSizeBytes);</span>
+    }
+
+    private byte[] compressWithFixedQuality(BufferedImage image, float quality) throws IOException {
+<span class="nc" id="L193">        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {</span>
+<span class="nc" id="L194">            Iterator&lt;ImageWriter&gt; writers = ImageIO.getImageWritersByFormatName(&quot;jpg&quot;);</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">            if (!writers.hasNext())</span>
+<span class="nc" id="L196">                throw new IllegalStateException(&quot;No JPEG writer found&quot;);</span>
+
+<span class="nc" id="L198">            ImageWriter writer = writers.next();</span>
+<span class="nc" id="L199">            try (ImageOutputStream ios = ImageIO.createImageOutputStream(outputStream)) {</span>
+<span class="nc" id="L200">                writer.setOutput(ios);</span>
+<span class="nc" id="L201">                ImageWriteParam param = writer.getDefaultWriteParam();</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">                if (param.canWriteCompressed()) {</span>
+<span class="nc" id="L203">                    param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);</span>
+<span class="nc" id="L204">                    param.setCompressionQuality(quality);</span>
+                }
+<span class="nc" id="L206">                writer.write(null, new IIOImage(image, null, null), param);</span>
+            } finally {
+<span class="nc" id="L208">                writer.dispose();</span>
+            }
+<span class="nc" id="L210">            return outputStream.toByteArray();</span>
+        }
+    }
+
+    /**
+     * Optimized PDF compression: Deep compression of internal images
+     */
+    public byte[] compressPdf(byte[] originalPdfBytes) throws IOException {
+        // NOTE: Input size validation should happen before this method if strict limits
+        // are needed.
+<span class="nc" id="L220">        long thresholdBytes = 100 * 1024;</span>
+<span class="nc bnc" id="L221" title="All 2 branches missed.">        if (originalPdfBytes.length &lt; thresholdBytes) {</span>
+<span class="nc" id="L222">            return originalPdfBytes; // Already small</span>
+        }
+
+<span class="nc" id="L225">        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(originalPdfBytes);</span>
+<span class="nc" id="L226">                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {</span>
+
+<span class="nc" id="L228">            PdfReader reader = new PdfReader(inputStream);</span>
+<span class="nc" id="L229">            WriterProperties writerProps = new WriterProperties()</span>
+<span class="nc" id="L230">                    .setCompressionLevel(9)</span>
+<span class="nc" id="L231">                    .setFullCompressionMode(true);</span>
+
+<span class="nc" id="L233">            PdfWriter writer = new PdfWriter(outputStream, writerProps);</span>
+<span class="nc" id="L234">            PdfDocument pdfDoc = new PdfDocument(reader, writer);</span>
+
+<span class="nc" id="L236">            long targetImageSize = 300 * 1024;</span>
+<span class="nc" id="L237">            optimizePdfImages(pdfDoc, targetImageSize);</span>
+
+<span class="nc" id="L239">            pdfDoc.close();</span>
+
+<span class="nc" id="L241">            byte[] compressedBytes = outputStream.toByteArray();</span>
+<span class="nc" id="L242">            log.info(&quot;PDF compressed from {}KB to {}KB&quot;, originalPdfBytes.length / 1024, compressedBytes.length / 1024);</span>
+
+<span class="nc bnc" id="L244" title="All 2 branches missed.">            if (compressedBytes.length &gt; originalPdfBytes.length) {</span>
+<span class="nc" id="L245">                return originalPdfBytes;</span>
+            }
+<span class="nc" id="L247">            return compressedBytes;</span>
+<span class="nc" id="L248">        } catch (Exception e) {</span>
+<span class="nc" id="L249">            log.error(&quot;Error during PDF compression&quot;, e);</span>
+<span class="nc" id="L250">            throw new IOException(&quot;PDF Compression failed&quot;, e);</span>
+        }
+    }
+
+    private void optimizePdfImages(PdfDocument pdfDoc, long targetImageSize) {
+<span class="nc" id="L255">        int numberOfPages = pdfDoc.getNumberOfPages();</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">        for (int i = 1; i &lt;= numberOfPages; i++) {</span>
+<span class="nc" id="L257">            PdfPage page = pdfDoc.getPage(i);</span>
+<span class="nc" id="L258">            PdfDictionary resources = page.getResources().getResource(PdfName.XObject);</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">            if (resources != null) {</span>
+<span class="nc" id="L260">                optimizePdfDictionary(resources, targetImageSize);</span>
+            }
+        }
+<span class="nc" id="L263">    }</span>
+
+    private void optimizePdfDictionary(PdfDictionary resources, long targetImageSize) {
+<span class="nc" id="L266">        Set&lt;PdfName&gt; keys = new HashSet&lt;&gt;(resources.keySet());</span>
+<span class="nc bnc" id="L267" title="All 2 branches missed.">        for (PdfName key : keys) {</span>
+<span class="nc" id="L268">            PdfObject obj = resources.get(key);</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">            if (obj.isIndirectReference()) {</span>
+<span class="nc" id="L270">                obj = ((com.itextpdf.kernel.pdf.PdfIndirectReference) obj).getRefersTo();</span>
+            }
+
+<span class="nc bnc" id="L273" title="All 4 branches missed.">            if (obj != null &amp;&amp; obj.isStream()) {</span>
+<span class="nc" id="L274">                PdfStream stream = (PdfStream) obj;</span>
+<span class="nc" id="L275">                PdfName subtype = stream.getAsName(PdfName.Subtype);</span>
+
+<span class="nc bnc" id="L277" title="All 2 branches missed.">                if (PdfName.Image.equals(subtype)) {</span>
+<span class="nc" id="L278">                    optimizeSinglePdfImage(stream, resources, key, targetImageSize);</span>
+<span class="nc bnc" id="L279" title="All 2 branches missed.">                } else if (PdfName.Form.equals(subtype)) {</span>
+<span class="nc" id="L280">                    PdfDictionary formResources = stream.getAsDictionary(PdfName.Resources);</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">                    if (formResources != null) {</span>
+<span class="nc" id="L282">                        PdfDictionary formXObjects = formResources.getAsDictionary(PdfName.XObject);</span>
+<span class="nc bnc" id="L283" title="All 2 branches missed.">                        if (formXObjects != null) {</span>
+<span class="nc" id="L284">                            optimizePdfDictionary(formXObjects, targetImageSize);</span>
+                        }
+                    }
+                }
+            }
+<span class="nc" id="L289">        }</span>
+<span class="nc" id="L290">    }</span>
+
+    private void optimizeSinglePdfImage(PdfStream stream, PdfDictionary resources, PdfName key, long targetSize) {
+        try {
+<span class="nc" id="L294">            PdfImageXObject imageXObject = new PdfImageXObject(stream);</span>
+<span class="nc" id="L295">            byte[] imageBytes = imageXObject.getImageBytes();</span>
+
+<span class="nc bnc" id="L297" title="All 4 branches missed.">            if (imageBytes == null || imageBytes.length &lt; targetSize)</span>
+<span class="nc" id="L298">                return;</span>
+
+<span class="nc" id="L300">            BufferedImage bi = imageXObject.getBufferedImage();</span>
+<span class="nc bnc" id="L301" title="All 2 branches missed.">            if (bi == null)</span>
+<span class="nc" id="L302">                return;</span>
+
+<span class="nc bnc" id="L304" title="All 4 branches missed.">            if (bi.getWidth() &gt; 1800 || bi.getHeight() &gt; 1800) {</span>
+<span class="nc" id="L305">                bi = Thumbnails.of(bi).size(1800, 1800).asBufferedImage();</span>
+            }
+
+<span class="nc" id="L308">            byte[] compressedBytes = compressWithFixedQuality(bi, 0.75f);</span>
+
+<span class="nc bnc" id="L310" title="All 2 branches missed.">            if (compressedBytes.length &lt; imageBytes.length) {</span>
+<span class="nc" id="L311">                ImageData newData = ImageDataFactory.create(compressedBytes);</span>
+<span class="nc" id="L312">                PdfImageXObject newXObject = new PdfImageXObject(newData);</span>
+<span class="nc" id="L313">                resources.put(key, newXObject.getPdfObject());</span>
+<span class="nc" id="L314">                log.debug(&quot;Optimized PDF embedding: {}KB -&gt; {}KB&quot;, imageBytes.length / 1024,</span>
+<span class="nc" id="L315">                        compressedBytes.length / 1024);</span>
+            }
+<span class="nc" id="L317">        } catch (Exception e) {</span>
+<span class="nc" id="L318">            log.warn(&quot;Failed to optimize PDF image: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L319">        }</span>
+<span class="nc" id="L320">    }</span>
+
+    /**
+     * Check if processing is needed
+     */
+    public boolean needsProcessing(long fileSizeBytes, String contentType) {
+<span class="nc" id="L326">        long targetSizeBytes = documentProperties.getFileSize().getTargetFileSizeKb() * 1024;</span>
+<span class="nc bnc" id="L327" title="All 2 branches missed.">        return fileSizeBytes &gt; targetSizeBytes;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

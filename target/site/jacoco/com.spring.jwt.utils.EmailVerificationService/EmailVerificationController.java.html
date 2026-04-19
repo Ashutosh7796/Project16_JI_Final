@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmailVerificationController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils.EmailVerificationService</a> &gt; <span class="el_source">EmailVerificationController.java</span></div><h1>EmailVerificationController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils.EmailVerificationService;
+
+import com.spring.jwt.utils.EmailVerificationService.EmailUtils.EmailVerificationRequest;
+import com.spring.jwt.utils.EmailVerificationService.EmailUtils.ResponseMessage;
+import com.spring.jwt.utils.EmailVerificationService.EmailUtils.VerifyOtpDTO;
+import com.spring.jwt.utils.EmailVerificationService.EmailUtils.VerifyOtpRequest;
+import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping(&quot;/emailVerification&quot;)
+<span class="nc" id="L14">@RequiredArgsConstructor</span>
+public class EmailVerificationController {
+
+    private final EmailVerificationService emailVerificationService;
+
+    @PostMapping(&quot;/send-otp&quot;)
+    public ResponseEntity&lt;ResponseMessage&gt; sendOtp(@RequestBody EmailVerificationRequest request) {
+<span class="nc" id="L21">        emailVerificationService.sendEmail(request.getEmail());</span>
+<span class="nc" id="L22">        return ResponseEntity.ok(new ResponseMessage(&quot;OTP sent successfully.&quot;));</span>
+    }
+
+    @PostMapping(&quot;/verify-otp&quot;)
+    public ResponseEntity&lt;ResponseMessage&gt; verifyOtp(@RequestBody @Valid VerifyOtpRequest request) {
+
+<span class="nc" id="L28">        VerifyOtpDTO verifyOtpDTO = new VerifyOtpDTO(request.getOtp(), request.getEmail());</span>
+
+<span class="nc" id="L30">        String result = emailVerificationService.verifyOtp(verifyOtpDTO);</span>
+
+<span class="nc" id="L32">        return ResponseEntity.ok(new ResponseMessage(result));</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PaymentException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Payment</a> &gt; <span class="el_source">PaymentException.java</span></div><h1>PaymentException.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Payment;
+
+import com.spring.jwt.exception.BaseException;
+
+public class PaymentException extends BaseException {
+
+    public PaymentException(String code, String message) {
+<span class="nc" id="L8">        super(code, message);</span>
+<span class="nc" id="L9">    }</span>
+
+    public static PaymentException duplicatePayment(String orderId) {
+<span class="nc" id="L12">        return new PaymentException(&quot;PAYMENT_DUPLICATE&quot;, &quot;Payment already completed for order: &quot; + orderId);</span>
+    }
+
+    public static PaymentException fraudDetected(String reason) {
+<span class="nc" id="L16">        return new PaymentException(&quot;PAYMENT_FRAUD&quot;, &quot;Payment blocked: &quot; + reason);</span>
+    }
+
+    public static PaymentException invalidCallback(String reason) {
+<span class="nc" id="L20">        return new PaymentException(&quot;PAYMENT_CALLBACK_INVALID&quot;, &quot;Invalid payment callback: &quot; + reason);</span>
+    }
+
+    public static PaymentException rateLimitExceeded() {
+<span class="nc" id="L24">        return new PaymentException(&quot;PAYMENT_RATE_LIMIT&quot;, &quot;Too many payment attempts. Please try again later.&quot;);</span>
+    }
+
+    public static PaymentException amountMismatch() {
+<span class="nc" id="L28">        return new PaymentException(&quot;PAYMENT_AMOUNT_MISMATCH&quot;, &quot;Payment amount does not match expected amount&quot;);</span>
+    }
+
+    public static PaymentException paymentNotFound(String identifier) {
+<span class="nc" id="L32">        return new PaymentException(&quot;PAYMENT_NOT_FOUND&quot;, &quot;Payment not found: &quot; + identifier);</span>
+    }
+
+    public static PaymentException idempotencySurveyMismatch() {
+<span class="nc" id="L36">        return new PaymentException(&quot;PAYMENT_IDEMPOTENCY_CONFLICT&quot;,</span>
+                &quot;Idempotency key is already associated with a different survey&quot;);
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

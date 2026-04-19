@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PaymentCallbackProcessingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Payment</a> &gt; <span class="el_source">PaymentCallbackProcessingService.java</span></div><h1>PaymentCallbackProcessingService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Payment;
+
+import com.spring.jwt.FarmerPayment.FarmerPaymentResponseDTO;
+import com.spring.jwt.FarmerPayment.FarmerPaymentService;
+import com.spring.jwt.ProductBuyPending.PaymentVerifyDto;
+import com.spring.jwt.ProductBuyPending.ProductBuyService;
+import com.spring.jwt.checkout.CheckoutMerchantOrderIds;
+import com.spring.jwt.checkout.CheckoutService;
+import com.spring.jwt.entity.PaymentCallbackQueue;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.StringTokenizer;
+
+/**
+ * Runs callback handling in its own Spring-managed bean so {@link Propagation#REQUIRES_NEW}
+ * applies reliably (no self-invocation from {@code @Component} listeners).
+ */
+@Service
+<span class="nc" id="L26">@RequiredArgsConstructor</span>
+<span class="nc" id="L27">@Slf4j</span>
+public class PaymentCallbackProcessingService {
+
+    private static final int MAX_RETRY_ATTEMPTS = 5;
+
+    private final PaymentCallbackQueueRepository queueRepository;
+    private final CcAvenueConfig ccAvenueConfig;
+    private final ProductBuyService productBuyService;
+    private final FarmerPaymentService farmerPaymentService;
+    private final CheckoutService checkoutService;
+    private final PaymentAuditService auditService;
+
+    /**
+     * Rows stuck in PROCESSING (e.g. JVM died after claim) are moved back to RETRY for the scheduled poller.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int releaseStaleProcessingRows(int olderThanMinutes) {
+<span class="nc" id="L44">        LocalDateTime staleBefore = LocalDateTime.now().minusMinutes(olderThanMinutes);</span>
+<span class="nc" id="L45">        int n = queueRepository.releaseStaleProcessing(staleBefore, LocalDateTime.now());</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">        if (n &gt; 0) {</span>
+<span class="nc" id="L47">            log.warn(&quot;Released {} payment callback queue row(s) stuck in PROCESSING (no heartbeat for {} min)&quot;,</span>
+<span class="nc" id="L48">                    n, olderThanMinutes);</span>
+        }
+<span class="nc" id="L50">        return n;</span>
+    }
+
+    /**
+     * One queue row per transaction: atomic claim, then business logic, then terminal status.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void processByQueueId(Long queueId) {
+<span class="nc" id="L58">        int claimed = queueRepository.claimForProcessing(queueId, LocalDateTime.now());</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (claimed == 0) {</span>
+<span class="nc" id="L60">            log.debug(&quot;Skip queueId={} (not claimable as PENDING/RETRY)&quot;, queueId);</span>
+<span class="nc" id="L61">            return;</span>
+        }
+
+<span class="nc" id="L64">        PaymentCallbackQueue item = queueRepository.findById(queueId).orElse(null);</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        if (item == null) {</span>
+<span class="nc" id="L66">            return;</span>
+        }
+
+        try {
+<span class="nc" id="L70">            handleCallbackItem(item);</span>
+<span class="nc" id="L71">            item.setStatus(&quot;DONE&quot;);</span>
+<span class="nc" id="L72">            item.setLastError(null);</span>
+<span class="nc" id="L73">            queueRepository.save(item);</span>
+<span class="nc" id="L74">        } catch (Exception ex) {</span>
+<span class="nc" id="L75">            int attempts = item.getAttemptCount() + 1;</span>
+<span class="nc" id="L76">            item.setAttemptCount(attempts);</span>
+<span class="nc" id="L77">            item.setLastError(truncate(ex.getMessage(), 2000));</span>
+
+<span class="nc bnc" id="L79" title="All 2 branches missed.">            if (attempts &gt;= MAX_RETRY_ATTEMPTS) {</span>
+<span class="nc" id="L80">                item.setStatus(&quot;DEAD&quot;);</span>
+<span class="nc" id="L81">                auditService.logEvent(</span>
+<span class="nc" id="L82">                        item.getPaymentType(),</span>
+                        null,
+                        null,
+                        &quot;CALLBACK_DEAD_LETTER&quot;,
+                        &quot;RETRY&quot;,
+                        &quot;DEAD&quot;,
+                        null,
+<span class="nc" id="L89">                        item.getClientIp(),</span>
+<span class="nc" id="L90">                        &quot;queueId=&quot; + item.getId() + &quot;, error=&quot; + truncate(ex.getMessage(), 500)</span>
+                );
+            } else {
+<span class="nc" id="L93">                item.setStatus(&quot;RETRY&quot;);</span>
+<span class="nc" id="L94">                item.setNextAttemptAt(LocalDateTime.now().plusMinutes(Math.min(15, attempts)));</span>
+            }
+<span class="nc" id="L96">            queueRepository.save(item);</span>
+<span class="nc" id="L97">            log.error(&quot;Payment callback processing failed: queueId={}, attempts={}, status={}, error={}&quot;,</span>
+<span class="nc" id="L98">                    item.getId(), item.getAttemptCount(), item.getStatus(), ex.getMessage());</span>
+<span class="nc" id="L99">        }</span>
+<span class="nc" id="L100">    }</span>
+
+    private void handleCallbackItem(PaymentCallbackQueue item) {
+<span class="nc" id="L103">        String callbackType = item.getCallbackType();</span>
+<span class="nc bnc" id="L104" title="All 7 branches missed.">        switch (callbackType) {</span>
+<span class="nc" id="L105">            case &quot;PRODUCT_RESPONSE&quot; -&gt; processProductResponse(item);</span>
+<span class="nc" id="L106">            case &quot;PRODUCT_CANCEL&quot; -&gt; processProductCancel(item);</span>
+<span class="nc" id="L107">            case &quot;FARMER_RESPONSE&quot; -&gt; processFarmerResponse(item);</span>
+<span class="nc" id="L108">            case &quot;FARMER_CANCEL&quot; -&gt; processFarmerCancel(item);</span>
+<span class="nc" id="L109">            case &quot;CHECKOUT_RESPONSE&quot; -&gt; processCheckoutResponse(item);</span>
+<span class="nc" id="L110">            case &quot;CHECKOUT_CANCEL&quot; -&gt; processCheckoutCancel(item);</span>
+<span class="nc" id="L111">            default -&gt; throw new IllegalArgumentException(&quot;Unknown callback type: &quot; + callbackType);</span>
+        }
+<span class="nc" id="L113">    }</span>
+
+    private void processProductResponse(PaymentCallbackQueue item) {
+<span class="nc" id="L116">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L118">            throw new IllegalArgumentException(&quot;Invalid encrypted callback payload&quot;);</span>
+        }
+
+<span class="nc" id="L121">        String orderId = params.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L122">        String orderStatus = params.get(&quot;order_status&quot;);</span>
+<span class="nc" id="L123">        String trackingId = params.get(&quot;tracking_id&quot;);</span>
+<span class="nc" id="L124">        String paymentMode = params.get(&quot;payment_mode&quot;);</span>
+<span class="nc" id="L125">        item.setOrderId(orderId);</span>
+
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        if (&quot;Success&quot;.equalsIgnoreCase(orderStatus)) {</span>
+<span class="nc" id="L128">            Long pendingOrderId = extractPendingId(orderId);</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">            if (pendingOrderId == null) {</span>
+<span class="nc" id="L130">                throw new IllegalArgumentException(&quot;Invalid product order id: &quot; + orderId);</span>
+            }
+<span class="nc" id="L132">            PaymentVerifyDto verifyDto = new PaymentVerifyDto();</span>
+<span class="nc" id="L133">            verifyDto.setPendingOrderId(pendingOrderId);</span>
+<span class="nc" id="L134">            verifyDto.setPaymentId(trackingId);</span>
+<span class="nc" id="L135">            verifyDto.setPaymentMode(mapCcAvenuePaymentMode(paymentMode));</span>
+<span class="nc" id="L136">            verifyDto.setOrderId(orderId);</span>
+<span class="nc" id="L137">            verifyDto.setAmount(params.get(&quot;amount&quot;));</span>
+<span class="nc" id="L138">            productBuyService.confirmPayment(verifyDto);</span>
+
+<span class="nc" id="L140">            auditService.logEvent(&quot;PRODUCT&quot;, pendingOrderId, orderId,</span>
+<span class="nc" id="L141">                    &quot;VERIFIED_SUCCESS&quot;, &quot;PENDING&quot;, &quot;SUCCESS&quot;, null, item.getClientIp(), null);</span>
+<span class="nc" id="L142">            item.setResultStatus(&quot;SUCCESS&quot;);</span>
+<span class="nc" id="L143">        } else {</span>
+<span class="nc" id="L144">            Long pendingOrderId = extractPendingId(orderId);</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">            if (pendingOrderId != null) {</span>
+<span class="nc" id="L146">                productBuyService.markPaymentFailed(pendingOrderId);</span>
+<span class="nc" id="L147">                auditService.logEvent(&quot;PRODUCT&quot;, pendingOrderId, orderId,</span>
+<span class="nc" id="L148">                        &quot;VERIFIED_FAILED&quot;, &quot;PENDING&quot;, &quot;FAILED&quot;, null, item.getClientIp(),</span>
+<span class="nc" id="L149">                        &quot;status_message=&quot; + params.get(&quot;status_message&quot;));</span>
+            }
+<span class="nc" id="L151">            item.setResultStatus(&quot;FAILED&quot;);</span>
+        }
+<span class="nc" id="L153">    }</span>
+
+    private void processProductCancel(PaymentCallbackQueue item) {
+<span class="nc bnc" id="L156" title="All 4 branches missed.">        if (item.getEncResp() == null || item.getEncResp().isBlank()) {</span>
+<span class="nc" id="L157">            auditService.logEvent(&quot;PRODUCT&quot;, null, null,</span>
+<span class="nc" id="L158">                    &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), &quot;No encResp&quot;);</span>
+<span class="nc" id="L159">            return;</span>
+        }
+<span class="nc" id="L161">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L163">            throw new IllegalArgumentException(&quot;Invalid encrypted cancel payload&quot;);</span>
+        }
+<span class="nc" id="L165">        String orderId = params.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L166">        item.setOrderId(orderId);</span>
+<span class="nc" id="L167">        Long pendingOrderId = extractPendingId(orderId);</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (pendingOrderId != null) {</span>
+<span class="nc" id="L169">            productBuyService.markPaymentFailed(pendingOrderId);</span>
+        }
+<span class="nc" id="L171">        auditService.logEvent(&quot;PRODUCT&quot;, pendingOrderId, orderId,</span>
+<span class="nc" id="L172">                &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), null);</span>
+<span class="nc" id="L173">        item.setResultStatus(&quot;CANCELLED&quot;);</span>
+<span class="nc" id="L174">    }</span>
+
+    private void processFarmerResponse(PaymentCallbackQueue item) {
+<span class="nc" id="L177">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L178" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L179">            throw new IllegalArgumentException(&quot;Invalid encrypted callback payload&quot;);</span>
+        }
+<span class="nc" id="L181">        item.setOrderId(params.get(&quot;order_id&quot;));</span>
+<span class="nc" id="L182">        FarmerPaymentResponseDTO result = farmerPaymentService.handleCallback(params, item.getClientIp());</span>
+<span class="nc" id="L183">        item.setResultStatus(result.getPaymentStatus());</span>
+<span class="nc" id="L184">        auditService.logEvent(&quot;FARMER&quot;, null, params.get(&quot;order_id&quot;),</span>
+<span class="nc" id="L185">                &quot;CALLBACK_PROCESSED&quot;, &quot;PENDING&quot;, result.getPaymentStatus(), null, item.getClientIp(),</span>
+<span class="nc" id="L186">                &quot;paymentId=&quot; + result.getPaymentId());</span>
+<span class="nc" id="L187">    }</span>
+
+    private void processCheckoutResponse(PaymentCallbackQueue item) {
+<span class="nc" id="L190">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L192">            throw new IllegalArgumentException(&quot;Invalid encrypted checkout callback payload&quot;);</span>
+        }
+<span class="nc" id="L194">        String orderId = params.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L195">        item.setOrderId(orderId);</span>
+<span class="nc" id="L196">        checkoutService.handleCcAvenueDecryptedCallback(params, item.getEncResp(), item.getClientIp());</span>
+<span class="nc" id="L197">        Long checkoutOrderId = CheckoutMerchantOrderIds.parseOrderId(orderId);</span>
+<span class="nc" id="L198">        auditService.logEvent(&quot;CHECKOUT&quot;, checkoutOrderId, orderId,</span>
+<span class="nc" id="L199">                &quot;CALLBACK_PROCESSED&quot;, null, params.get(&quot;order_status&quot;), null, item.getClientIp(),</span>
+<span class="nc" id="L200">                &quot;tracking_id=&quot; + params.get(&quot;tracking_id&quot;));</span>
+<span class="nc" id="L201">        item.setResultStatus(normalizeCheckoutQueueResult(params.get(&quot;order_status&quot;)));</span>
+<span class="nc" id="L202">    }</span>
+
+    private void processCheckoutCancel(PaymentCallbackQueue item) {
+<span class="nc bnc" id="L205" title="All 4 branches missed.">        if (item.getEncResp() == null || item.getEncResp().isBlank()) {</span>
+<span class="nc" id="L206">            auditService.logEvent(&quot;CHECKOUT&quot;, null, null,</span>
+<span class="nc" id="L207">                    &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), &quot;No encResp&quot;);</span>
+<span class="nc" id="L208">            item.setResultStatus(&quot;CANCELLED&quot;);</span>
+<span class="nc" id="L209">            return;</span>
+        }
+<span class="nc" id="L211">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L213">            throw new IllegalArgumentException(&quot;Invalid encrypted checkout cancel payload&quot;);</span>
+        }
+<span class="nc" id="L215">        params.putIfAbsent(&quot;order_status&quot;, &quot;Aborted&quot;);</span>
+<span class="nc" id="L216">        String orderId = params.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L217">        item.setOrderId(orderId);</span>
+<span class="nc" id="L218">        checkoutService.handleCcAvenueDecryptedCallback(params, item.getEncResp(), item.getClientIp());</span>
+<span class="nc" id="L219">        Long checkoutOrderId = CheckoutMerchantOrderIds.parseOrderId(orderId);</span>
+<span class="nc" id="L220">        auditService.logEvent(&quot;CHECKOUT&quot;, checkoutOrderId, orderId,</span>
+<span class="nc" id="L221">                &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), null);</span>
+<span class="nc" id="L222">        item.setResultStatus(&quot;CANCELLED&quot;);</span>
+<span class="nc" id="L223">    }</span>
+
+    private static String normalizeCheckoutQueueResult(String orderStatus) {
+<span class="nc bnc" id="L226" title="All 2 branches missed.">        if (orderStatus == null) {</span>
+<span class="nc" id="L227">            return &quot;UNKNOWN&quot;;</span>
+        }
+<span class="nc bnc" id="L229" title="All 2 branches missed.">        if (&quot;Success&quot;.equalsIgnoreCase(orderStatus)) {</span>
+<span class="nc" id="L230">            return &quot;SUCCESS&quot;;</span>
+        }
+<span class="nc bnc" id="L232" title="All 4 branches missed.">        if (orderStatus.toLowerCase().contains(&quot;pending&quot;) || orderStatus.toLowerCase().contains(&quot;initiated&quot;)) {</span>
+<span class="nc" id="L233">            return &quot;PENDING&quot;;</span>
+        }
+<span class="nc" id="L235">        return &quot;FAILED&quot;;</span>
+    }
+
+    private void processFarmerCancel(PaymentCallbackQueue item) {
+<span class="nc bnc" id="L239" title="All 4 branches missed.">        if (item.getEncResp() == null || item.getEncResp().isBlank()) {</span>
+<span class="nc" id="L240">            auditService.logEvent(&quot;FARMER&quot;, null, null,</span>
+<span class="nc" id="L241">                    &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), &quot;No encResp&quot;);</span>
+<span class="nc" id="L242">            return;</span>
+        }
+<span class="nc" id="L244">        Map&lt;String, String&gt; params = decryptAndParse(item.getEncResp());</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">        if (params == null) {</span>
+<span class="nc" id="L246">            throw new IllegalArgumentException(&quot;Invalid encrypted cancel payload&quot;);</span>
+        }
+<span class="nc" id="L248">        params.put(&quot;order_status&quot;, &quot;Failure&quot;);</span>
+<span class="nc" id="L249">        item.setOrderId(params.get(&quot;order_id&quot;));</span>
+<span class="nc" id="L250">        farmerPaymentService.handleCallback(params, item.getClientIp());</span>
+<span class="nc" id="L251">        auditService.logEvent(&quot;FARMER&quot;, null, params.get(&quot;order_id&quot;),</span>
+<span class="nc" id="L252">                &quot;CANCELLED&quot;, null, &quot;FAILED&quot;, null, item.getClientIp(), null);</span>
+<span class="nc" id="L253">        item.setResultStatus(&quot;CANCELLED&quot;);</span>
+<span class="nc" id="L254">    }</span>
+
+    private Map&lt;String, String&gt; decryptAndParse(String encResp) {
+        try {
+<span class="nc" id="L258">            String decrypted = CcAvenueUtil.decrypt(encResp, ccAvenueConfig.getWorkingKey());</span>
+<span class="nc" id="L259">            return parseResponseString(decrypted);</span>
+<span class="nc" id="L260">        } catch (Exception ex) {</span>
+<span class="nc" id="L261">            log.error(&quot;Failed to decrypt callback payload: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L262">            return null;</span>
+        }
+    }
+
+    private Map&lt;String, String&gt; parseResponseString(String response) {
+<span class="nc" id="L267">        Map&lt;String, String&gt; map = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L268">        StringTokenizer tokenizer = new StringTokenizer(response, &quot;&amp;&quot;);</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">        while (tokenizer.hasMoreTokens()) {</span>
+<span class="nc" id="L270">            String pair = tokenizer.nextToken();</span>
+<span class="nc" id="L271">            int idx = pair.indexOf('=');</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">            if (idx &gt; 0) {</span>
+<span class="nc" id="L273">                String key = pair.substring(0, idx).trim();</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">                String value = idx &lt; pair.length() - 1 ? pair.substring(idx + 1).trim() : &quot;&quot;;</span>
+<span class="nc" id="L275">                map.put(key, value);</span>
+            }
+<span class="nc" id="L277">        }</span>
+<span class="nc" id="L278">        return map;</span>
+    }
+
+    private Long extractPendingId(String orderId) {
+<span class="nc bnc" id="L282" title="All 2 branches missed.">        if (orderId == null) return null;</span>
+        try {
+<span class="nc bnc" id="L284" title="All 2 branches missed.">            if (orderId.startsWith(&quot;PROD-&quot;)) {</span>
+<span class="nc" id="L285">                return Long.parseLong(orderId.substring(5));</span>
+            }
+<span class="nc" id="L287">            return Long.parseLong(orderId);</span>
+<span class="nc" id="L288">        } catch (NumberFormatException e) {</span>
+<span class="nc" id="L289">            return null;</span>
+        }
+    }
+
+    private String mapCcAvenuePaymentMode(String ccavenueMode) {
+<span class="nc bnc" id="L294" title="All 2 branches missed.">        if (ccavenueMode == null) return &quot;CCAVENUE&quot;;</span>
+<span class="nc bnc" id="L295" title="All 6 branches missed.">        return switch (ccavenueMode.toUpperCase()) {</span>
+<span class="nc" id="L296">            case &quot;CREDIT CARD&quot;, &quot;CC&quot; -&gt; &quot;CARD&quot;;</span>
+<span class="nc" id="L297">            case &quot;DEBIT CARD&quot;, &quot;DC&quot; -&gt; &quot;CARD&quot;;</span>
+<span class="nc" id="L298">            case &quot;NET BANKING&quot;, &quot;NB&quot; -&gt; &quot;NETBANKING&quot;;</span>
+<span class="nc" id="L299">            case &quot;WALLET&quot;, &quot;WL&quot; -&gt; &quot;WALLET&quot;;</span>
+<span class="nc" id="L300">            case &quot;UPI&quot; -&gt; &quot;UPI&quot;;</span>
+<span class="nc" id="L301">            default -&gt; &quot;CCAVENUE&quot;;</span>
+        };
+    }
+
+    private String truncate(String value, int maxLen) {
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        if (value == null) return null;</span>
+<span class="nc bnc" id="L307" title="All 2 branches missed.">        return value.length() &gt; maxLen ? value.substring(0, maxLen) : value;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

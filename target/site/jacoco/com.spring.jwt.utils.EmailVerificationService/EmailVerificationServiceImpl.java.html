@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmailVerificationServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils.EmailVerificationService</a> &gt; <span class="el_source">EmailVerificationServiceImpl.java</span></div><h1>EmailVerificationServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils.EmailVerificationService;
+
+import com.spring.jwt.dto.EmailVerificationMapper;
+import com.spring.jwt.exception.*;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.utils.EmailVerificationService.EmailUtils.VerifyOtpDTO;
+import io.github.bucket4j.*;
+import jakarta.mail.*;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L30">@RequiredArgsConstructor</span>
+<span class="nc" id="L31">@Slf4j</span>
+public class EmailVerificationServiceImpl implements EmailVerificationService {
+
+    private final EmailVerificationRepo emailVerificationRepo;
+    private final UserRepository userRepository;
+    private final EmailVerificationMapper emailVerificationMapper;
+
+    @Value(&quot;${spring.mail.username}&quot;) private String emailUsername;
+    @Value(&quot;${spring.mail.password}&quot;) private String emailPassword;
+    @Value(&quot;${spring.mail.host}&quot;) private String emailHost;
+    @Value(&quot;${spring.mail.port}&quot;) private String emailPort;
+    @Value(&quot;${spring.mail.properties.mail.smtp.ssl.enable}&quot;) private String emailSmtpSslEnable;
+    @Value(&quot;${spring.mail.properties.mail.smtp.auth}&quot;) private String emailSmtpAuth;
+
+<span class="nc" id="L45">    private final ConcurrentMap&lt;String, Bucket&gt; emailRateLimiters = new ConcurrentHashMap&lt;&gt;();</span>
+
+    private static final String STATUS_VERIFIED = &quot;Verified&quot;;
+    private static final String STATUS_NOT_VERIFIED = &quot;Not Verified&quot;;
+    private static final int OTP_EXPIRY_MINUTES = 3;
+    private static final int OTP_RATE_LIMIT = 5;
+
+    private Bucket getRateLimiterForEmail(String email) {
+<span class="nc" id="L53">        return emailRateLimiters.computeIfAbsent(email, key -&gt;</span>
+<span class="nc" id="L54">                Bucket.builder().addLimit(Bandwidth.classic(OTP_RATE_LIMIT, Refill.greedy(OTP_RATE_LIMIT, Duration.ofMinutes(5)))).build()</span>
+        );
+    }
+
+    @Override
+    public void sendEmail(String email) {
+<span class="nc bnc" id="L60" title="All 4 branches missed.">        if (email == null || email.isBlank()) throw new EmptyFieldException(&quot;Email field is empty&quot;);</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (userRepository.findByEmail(email) != null) throw new UserAlreadyExistException(&quot;User already exists&quot;);</span>
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        if (!getRateLimiterForEmail(email).tryConsume(1)) throw new RuntimeException(&quot;Too many OTP requests. Try again later.&quot;);</span>
+
+<span class="nc" id="L64">        String otp = OtpUtil.generateOtp(6);</span>
+<span class="nc" id="L65">        String salt = OtpUtil.generateSalt();</span>
+<span class="nc" id="L66">        String hashedOtp = OtpUtil.hashOtp(otp, salt);</span>
+
+<span class="nc" id="L68">        saveEmail(email, hashedOtp, salt, LocalDateTime.now());</span>
+
+<span class="nc" id="L70">        sendEmailInternal(loadEmailTemplate(&quot;otp_email_template.html&quot;).replace(&quot;{{otp}}&quot;, otp), &quot;OTP Verification&quot;, email);</span>
+<span class="nc" id="L71">    }</span>
+
+
+    @Override
+    public String saveEmail(String email, String otp, String salt, LocalDateTime creationTime) {
+<span class="nc" id="L76">        EmailVerification emailVerification = emailVerificationRepo.findByEmail(email).orElseGet(EmailVerification::new);</span>
+<span class="nc" id="L77">        emailVerification.setEmail(email);</span>
+<span class="nc" id="L78">        emailVerification.setOtp(otp);</span>
+<span class="nc" id="L79">        emailVerification.setSalt(salt);</span>
+<span class="nc" id="L80">        emailVerification.setStatus(STATUS_NOT_VERIFIED);</span>
+<span class="nc" id="L81">        emailVerification.setCreationTime(creationTime);</span>
+<span class="nc" id="L82">        emailVerification.setExpiryTime(creationTime.plusMinutes(OTP_EXPIRY_MINUTES));</span>
+<span class="nc" id="L83">        emailVerificationRepo.save(emailVerification);</span>
+<span class="nc" id="L84">        return &quot;Email saved&quot;;</span>
+    }
+
+    @Override
+    public String verifyOtp(VerifyOtpDTO verifyOtpDTO) {
+<span class="nc" id="L89">        EmailVerification emailVerification = emailVerificationRepo.findByEmail(verifyOtpDTO.getEmail())</span>
+<span class="nc" id="L90">                .orElseThrow(() -&gt; new InvalidOtpException(&quot;Invalid OTP&quot;));</span>
+
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (Duration.between(emailVerification.getCreationTime(), LocalDateTime.now()).toMinutes() &gt; OTP_EXPIRY_MINUTES) {</span>
+<span class="nc" id="L93">            throw new OtpExpiredException(&quot;Invalid or expired OTP&quot;);</span>
+        }
+
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        if (!OtpUtil.verifyOtp(verifyOtpDTO.getOtp(), emailVerification.getOtp(), emailVerification.getSalt())) {</span>
+<span class="nc" id="L97">            emailVerification.setAttempts(emailVerification.getAttempts() + 1);</span>
+<span class="nc" id="L98">            emailVerificationRepo.save(emailVerification);</span>
+<span class="nc" id="L99">            throw new InvalidOtpException(&quot;Invalid OTP. Attempt &quot; + emailVerification.getAttempts());</span>
+        }
+
+<span class="nc" id="L102">        emailVerification.setAttempts(0);</span>
+<span class="nc" id="L103">        emailVerification.setStatus(STATUS_VERIFIED);</span>
+<span class="nc" id="L104">        emailVerificationRepo.save(emailVerification);</span>
+<span class="nc" id="L105">        return &quot;Verified&quot;;</span>
+    }
+
+    @Scheduled(cron = &quot;0 4 14 * * ?&quot;, zone = &quot;Asia/Kolkata&quot;)
+    @SchedulerLock(name = &quot;emailVerificationOtpCleanup&quot;, lockAtLeastFor = &quot;30s&quot;, lockAtMostFor = &quot;15m&quot;)
+    @Transactional
+    public void cleanupExpiredOTP() {
+<span class="nc" id="L112">        LocalDateTime expiryThreshold = LocalDateTime.now().minusMinutes(OTP_EXPIRY_MINUTES);</span>
+
+<span class="nc" id="L114">        List&lt;EmailVerification&gt; expiredOtps = emailVerificationRepo.findByStatusAndCreationTimeBefore(STATUS_NOT_VERIFIED, expiryThreshold);</span>
+<span class="nc" id="L115">        log.debug(&quot;Found {} expired OTPs for cleanup&quot;, expiredOtps.size());</span>
+
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (!expiredOtps.isEmpty()) {</span>
+<span class="nc" id="L118">            int deletedRecords = emailVerificationRepo.deleteByStatusAndCreationTimeBefore(STATUS_NOT_VERIFIED, expiryThreshold);</span>
+<span class="nc" id="L119">            log.info(&quot;Deleted {} expired OTPs during scheduled cleanup&quot;, deletedRecords);</span>
+<span class="nc" id="L120">        } else {</span>
+<span class="nc" id="L121">            log.debug(&quot;No expired OTPs found during scheduled cleanup&quot;);</span>
+        }
+<span class="nc" id="L123">    }</span>
+
+
+    private void sendEmailInternal(String message, String subject, String to) {
+        try {
+<span class="nc" id="L128">            Session session = Session.getInstance(setupEmailProperties(), new Authenticator() {</span>
+                @Override protected PasswordAuthentication getPasswordAuthentication() {
+<span class="nc" id="L130">                    return new PasswordAuthentication(emailUsername, emailPassword);</span>
+                }
+            });
+<span class="nc" id="L133">            Message mimeMessage = new MimeMessage(session);</span>
+<span class="nc" id="L134">            mimeMessage.setFrom(new InternetAddress(emailUsername));</span>
+<span class="nc" id="L135">            mimeMessage.setRecipient(Message.RecipientType.TO, new InternetAddress(to));</span>
+<span class="nc" id="L136">            mimeMessage.setSubject(subject);</span>
+<span class="nc" id="L137">            mimeMessage.setContent(message, &quot;text/html&quot;);</span>
+<span class="nc" id="L138">            Transport.send(mimeMessage);</span>
+<span class="nc" id="L139">        } catch (MessagingException e) {</span>
+<span class="nc" id="L140">            throw new RuntimeException(&quot;Error sending email&quot;, e);</span>
+<span class="nc" id="L141">        }</span>
+<span class="nc" id="L142">    }</span>
+
+    private Properties setupEmailProperties() {
+<span class="nc" id="L145">        Properties properties = new Properties();</span>
+<span class="nc" id="L146">        properties.put(&quot;mail.smtp.host&quot;, emailHost);</span>
+<span class="nc" id="L147">        properties.put(&quot;mail.smtp.port&quot;, emailPort);</span>
+<span class="nc" id="L148">        properties.put(&quot;mail.smtp.ssl.enable&quot;, emailSmtpSslEnable);</span>
+<span class="nc" id="L149">        properties.put(&quot;mail.smtp.auth&quot;, emailSmtpAuth);</span>
+<span class="nc" id="L150">        return properties;</span>
+    }
+
+    private String loadEmailTemplate(String templateFileName) {
+<span class="nc" id="L154">        try (InputStream inputStream = getClass().getResourceAsStream(&quot;/templates/&quot; + templateFileName)) {</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">            if (inputStream == null) {</span>
+<span class="nc" id="L156">                log.error(&quot;Template file not found: {}&quot;, templateFileName);</span>
+<span class="nc" id="L157">                return &quot;Please enter the OTP code: {{otp}}&quot;; // Basic fallback template</span>
+            }
+            
+<span class="nc" id="L160">            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {</span>
+<span class="nc" id="L161">            return reader.lines().collect(Collectors.joining(System.lineSeparator()));</span>
+            }
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        } catch (Exception e) {</span>
+<span class="nc" id="L164">            log.error(&quot;Error loading email template&quot;, e);</span>
+<span class="nc" id="L165">            throw new RuntimeException(&quot;Error loading email template&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

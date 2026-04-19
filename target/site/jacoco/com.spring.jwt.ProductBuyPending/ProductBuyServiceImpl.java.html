@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProductBuyServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.ProductBuyPending</a> &gt; <span class="el_source">ProductBuyServiceImpl.java</span></div><h1>ProductBuyServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.ProductBuyPending;
+
+import com.spring.jwt.Enums.PaymentStatus;
+import com.spring.jwt.Payment.CcAvenuePaymentRequest;
+import com.spring.jwt.Payment.CcAvenuePaymentService;
+import com.spring.jwt.Product.ProductRepository;
+import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedDto;
+import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedRepository;
+import com.spring.jwt.service.security.UserDetailsCustom;
+import com.spring.jwt.entity.*;
+import com.spring.jwt.Enums.PaymentMode;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+
+@Service
+<span class="nc" id="L29">@RequiredArgsConstructor</span>
+<span class="nc" id="L30">@Slf4j</span>
+public class ProductBuyServiceImpl implements ProductBuyService {
+
+    private final ProductRepository productRepo;
+    private final ProductBuyPendingRepository pendingRepo;
+    private final ProductBuyConfirmedRepository confirmedRepo;
+    private final CcAvenuePaymentService ccAvenuePaymentService;
+
+    @Override
+    @Transactional
+    public ProductBuyPendingDto createPendingOrder(CreateOrderRequestDto dto) {
+<span class="nc" id="L41">        Long currentUserId = getCurrentUserId();</span>
+<span class="nc" id="L42">        Product product = productRepo.findById(dto.getProductId())</span>
+<span class="nc" id="L43">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Product not found&quot;));</span>
+
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (!Boolean.TRUE.equals(product.getActive())) {</span>
+<span class="nc" id="L46">            throw new IllegalStateException(&quot;Product is not active&quot;);</span>
+        }
+
+<span class="nc" id="L49">        double price = product.getPrice();</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        double discount = product.getOffers() != null ? product.getOffers() : 0;</span>
+<span class="nc" id="L51">        double finalPrice = price - (price * discount / 100);</span>
+<span class="nc" id="L52">        double totalAmount = finalPrice * dto.getQuantity();</span>
+
+<span class="nc" id="L54">        ProductBuyPending pending = new ProductBuyPending();</span>
+        // Prevent user spoofing by always binding order to authenticated user.
+<span class="nc" id="L56">        pending.setUserId(currentUserId);</span>
+<span class="nc" id="L57">        pending.setProductId(product.getProductId());</span>
+<span class="nc" id="L58">        pending.setQuantity(dto.getQuantity());</span>
+<span class="nc" id="L59">        pending.setTotalAmount(totalAmount);</span>
+<span class="nc" id="L60">        pending.setPaymentStatus(PaymentStatus.PENDING);</span>
+<span class="nc" id="L61">        pending.setCustomerName(dto.getCustomerName());</span>
+<span class="nc" id="L62">        pending.setContactNumber(dto.getContactNumber());</span>
+<span class="nc" id="L63">        pending.setDeliveryAddress(dto.getDeliveryAddress());</span>
+
+<span class="nc" id="L65">        pendingRepo.save(pending);</span>
+
+<span class="nc" id="L67">        CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()</span>
+<span class="nc" id="L68">                .orderId(&quot;PROD-&quot; + pending.getProductBuyPendingId())</span>
+<span class="nc" id="L69">                .amount(BigDecimal.valueOf(totalAmount))</span>
+<span class="nc" id="L70">                .billingName(dto.getCustomerName())</span>
+<span class="nc" id="L71">                .billingAddress(dto.getDeliveryAddress())</span>
+<span class="nc" id="L72">                .billingTel(dto.getContactNumber())</span>
+<span class="nc" id="L73">                .build();</span>
+
+<span class="nc" id="L75">        String paymentForm = ccAvenuePaymentService.generatePaymentForm(paymentRequest);</span>
+
+<span class="nc" id="L77">        pending.setPaymentGatewayOrderId(&quot;PROD-&quot; + pending.getProductBuyPendingId());</span>
+<span class="nc" id="L78">        pendingRepo.save(pending);</span>
+
+<span class="nc" id="L80">        log.info(&quot;Created pending order {} for product {}&quot;, pending.getProductBuyPendingId(), product.getProductId());</span>
+
+<span class="nc" id="L82">        ProductBuyPendingDto response = mapToPendingDto(pending);</span>
+<span class="nc" id="L83">        response.setPaymentGatewayOrderId(paymentForm);</span>
+
+<span class="nc" id="L85">        return response;</span>
+    }
+
+    @Override
+    @Transactional
+    public ProductBuyConfirmedDto confirmPayment(PaymentVerifyDto dto) {
+<span class="nc" id="L91">        ProductBuyPending pending = pendingRepo.findById(dto.getPendingOrderId())</span>
+<span class="nc" id="L92">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Pending order not found&quot;));</span>
+
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (PaymentStatus.SUCCESS.equals(pending.getPaymentStatus())) {</span>
+<span class="nc" id="L95">            return loadConfirmedAfterDuplicateCallback(dto, pending);</span>
+        }
+
+<span class="nc bnc" id="L98" title="All 4 branches missed.">        if (dto.getOrderId() == null || !dto.getOrderId().equals(pending.getPaymentGatewayOrderId())) {</span>
+<span class="nc" id="L99">            throw new IllegalArgumentException(&quot;Order mismatch in payment callback&quot;);</span>
+        }
+
+<span class="nc bnc" id="L102" title="All 4 branches missed.">        if (dto.getAmount() == null || dto.getAmount().isBlank()) {</span>
+<span class="nc" id="L103">            throw new IllegalArgumentException(&quot;Missing callback amount&quot;);</span>
+        }
+        BigDecimal callbackAmount;
+        try {
+<span class="nc" id="L107">            callbackAmount = new BigDecimal(dto.getAmount()).setScale(2, RoundingMode.HALF_UP);</span>
+<span class="nc" id="L108">        } catch (NumberFormatException ex) {</span>
+<span class="nc" id="L109">            throw new IllegalArgumentException(&quot;Invalid callback amount&quot;);</span>
+<span class="nc" id="L110">        }</span>
+<span class="nc" id="L111">        BigDecimal expectedAmount = BigDecimal.valueOf(pending.getTotalAmount()).setScale(2, RoundingMode.HALF_UP);</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (expectedAmount.compareTo(callbackAmount) != 0) {</span>
+<span class="nc" id="L113">            throw new IllegalArgumentException(&quot;Amount mismatch in payment callback&quot;);</span>
+        }
+
+        try {
+<span class="nc" id="L117">            pending.setPaymentStatus(PaymentStatus.SUCCESS);</span>
+<span class="nc" id="L118">            pendingRepo.save(pending);</span>
+
+<span class="nc" id="L120">            ProductBuyConfirmed confirmed = new ProductBuyConfirmed();</span>
+<span class="nc" id="L121">            confirmed.setUserId(pending.getUserId());</span>
+<span class="nc" id="L122">            confirmed.setProductId(pending.getProductId());</span>
+<span class="nc" id="L123">            confirmed.setQuantity(pending.getQuantity());</span>
+<span class="nc" id="L124">            confirmed.setTotalAmount(pending.getTotalAmount());</span>
+<span class="nc" id="L125">            confirmed.setPaymentId(dto.getPaymentId());</span>
+<span class="nc" id="L126">            confirmed.setPaymentMode(PaymentMode.valueOf(dto.getPaymentMode()));</span>
+<span class="nc" id="L127">            confirmed.setPaymentDate(LocalDateTime.now());</span>
+<span class="nc" id="L128">            confirmed.setCustomerName(pending.getCustomerName());</span>
+<span class="nc" id="L129">            confirmed.setContactNumber(pending.getContactNumber());</span>
+<span class="nc" id="L130">            confirmed.setDeliveryAddress(pending.getDeliveryAddress());</span>
+<span class="nc" id="L131">            confirmedRepo.save(confirmed);</span>
+
+<span class="nc" id="L133">            log.info(&quot;Payment confirmed for order {}&quot;, pending.getProductBuyPendingId());</span>
+
+<span class="nc" id="L135">            return mapToConfirmedDto(confirmed);</span>
+<span class="nc" id="L136">        } catch (ObjectOptimisticLockingFailureException ex) {</span>
+<span class="nc" id="L137">            ProductBuyPending latest = pendingRepo.findById(dto.getPendingOrderId())</span>
+<span class="nc" id="L138">                    .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Pending order not found&quot;));</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">            if (PaymentStatus.SUCCESS.equals(latest.getPaymentStatus())) {</span>
+<span class="nc" id="L140">                log.info(&quot;Concurrent confirm resolved idempotently for pending {}&quot;, dto.getPendingOrderId());</span>
+<span class="nc" id="L141">                return loadConfirmedAfterDuplicateCallback(dto, latest);</span>
+            }
+<span class="nc" id="L143">            throw ex;</span>
+        }
+    }
+
+    private ProductBuyConfirmedDto loadConfirmedAfterDuplicateCallback(PaymentVerifyDto dto, ProductBuyPending pending) {
+<span class="nc bnc" id="L148" title="All 4 branches missed.">        if (dto.getPaymentId() == null || dto.getPaymentId().isBlank()) {</span>
+<span class="nc" id="L149">            throw new IllegalStateException(&quot;Payment already processed; missing paymentId for idempotent lookup&quot;);</span>
+        }
+<span class="nc bnc" id="L151" title="All 4 branches missed.">        if (dto.getOrderId() != null &amp;&amp; pending.getPaymentGatewayOrderId() != null</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">                &amp;&amp; !dto.getOrderId().equals(pending.getPaymentGatewayOrderId())) {</span>
+<span class="nc" id="L153">            throw new IllegalArgumentException(&quot;Order mismatch in payment callback&quot;);</span>
+        }
+<span class="nc" id="L155">        Optional&lt;ProductBuyConfirmed&gt; existing = confirmedRepo.findFirstByPaymentIdOrderByIdDesc(dto.getPaymentId());</span>
+<span class="nc" id="L156">        return existing.map(this::mapToConfirmedDto)</span>
+<span class="nc" id="L157">                .orElseThrow(() -&gt; new IllegalStateException(</span>
+<span class="nc" id="L158">                        &quot;Payment marked success but no confirmation row found for paymentId=&quot; + dto.getPaymentId()));</span>
+    }
+
+    @Override
+    @Transactional
+    public void markPaymentFailed(Long pendingOrderId) {
+<span class="nc" id="L164">        ProductBuyPending pending = pendingRepo.findById(pendingOrderId)</span>
+<span class="nc" id="L165">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Order not found&quot;));</span>
+
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        if (PaymentStatus.SUCCESS.equals(pending.getPaymentStatus())) {</span>
+<span class="nc" id="L168">            log.warn(&quot;Ignoring failure callback for already successful order {}&quot;, pendingOrderId);</span>
+<span class="nc" id="L169">            return;</span>
+        }
+
+<span class="nc" id="L172">        pending.setPaymentStatus(PaymentStatus.FAILED);</span>
+<span class="nc" id="L173">        pendingRepo.save(pending);</span>
+
+<span class="nc" id="L175">        log.info(&quot;Payment marked failed for order {}&quot;, pendingOrderId);</span>
+<span class="nc" id="L176">    }</span>
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductBuyConfirmedDto getConfirmedOrder(Long id) {
+<span class="nc" id="L181">        ProductBuyConfirmed confirmed = confirmedRepo.findById(id)</span>
+<span class="nc" id="L182">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Order not found&quot;));</span>
+<span class="nc" id="L183">        validateResourceOwnership(confirmed.getUserId());</span>
+<span class="nc" id="L184">        return mapToConfirmedDto(confirmed);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductBuyPendingDto getPendingOrder(Long id) {
+<span class="nc" id="L190">        ProductBuyPending pending = pendingRepo.findById(id)</span>
+<span class="nc" id="L191">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Pending order not found&quot;));</span>
+<span class="nc" id="L192">        validateResourceOwnership(pending.getUserId());</span>
+<span class="nc" id="L193">        return mapToPendingDto(pending);</span>
+    }
+
+    private void validateResourceOwnership(Long ownerUserId) {
+<span class="nc" id="L197">        Long currentUserId = getCurrentUserId();</span>
+<span class="nc bnc" id="L198" title="All 4 branches missed.">        if (!currentUserId.equals(ownerUserId) &amp;&amp; !isCurrentUserAdmin()) {</span>
+<span class="nc" id="L199">            throw new AccessDeniedException(&quot;You are not allowed to access this order&quot;);</span>
+        }
+<span class="nc" id="L201">    }</span>
+
+    private boolean isCurrentUserAdmin() {
+<span class="nc" id="L204">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        if (auth == null) {</span>
+<span class="nc" id="L206">            return false;</span>
+        }
+<span class="nc" id="L208">        return auth.getAuthorities().stream()</span>
+<span class="nc" id="L209">                .anyMatch(a -&gt; &quot;ROLE_ADMIN&quot;.equals(a.getAuthority()));</span>
+    }
+
+    private Long getCurrentUserId() {
+<span class="nc" id="L213">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L214" title="All 4 branches missed.">        if (auth != null &amp;&amp; auth.getPrincipal() instanceof UserDetailsCustom userDetails) {</span>
+<span class="nc" id="L215">            return userDetails.getUserId();</span>
+        }
+<span class="nc" id="L217">        throw new AccessDeniedException(&quot;Authenticated user is required&quot;);</span>
+    }
+
+    private ProductBuyPendingDto mapToPendingDto(ProductBuyPending e) {
+<span class="nc" id="L221">        return new ProductBuyPendingDto(</span>
+<span class="nc" id="L222">                e.getProductBuyPendingId(),</span>
+<span class="nc" id="L223">                e.getUserId(),</span>
+<span class="nc" id="L224">                e.getProductId(),</span>
+<span class="nc" id="L225">                e.getQuantity(),</span>
+<span class="nc" id="L226">                e.getTotalAmount(),</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">                e.getPaymentStatus() != null ? e.getPaymentStatus().name() : null,</span>
+<span class="nc" id="L228">                e.getPaymentGatewayOrderId(),</span>
+<span class="nc" id="L229">                e.getCreatedAt(),</span>
+<span class="nc" id="L230">                e.getDeliveryAddress(),</span>
+<span class="nc" id="L231">                e.getCustomerName(),</span>
+<span class="nc" id="L232">                e.getContactNumber()</span>
+        );
+    }
+
+    private ProductBuyConfirmedDto mapToConfirmedDto(ProductBuyConfirmed e) {
+<span class="nc" id="L237">        ProductBuyConfirmedDto dto = new ProductBuyConfirmedDto();</span>
+<span class="nc" id="L238">        dto.setId(e.getId());</span>
+<span class="nc" id="L239">        dto.setUserId(e.getUserId());</span>
+<span class="nc" id="L240">        dto.setProductId(e.getProductId());</span>
+<span class="nc" id="L241">        dto.setQuantity(e.getQuantity());</span>
+<span class="nc" id="L242">        dto.setTotalAmount(e.getTotalAmount());</span>
+<span class="nc" id="L243">        dto.setPaymentId(e.getPaymentId());</span>
+<span class="nc" id="L244">        dto.setPaymentMode(e.getPaymentMode());</span>
+<span class="nc" id="L245">        dto.setPaymentDate(e.getPaymentDate());</span>
+<span class="nc" id="L246">        dto.setCreatedAt(e.getCreatedAt());</span>
+<span class="nc" id="L247">        dto.setCustomerName(e.getCustomerName());</span>
+<span class="nc" id="L248">        dto.setContactNumber(e.getContactNumber());</span>
+<span class="nc" id="L249">        dto.setDeliveryAddress(e.getDeliveryAddress());</span>
+<span class="nc" id="L250">        dto.setDeliveryCreated(e.getDeliveryCreated());</span>
+<span class="nc bnc" id="L251" title="All 2 branches missed.">        if (e.getProduct() != null) {</span>
+<span class="nc" id="L252">            dto.setProductName(e.getProduct().getProductName());</span>
+        }
+<span class="nc" id="L254">        return dto;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

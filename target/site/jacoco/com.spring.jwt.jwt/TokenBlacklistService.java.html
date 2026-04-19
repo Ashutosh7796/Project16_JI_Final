@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TokenBlacklistService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.jwt</a> &gt; <span class="el_source">TokenBlacklistService.java</span></div><h1>TokenBlacklistService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.jwt;
+
+import com.spring.jwt.entity.BlacklistedToken;
+import com.spring.jwt.repository.BlacklistedTokenRepository;
+import com.spring.jwt.utils.SecurityAuditLogger;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * Service to manage blacklisted tokens to prevent token reuse.
+ * &lt;p&gt;
+ * Tokens are persisted to the {@code blacklisted_tokens} table (via JPA) so
+ * the blacklist survives server restarts and works across multiple pods.
+ * An in-memory {@link ConcurrentHashMap} serves as an L1 cache for hot lookups
+ * to avoid hitting the DB on every request.
+ */
+@Service
+<span class="nc" id="L25">@Slf4j</span>
+public class TokenBlacklistService {
+
+    private final BlacklistedTokenRepository repository;
+    private final SecurityAuditLogger securityAuditLogger;
+
+    /** L1 in-memory cache — prevents DB hit on every isBlacklisted() call. */
+<span class="nc" id="L32">    private final Map&lt;String, Instant&gt; localCache = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="nc" id="L34">    private final AtomicInteger totalBlacklistedTokens = new AtomicInteger(0);</span>
+<span class="nc" id="L35">    private final AtomicInteger blacklistHits = new AtomicInteger(0);</span>
+
+    public TokenBlacklistService(BlacklistedTokenRepository repository,
+<span class="nc" id="L38">                                  SecurityAuditLogger securityAuditLogger) {</span>
+<span class="nc" id="L39">        this.repository = repository;</span>
+<span class="nc" id="L40">        this.securityAuditLogger = securityAuditLogger;</span>
+<span class="nc" id="L41">    }</span>
+
+    /**
+     * Blacklist a token — persists to DB + adds to L1 cache.
+     *
+     * @param tokenId        JWT jti claim
+     * @param expirationTime when the JWT expires (safe to purge after)
+     * @param username       associated user
+     * @param reason         why blacklisted (logout, token_rotation, security_revoke)
+     */
+    public void blacklistToken(String tokenId, Instant expirationTime, String username, String reason) {
+<span class="nc" id="L52">        blacklistToken(tokenId, expirationTime, username, reason, &quot;unknown&quot;);</span>
+<span class="nc" id="L53">    }</span>
+
+    /**
+     * Blacklist a token with token type info.
+     */
+    public void blacklistToken(String tokenId, Instant expirationTime, String username,
+                                String reason, String tokenType) {
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        if (tokenId == null) return;</span>
+
+<span class="nc" id="L62">        log.debug(&quot;Blacklisting token: {} type={} reason={}&quot;, maskTokenId(tokenId), tokenType, reason);</span>
+
+        try {
+            // Persist to DB (idempotent via unique constraint)
+<span class="nc bnc" id="L66" title="All 2 branches missed.">            if (!repository.existsByTokenId(tokenId)) {</span>
+<span class="nc" id="L67">                BlacklistedToken entity = new BlacklistedToken(</span>
+                        tokenId, tokenType, username, reason, expirationTime);
+<span class="nc" id="L69">                repository.save(entity);</span>
+            }
+<span class="nc" id="L71">        } catch (Exception e) {</span>
+            // Unique constraint violation = already blacklisted = fine
+<span class="nc" id="L73">            log.debug(&quot;Token already blacklisted or DB error: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L74">        }</span>
+
+        // Always update L1 cache
+<span class="nc" id="L77">        localCache.put(tokenId, expirationTime);</span>
+<span class="nc" id="L78">        totalBlacklistedTokens.incrementAndGet();</span>
+
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (securityAuditLogger != null) {</span>
+<span class="nc" id="L81">            securityAuditLogger.logTokenEvent(&quot;BLACKLIST&quot;, username, maskTokenId(tokenId), true);</span>
+        }
+<span class="nc" id="L83">    }</span>
+
+    /**
+     * Blacklist a token (minimal params — backwards-compatible).
+     */
+    public void blacklistToken(String tokenId, Instant expirationTime) {
+<span class="nc" id="L89">        blacklistToken(tokenId, expirationTime, &quot;unknown&quot;, &quot;token_rotation&quot;, &quot;unknown&quot;);</span>
+<span class="nc" id="L90">    }</span>
+
+    /**
+     * Check if a token is blacklisted.
+     * Checks L1 cache first, falls back to DB.
+     */
+    public boolean isBlacklisted(String tokenId) {
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        if (tokenId == null) return false;</span>
+
+        // L1 cache hit — fast path
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (localCache.containsKey(tokenId)) {</span>
+<span class="nc" id="L101">            onBlacklistHit(tokenId);</span>
+<span class="nc" id="L102">            return true;</span>
+        }
+
+        // L2 — check DB
+<span class="nc" id="L106">        Optional&lt;BlacklistedToken&gt; dbEntry = repository.findByTokenId(tokenId);</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        if (dbEntry.isPresent()) {</span>
+            // Warm the L1 cache
+<span class="nc" id="L109">            localCache.put(tokenId, dbEntry.get().getExpiresAt());</span>
+<span class="nc" id="L110">            onBlacklistHit(tokenId);</span>
+
+            // Increment reuse counter in DB
+            try {
+<span class="nc" id="L114">                repository.incrementReuseAttempts(tokenId);</span>
+<span class="nc" id="L115">            } catch (Exception e) {</span>
+<span class="nc" id="L116">                log.debug(&quot;Error incrementing reuse attempts: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L117">            }</span>
+<span class="nc" id="L118">            return true;</span>
+        }
+
+<span class="nc" id="L121">        return false;</span>
+    }
+
+    private void onBlacklistHit(String tokenId) {
+<span class="nc" id="L125">        blacklistHits.incrementAndGet();</span>
+<span class="nc" id="L126">        log.warn(&quot;Attempted reuse of blacklisted token: {}&quot;, maskTokenId(tokenId));</span>
+
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        if (securityAuditLogger != null) {</span>
+<span class="nc" id="L129">            securityAuditLogger.logTokenEvent(&quot;REUSE_ATTEMPT&quot;, &quot;unknown&quot;, maskTokenId(tokenId), false);</span>
+        }
+<span class="nc" id="L131">    }</span>
+
+    /**
+     * Clean up expired tokens from both DB and L1 cache every hour.
+     * ShedLock ensures only one pod runs the DB purge in multi-instance deployments.
+     */
+    @Scheduled(fixedRate = 3600000)
+    @SchedulerLock(name = &quot;blacklistCleanup&quot;, lockAtLeastFor = &quot;30s&quot;, lockAtMostFor = &quot;10m&quot;)
+    public void cleanupBlacklist() {
+<span class="nc" id="L140">        Instant now = Instant.now();</span>
+
+        // Purge L1 cache
+<span class="nc" id="L143">        int cacheRemoved = 0;</span>
+<span class="nc" id="L144">        var iterator = localCache.entrySet().iterator();</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        while (iterator.hasNext()) {</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">            if (iterator.next().getValue().isBefore(now)) {</span>
+<span class="nc" id="L147">                iterator.remove();</span>
+<span class="nc" id="L148">                cacheRemoved++;</span>
+            }
+        }
+
+        // Purge DB
+<span class="nc" id="L153">        int dbRemoved = 0;</span>
+        try {
+<span class="nc" id="L155">            dbRemoved = repository.deleteExpiredTokens(now);</span>
+<span class="nc" id="L156">        } catch (Exception e) {</span>
+<span class="nc" id="L157">            log.warn(&quot;Error purging expired blacklisted tokens from DB: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L158">        }</span>
+
+<span class="nc bnc" id="L160" title="All 4 branches missed.">        if (cacheRemoved &gt; 0 || dbRemoved &gt; 0) {</span>
+<span class="nc" id="L161">            log.info(&quot;Blacklist cleanup: {} from cache, {} from DB, {} remaining in cache&quot;,</span>
+<span class="nc" id="L162">                    cacheRemoved, dbRemoved, localCache.size());</span>
+        }
+<span class="nc" id="L164">    }</span>
+
+    /**
+     * Get statistics about the token blacklist.
+     */
+    public BlacklistStats getStats() {
+<span class="nc" id="L170">        return new BlacklistStats(</span>
+<span class="nc" id="L171">            localCache.size(),</span>
+<span class="nc" id="L172">            totalBlacklistedTokens.get(),</span>
+<span class="nc" id="L173">            blacklistHits.get()</span>
+        );
+    }
+
+    /**
+     * Extend the blacklisting period for a token (high-risk scenarios).
+     */
+    public void extendBlacklisting(String tokenId, long additionalHours) {
+<span class="nc" id="L181">        repository.findByTokenId(tokenId).ifPresent(entry -&gt; {</span>
+<span class="nc" id="L182">            Instant newExpiration = entry.getExpiresAt().plusSeconds(additionalHours * 3600);</span>
+<span class="nc" id="L183">            entry.setExpiresAt(newExpiration);</span>
+<span class="nc" id="L184">            repository.save(entry);</span>
+<span class="nc" id="L185">            localCache.put(tokenId, newExpiration);</span>
+<span class="nc" id="L186">            log.info(&quot;Extended blacklisting for token: {}, new expiration: {}&quot;,</span>
+<span class="nc" id="L187">                    maskTokenId(tokenId), newExpiration);</span>
+<span class="nc" id="L188">        });</span>
+<span class="nc" id="L189">    }</span>
+
+    /**
+     * Mask token ID for logging.
+     */
+    private String maskTokenId(String tokenId) {
+<span class="nc bnc" id="L195" title="All 4 branches missed.">        if (tokenId == null || tokenId.length() &lt; 8) {</span>
+<span class="nc" id="L196">            return &quot;***&quot;;</span>
+        }
+<span class="nc" id="L198">        return tokenId.substring(0, 3) + &quot;...&quot; + tokenId.substring(tokenId.length() - 3);</span>
+    }
+
+    /**
+     * Statistics about the blacklist.
+     */
+    public static class BlacklistStats {
+        private final int currentCacheSize;
+        private final int totalBlacklisted;
+        private final int blacklistHits;
+
+<span class="nc" id="L209">        public BlacklistStats(int currentCacheSize, int totalBlacklisted, int blacklistHits) {</span>
+<span class="nc" id="L210">            this.currentCacheSize = currentCacheSize;</span>
+<span class="nc" id="L211">            this.totalBlacklisted = totalBlacklisted;</span>
+<span class="nc" id="L212">            this.blacklistHits = blacklistHits;</span>
+<span class="nc" id="L213">        }</span>
+
+<span class="nc" id="L215">        public int getCurrentCacheSize() { return currentCacheSize; }</span>
+<span class="nc" id="L216">        public int getTotalBlacklisted() { return totalBlacklisted; }</span>
+<span class="nc" id="L217">        public int getBlacklistHits() { return blacklistHits; }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

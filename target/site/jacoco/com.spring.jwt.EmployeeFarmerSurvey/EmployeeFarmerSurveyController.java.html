@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeFarmerSurveyController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeFarmerSurvey</a> &gt; <span class="el_source">EmployeeFarmerSurveyController.java</span></div><h1>EmployeeFarmerSurveyController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeFarmerSurvey;
+
+import com.spring.jwt.Enums.FormStatus;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * REST Controller for managing Employee–Farmer Survey operations.
+ *
+ * This controller exposes secure APIs for:
+ *  - Creating farmer surveys
+ *  - Fetching surveys (by ID, by user, logged-in user)
+ *  - Updating surveys (PATCH – partial update)
+ *  - Deleting surveys
+ *
+ * All responses follow a standard BaseResponseDTO structure
+ * to maintain consistency across the application.
+ *
+ * Security:
+ *  - Logged-in user information is derived from JWT via SecurityContext
+ *  - No userId is trusted directly from the client for sensitive operations
+ *
+ * Pagination:
+ *  - Applied using Spring Pageable
+ *  - Default sorting: surveyId DESC
+ */
+@RestController
+<span class="nc" id="L36">@Slf4j</span>
+@RequestMapping(&quot;/api/v1/employeeFarmerSurveys&quot;)
+<span class="nc" id="L38">@RequiredArgsConstructor</span>
+public class EmployeeFarmerSurveyController {
+
+    private final EmployeeFarmerSurveyService employeeFarmerSurveyService;
+    private final SurveyIdResolver surveyIdResolver;
+
+    /**
+     * Create a new Employee–Farmer Survey.
+     *
+     * - Survey is always created for the logged-in user (JWT based)
+     * - Form number is generated automatically by the backend
+     * - Duplicate farmer mobile numbers are validated
+     *
+     * @param dto Survey request payload
+     * @return Created survey details with generated surveyId and formNumber
+     */
+    @PostMapping(&quot;/add&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;EmployeeFarmerSurveyDTO&gt;&gt; createSurvey(
+            @Valid @RequestBody EmployeeFarmerSurveyRegDTO dto) {
+
+<span class="nc" id="L58">        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.createSurvey(dto);</span>
+<span class="nc" id="L59">        return ResponseEntity.status(HttpStatus.CREATED).body(new BaseResponseDTO1&lt;&gt;(&quot;201&quot;, &quot;Survey created successfully&quot;, result));</span>
+    }
+
+    /**
+     * Fetch a survey by its unique surveyId.
+     *
+     * @param surveyId Unique identifier of the survey
+     * @return Survey details if found
+     */
+    @GetMapping(&quot;/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;EmployeeFarmerSurveyDTO&gt;&gt; getSurveyById(
+            @PathVariable String surveyId) {
+
+<span class="nc" id="L72">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+<span class="nc" id="L73">        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.getSurveyById(internalSurveyId);</span>
+
+<span class="nc" id="L75">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Survey fetched successfully&quot;, result)</span>
+        );
+    }
+
+    /**
+     * Fetch all surveys (Admin-level operation).
+     *
+     * - Supports pagination and sorting
+     * - Default sorting: surveyId DESC
+     *
+     * @param pageable Pagination and sorting configuration
+     * @return Paginated list of surveys
+     */
+    @GetMapping
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Page&lt;EmployeeFarmerSurveyDTO&gt;&gt;&gt; getAllSurveys(
+            @PageableDefault(page = 0, size = 10, sort = &quot;surveyId&quot;, direction = Sort.Direction.DESC) Pageable pageable) {
+
+<span class="nc" id="L92">        Page&lt;EmployeeFarmerSurveyDTO&gt; page = employeeFarmerSurveyService.getAllSurveys(pageable);</span>
+<span class="nc" id="L93">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Surveys fetched successfully&quot;, page));</span>
+    }
+
+    /**
+     * Partially update an existing survey.
+     *
+     * - PATCH operation (null-safe updates)
+     * - Only provided fields are updated
+     * - Ownership validation is applied
+     *
+     * @param surveyId Survey identifier
+     * @param dto      Fields to update
+     * @return Updated survey details
+     */
+    @PatchMapping(&quot;/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;EmployeeFarmerSurveyDTO&gt;&gt; updateSurvey(
+            @PathVariable String surveyId,
+            @RequestBody EmployeeFarmerSurveyDTO dto) {
+
+<span class="nc" id="L112">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+<span class="nc" id="L113">        EmployeeFarmerSurveyDTO result = employeeFarmerSurveyService.updateSurvey(internalSurveyId, dto);</span>
+
+<span class="nc" id="L115">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Survey updated successfully&quot;, result));</span>
+    }
+
+    /**
+     * Delete a survey by its surveyId.
+     *
+     * - Soft or hard delete depends on service implementation
+     *
+     * @param surveyId Survey identifier
+     * @return Success message
+     */
+    @DeleteMapping(&quot;/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Void&gt;&gt; deleteSurvey(
+            @PathVariable String surveyId) {
+<span class="nc" id="L129">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+        
+<span class="nc" id="L131">        log.debug(&quot;Delete request received for survey ID: {}&quot;, surveyId);</span>
+<span class="nc" id="L132">        employeeFarmerSurveyService.deleteSurvey(internalSurveyId);</span>
+<span class="nc" id="L133">        log.info(&quot;Survey deleted successfully: {}&quot;, surveyId);</span>
+        
+<span class="nc" id="L135">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Survey deleted successfully&quot;, null));</span>
+    }
+
+    /**
+     * Fetch surveys for a specific user (Admin use-case).
+     *
+     * - Requires userId as path variable
+     * - Supports pagination
+     *
+     * @param userId   User identifier
+     * @param pageable Pagination configuration
+     * @return Paginated list of surveys for the user
+     */
+    @GetMapping(&quot;/user/{userId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Page&lt;EmployeeFarmerSurveyDTO&gt;&gt;&gt; getSurveysByUserId(
+            @PathVariable Long userId,
+            @PageableDefault(page = 0, size = 10, sort = &quot;surveyId&quot;, direction = Sort.Direction.DESC) Pageable pageable) {
+
+<span class="nc" id="L153">        Page&lt;EmployeeFarmerSurveyDTO&gt; page = employeeFarmerSurveyService.getByUserIdSurveys(userId, pageable);</span>
+
+<span class="nc" id="L155">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;User surveys fetched successfully&quot;, page));</span>
+    }
+
+    /**
+     * Fetch surveys for the currently logged-in user.
+     *
+     * - User identity is derived from JWT token
+     * - No userId is accepted from the client
+     *
+     * @param pageable Pagination configuration
+     * @return Paginated list of logged-in user's surveys
+     */
+    @GetMapping(&quot;/my&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Page&lt;EmployeeFarmerSurveyDTO&gt;&gt;&gt; getMySurveys(
+            @PageableDefault(page = 0, size = 10, sort = &quot;surveyId&quot;, direction = Sort.Direction.DESC) Pageable pageable) {
+
+<span class="nc" id="L171">        Page&lt;EmployeeFarmerSurveyDTO&gt; page = employeeFarmerSurveyService.getMySurveys(pageable);</span>
+
+<span class="nc" id="L173">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;My surveys fetched successfully&quot;, page));</span>
+    }
+
+    @GetMapping(&quot;/status-count/all&quot;)
+    public ResponseEntity&lt;SurveyStatusCountDTO&gt; getAllStatusCount() {
+<span class="nc" id="L178">        return ResponseEntity.ok(</span>
+<span class="nc" id="L179">                employeeFarmerSurveyService.getAllSurveyStatusCount()</span>
+        );
+    }
+
+    @GetMapping(&quot;/status-count/me&quot;)
+    public ResponseEntity&lt;SurveyStatusCountDTO&gt; getMyStatusCount() {
+<span class="nc" id="L185">        return ResponseEntity.ok(</span>
+<span class="nc" id="L186">                employeeFarmerSurveyService.getSurveyStatusCountByLoggedInUser()</span>
+        );
+    }
+
+    @GetMapping(&quot;/status/{status}&quot;)
+    public ResponseEntity&lt;Page&lt;EmployeeFarmerSurveyDTO&gt;&gt; getAllByStatus(
+            @PathVariable FormStatus status,
+            Pageable pageable) {
+
+<span class="nc" id="L195">        return ResponseEntity.ok(</span>
+<span class="nc" id="L196">                employeeFarmerSurveyService.getAllSurveysByStatus(status, pageable)</span>
+        );
+    }
+
+
+    @GetMapping(&quot;/me/status/{status}&quot;)
+    public ResponseEntity&lt;Page&lt;EmployeeFarmerSurveyDTO&gt;&gt; getMyByStatus(
+            @PathVariable FormStatus status,
+            Pageable pageable) {
+
+<span class="nc" id="L206">        return ResponseEntity.ok(</span>
+<span class="nc" id="L207">                employeeFarmerSurveyService.getMySurveysByStatus(status, pageable)</span>
+        );
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

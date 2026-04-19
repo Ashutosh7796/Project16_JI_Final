@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Document</a> &gt; <span class="el_source">DocumentController.java</span></div><h1>DocumentController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Document;
+
+import com.spring.jwt.Document.domain.DocumentMetadata;
+import com.spring.jwt.Enums.DocumentType;
+import com.spring.jwt.config.DocumentProperties;
+import com.spring.jwt.dto.DocumentDetailResponseDTO;
+import com.spring.jwt.dto.DocumentResponseDTO;
+import com.spring.jwt.dto.PaginatedDocumentResponseDTO;
+import com.spring.jwt.utils.ApiResponse;
+import com.spring.jwt.utils.SecurityUtil;import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.Optional;
+
+@RestController
+@RequestMapping(&quot;/api/v1/documents&quot;)
+<span class="nc" id="L30">@Slf4j</span>
+<span class="nc" id="L31">@RequiredArgsConstructor</span>
+@Validated
+@Tag(name = &quot;Document Management&quot;, description = &quot;APIs for managing user documents including upload, retrieval, update, and deletion&quot;)
+public class DocumentController
+{
+
+        private final DocumentService documentService;
+        private final DocumentProperties documentProperties;
+
+        @Operation(summary = &quot;Upload a document&quot;, description = &quot;Upload a document file with automatic compression and validation. Supports PDF, JPEG, PNG, and WEBP formats up to 15MB.&quot;)
+        @ApiResponses(value =
+                {
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;201&quot;,
+                                description = &quot;Document uploaded successfully&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;400&quot;,
+                                description = &quot;Invalid file or parameters&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;413&quot;,
+                                description = &quot;File size exceeds limit&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;401&quot;,
+                                description = &quot;Unauthorized&quot;)
+                })
+        @PostMapping(value = &quot;/upload&quot;, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentResponseDTO&gt;&gt; uploadDocument
+                (
+                        @Parameter(description = &quot;Document file to upload&quot;, required = true)
+                        @RequestParam(&quot;file&quot;) MultipartFile file,
+                        @Parameter(description = &quot;Type of document being uploaded&quot;, required = true)
+                        @RequestParam(&quot;documentType&quot;) DocumentType documentType,
+                        @Parameter(description = &quot;Optional description for the document&quot;)
+                        @RequestParam(value = &quot;description&quot;, required = false) String description
+                )
+        {
+
+<span class="nc" id="L64">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L65">                log.info(&quot;Upload request: user={}, type={} (enum={}), file={}, size={}KB&quot;,</span>
+<span class="nc" id="L66">                                userId, documentType, documentType.name(), file.getOriginalFilename(), file.getSize() / 1024);</span>
+
+<span class="nc" id="L68">                DocumentResponseDTO response = documentService.uploadDocument(userId, file, documentType, description);</span>
+
+<span class="nc" id="L70">                return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L71">                                .body(ApiResponse.success(&quot;Document uploaded successfully&quot;, response));</span>
+        }
+
+        @Operation(summary = &quot;Upload a document&quot;, description = &quot;Upload a document file with automatic compression and validation. Supports PDF, JPEG, PNG, and WEBP formats up to 15MB.&quot;)
+        @ApiResponses(value =
+                {
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;201&quot;,
+                                description = &quot;Document uploaded successfully&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;400&quot;,
+                                description = &quot;Invalid file or parameters&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;413&quot;,
+                                description = &quot;File size exceeds limit&quot;),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;401&quot;,
+                                description = &quot;Unauthorized&quot;)
+                })
+        @PostMapping(value = &quot;/uploadByUser&quot;, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentResponseDTO&gt;&gt; uploadDocumentUserId
+                (
+                        @Parameter(description = &quot;Document file to upload&quot;, required = true)
+                        @RequestParam(&quot;file&quot;) MultipartFile file,
+                        @Parameter(description = &quot;Type of document being uploaded&quot;, required = true)
+                        @RequestParam(&quot;documentType&quot;) DocumentType documentType,
+                        @Parameter(description = &quot;Optional description for the document&quot;)
+                        @RequestParam(value = &quot;description&quot;, required = false) String description,
+                        @Parameter(description = &quot;userId&quot;)
+                        @RequestParam(&quot;UserId&quot;) Long userId
+                )
+        {
+
+//                Long userId = SecurityUtil.getCurrentUserId();
+<span class="nc" id="L101">                log.info(&quot;Upload request: user={}, type={} (enum={}), file={}, size={}KB&quot;,</span>
+<span class="nc" id="L102">                        userId, documentType, documentType.name(), file.getOriginalFilename(), file.getSize() / 1024);</span>
+
+<span class="nc" id="L104">                DocumentResponseDTO response = documentService.uploadDocument(userId, file, documentType, description);</span>
+
+<span class="nc" id="L106">                return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L107">                        .body(ApiResponse.success(&quot;Document uploaded successfully&quot;, response));</span>
+        }
+
+        /**
+         * Replace existing document of the same type or create new
+         *
+         * Business Logic:
+         * 1. Check if document of same type exists for user
+         * 2. If exists: update existing document
+         * 3. If not exists: create new document
+         * 4. Return appropriate response
+         */
+        @Operation(summary = &quot;Replace existing document&quot;, description = &quot;Replace an existing document of the same type or create new if doesn't exist&quot;)
+        @PostMapping(value = &quot;/replace&quot;, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentResponseDTO&gt;&gt; replaceDocument
+        (
+                        @RequestParam(&quot;file&quot;) MultipartFile file,
+                        @RequestParam(&quot;documentType&quot;) DocumentType documentType,
+                        @RequestParam(value = &quot;description&quot;, required = false) String description)
+        {
+
+<span class="nc" id="L128">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L129">                log.info(&quot;Replace request: user={}, type={}&quot;, userId, documentType);</span>
+
+<span class="nc" id="L131">                DocumentResponseDTO response = documentService.replaceDocument(userId, file, documentType, description);</span>
+
+<span class="nc" id="L133">                return ResponseEntity.ok(ApiResponse.success(&quot;Document replaced successfully&quot;, response));</span>
+        }
+
+        /**
+         * Get document by ID with file data
+         *
+         * Business Logic:
+         * 1. Validate user ownership of document
+         * 2. Retrieve document with binary data
+         * 3. Convert binary data to Base64 for JSON response
+         * 4. Return complete document information
+         */
+        @Operation(summary = &quot;Get document by ID&quot;, description = &quot;Retrieve a specific document by its ID including the file data (Base64 encoded)&quot;)
+        @GetMapping(&quot;/{documentId}&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentDetailResponseDTO&gt;&gt; getDocumentById
+        (
+                        @Parameter(description = &quot;Document ID&quot;, required = true)
+                        @PathVariable Integer documentId)
+        {
+
+<span class="nc" id="L153">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L154">                log.debug(&quot;Get document request: user={}, documentId={}&quot;, userId, documentId);</span>
+
+<span class="nc" id="L156">                DocumentDetailResponseDTO response = documentService.getDocumentById(userId, documentId);</span>
+
+<span class="nc" id="L158">                return ResponseEntity.ok(ApiResponse.success(&quot;Document retrieved successfully&quot;, response));</span>
+        }
+
+
+        /**
+         * Get document metadata without file data for performance
+         *
+         * Business Logic:
+         * 1. Validate user ownership
+         * 2. Return only metadata (no binary data)
+         * 3. Optimized for performance when file content not needed
+         */
+        @Operation(summary = &quot;Get document metadata&quot;, description = &quot;Retrieve document metadata without the file data for performance&quot;)
+        @GetMapping(&quot;/{documentId}/metadata&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentMetadata&gt;&gt; getDocumentMetadata
+        (
+                        @PathVariable Integer documentId)
+        {
+
+<span class="nc" id="L177">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L178">                log.debug(&quot;Get metadata request: user={}, documentId={}&quot;, userId, documentId);</span>
+
+<span class="nc" id="L180">                Optional&lt;DocumentMetadata&gt; metadata = documentService.getDocumentMetadata(userId, documentId);</span>
+
+<span class="nc bnc" id="L182" title="All 2 branches missed.">                if (metadata.isPresent()) {</span>
+<span class="nc" id="L183">                        return ResponseEntity.ok(ApiResponse.success(&quot;Document metadata retrieved&quot;, metadata.get()));</span>
+                } else {
+<span class="nc" id="L185">                        return ResponseEntity.notFound().build();</span>
+                }
+        }
+
+        /**
+         * Get document by type for current user
+         *
+         * Business Logic:
+         * 1. Find document of specific type for user
+         * 2. Return document with file data
+         * 3. Useful for retrieving specific document types (e.g., profile photo)
+         */
+        @Operation(summary = &quot;Get document by type&quot;, description = &quot;Retrieve a document by its type for the current user&quot;)
+        @GetMapping(&quot;/type/{documentType}&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentDetailResponseDTO&gt;&gt; getDocumentByType
+        (
+                        @Parameter(description = &quot;Document type&quot;, required = true)
+                        @PathVariable DocumentType documentType)
+        {
+
+<span class="nc" id="L205">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L206">                log.debug(&quot;Get by type request: user={}, type={}&quot;, userId, documentType);</span>
+
+<span class="nc" id="L208">                DocumentDetailResponseDTO response = documentService.getDocumentByType(userId, documentType);</span>
+
+<span class="nc" id="L210">                return ResponseEntity.ok(ApiResponse.success(&quot;Document retrieved successfully&quot;, response));</span>
+        }
+
+        /**
+         * Get all documents for current user (without file data for performance)
+         *
+         * Business Logic:
+         * 1. Retrieve all documents for user
+         * 2. Return metadata only (no binary data)
+         * 3. Ordered by upload date (newest first)
+         */
+        @Operation(summary = &quot;Get all user documents&quot;, description = &quot;Retrieve all documents for the current user (without file data for performance)&quot;)
+        @GetMapping(&quot;/user/all&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;List&lt;DocumentResponseDTO&gt;&gt;&gt; getAllDocumentsByUserId()
+        {
+
+<span class="nc" id="L226">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L227">                log.debug(&quot;Get all documents request: user={}&quot;, userId);</span>
+
+<span class="nc" id="L229">                List&lt;DocumentResponseDTO&gt; response = documentService.getAllDocumentsByUserId(userId);</span>
+
+<span class="nc" id="L231">                return ResponseEntity.ok(ApiResponse.success(</span>
+<span class="nc" id="L232">                                String.format(&quot;Retrieved %d documents successfully&quot;, response.size()), response));</span>
+        }
+
+        /**
+         * Admin endpoint: get all documents for any user by their userId.
+         * Requires ADMIN role.
+         */
+        @Operation(summary = &quot;Admin: Get all documents for a user&quot;, description = &quot;Admin-only endpoint to retrieve all documents for any user by their userId&quot;)
+        @ApiResponses(value = {
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;200&quot;, description = &quot;Documents retrieved successfully&quot;),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;403&quot;, description = &quot;Forbidden - Admin role required&quot;),
+                @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = &quot;404&quot;, description = &quot;User not found&quot;)
+        })
+        @GetMapping(&quot;/user/{userId}/all&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;List&lt;DocumentResponseDTO&gt;&gt;&gt; getAllDocumentsByUserIdForAdmin(
+                @Parameter(description = &quot;Target user ID&quot;, required = true)
+                @PathVariable Long userId)
+        {
+<span class="nc" id="L250">                log.info(&quot;Admin get all documents request: targetUser={}, requestedBy={}&quot;,</span>
+<span class="nc" id="L251">                        userId, SecurityUtil.getCurrentUserId());</span>
+
+<span class="nc" id="L253">                List&lt;DocumentResponseDTO&gt; response = ((DocumentServiceImpl) documentService)</span>
+<span class="nc" id="L254">                        .getAllDocumentsByUserIdForAdmin(userId);</span>
+
+<span class="nc" id="L256">                return ResponseEntity.ok(ApiResponse.success(</span>
+<span class="nc" id="L257">                        String.format(&quot;Retrieved %d documents for user %d&quot;, response.size(), userId), response));</span>
+        }
+
+        /**
+         * Get documents with pagination support
+         *
+         * Business Logic:
+         * 1. Validate pagination parameters
+         * 2. Apply pagination logic
+         * 3. Return subset of documents
+         * 4. Useful for large document collections
+         */
+        @Operation(summary = &quot;Get documents with pagination&quot;, description = &quot;Retrieve documents for the current user with pagination support&quot;)
+        @GetMapping(&quot;/user/paginated&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;PaginatedDocumentResponseDTO&gt;&gt; getDocumentsPaginated
+        (
+                        @Parameter(description = &quot;Page number (0-based)&quot;)
+                        @RequestParam(defaultValue = &quot;0&quot;)
+                        @Min(0) int page,
+                        @Parameter(description = &quot;Page size (1-50)&quot;)
+                        @RequestParam(defaultValue = &quot;10&quot;)
+                        @Min(value = 1, message = &quot;Page size must be at least 1&quot;)
+                        @Max(value = 30, message = &quot;Page size cannot exceed 30&quot;) int size
+        )
+        {
+
+<span class="nc" id="L283">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L284">                log.debug(&quot;Paginated request: user={}, page={}, size={}&quot;, userId, page, size);</span>
+
+<span class="nc" id="L286">                PaginatedDocumentResponseDTO response = documentService.getDocumentsPaginated(userId, page, size);</span>
+
+<span class="nc" id="L288">                return ResponseEntity.ok(ApiResponse.success(</span>
+<span class="nc" id="L289">                                String.format(&quot;Retrieved page %d with %d documents (total: %d)&quot;,</span>
+<span class="nc" id="L290">                                                page, response.getNumberOfElements(), response.getTotalElements()),</span>
+                                response));
+        }
+
+        /**
+         * Get documents by multiple types
+         *
+         * Business Logic:
+         * 1. Accept list of document types
+         * 2. Filter documents by specified types
+         * 3. Return matching documents
+         */
+        @Operation(summary = &quot;Get documents by types&quot;, description = &quot;Retrieve documents of specific types for the current user&quot;)
+        @PostMapping(&quot;/user/by-types&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;List&lt;DocumentResponseDTO&gt;&gt;&gt; getDocumentsByTypes
+        (
+                        @Parameter(description = &quot;List of document types to retrieve&quot;)
+                        @RequestBody List&lt;DocumentType&gt; documentTypes
+        )
+        {
+
+<span class="nc" id="L311">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L312">                log.debug(&quot;Get by types request: user={}, types={}&quot;, userId, documentTypes);</span>
+
+<span class="nc" id="L314">                List&lt;DocumentResponseDTO&gt; response = documentService.getDocumentsByTypes(userId, documentTypes);</span>
+
+<span class="nc" id="L316">                return ResponseEntity.ok(ApiResponse.success(&quot;Documents retrieved successfully&quot;, response));</span>
+        }
+
+        /**
+         * Update existing document
+         *
+         * Business Logic:
+         * 1. Validate user ownership and permissions
+         * 2. Update file if provided (with reprocessing)
+         * 3. Update description if provided
+         * 4. Save changes and return updated document
+         */
+        @Operation(summary = &quot;Update document&quot;, description = &quot;Update an existing document's file and/or description&quot;)
+        @PutMapping(value = &quot;/{documentId}&quot;, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentResponseDTO&gt;&gt; updateDocument
+        (
+                        @Parameter(description = &quot;Document ID to update&quot;, required = true)
+                        @PathVariable Integer documentId,
+                        @Parameter(description = &quot;New file (optional)&quot;)
+                        @RequestParam(value = &quot;file&quot;, required = false) MultipartFile file,
+                        @Parameter(description = &quot;New description (optional)&quot;)
+                        @RequestParam(value = &quot;description&quot;, required = false) String description
+        )
+        {
+
+<span class="nc" id="L341">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc bnc" id="L342" title="All 2 branches missed.">                log.info(&quot;Update request: user={}, documentId={}, hasFile={}&quot;,</span>
+<span class="nc bnc" id="L343" title="All 2 branches missed.">                                userId, documentId, file != null &amp;&amp; !file.isEmpty());</span>
+
+<span class="nc" id="L345">                DocumentResponseDTO response = documentService.updateDocument(userId, documentId, file, description);</span>
+
+<span class="nc" id="L347">                return ResponseEntity.ok(ApiResponse.success(&quot;Document updated successfully&quot;, response));</span>
+        }
+
+        /**
+         * Delete document by ID
+         *
+         * Business Logic:
+         * 1. Validate user ownership and delete permissions
+         * 2. Remove document from database
+         * 3. Clean up associated resources
+         */
+        @Operation(summary = &quot;Delete document by ID&quot;, description = &quot;Delete a specific document by its ID&quot;)
+        @DeleteMapping(&quot;/{documentId}&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;Void&gt;&gt; deleteDocument
+        (
+                        @Parameter(description = &quot;Document ID to delete&quot;, required = true)
+                        @PathVariable Integer documentId
+        )
+        {
+
+<span class="nc" id="L367">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L368">                log.info(&quot;Delete request: user={}, documentId={}&quot;, userId, documentId);</span>
+
+<span class="nc" id="L370">                documentService.deleteDocument(userId, documentId);</span>
+
+<span class="nc" id="L372">                return ResponseEntity.ok(ApiResponse.success(&quot;Document deleted successfully&quot;, null));</span>
+        }
+
+        /**
+         * Delete document by type
+         *
+         * Business Logic:
+         * 1. Find document of specified type for user
+         * 2. Delete if exists
+         * 3. Useful for replacing document types
+         */
+        @Operation(summary = &quot;Delete document by type&quot;, description = &quot;Delete a document by its type for the current user&quot;)
+        @DeleteMapping(&quot;/type/{documentType}&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;Void&gt;&gt; deleteDocumentByType
+        (
+                        @Parameter(description = &quot;Document type to delete&quot;, required = true)
+                        @PathVariable DocumentType documentType
+        )
+        {
+
+<span class="nc" id="L392">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L393">                log.info(&quot;Delete by type request: user={}, type={}&quot;, userId, documentType);</span>
+
+<span class="nc" id="L395">                documentService.deleteDocumentByType(userId, documentType);</span>
+
+<span class="nc" id="L397">                return ResponseEntity.ok(ApiResponse.success(&quot;Document deleted successfully&quot;, null));</span>
+        }
+
+        /**
+         * Check if document exists for a type
+         *
+         * Business Logic:
+         * 1. Query database for document existence
+         * 2. Return boolean result
+         * 3. Useful for UI logic and validation
+         */
+        @Operation(summary = &quot;Check document existence&quot;, description = &quot;Check if a document of specific type exists for the current user&quot;)
+        @GetMapping(&quot;/exists/{documentType}&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;Boolean&gt;&gt; checkDocumentExists
+        (
+                        @Parameter(description = &quot;Document type to check&quot;, required = true)
+                        @PathVariable DocumentType documentType)
+        {
+
+<span class="nc" id="L416">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L417">                log.debug(&quot;Existence check: user={}, type={}&quot;, userId, documentType);</span>
+
+<span class="nc" id="L419">                boolean exists = documentService.documentExists(userId, documentType);</span>
+
+<span class="nc" id="L421">                return ResponseEntity.ok(ApiResponse.success(&quot;Document existence checked&quot;, exists));</span>
+        }
+
+        /**
+         * Get document count for user
+         *
+         * Business Logic:
+         * 1. Count total documents for user
+         * 2. Return numeric count
+         * 3. Useful for dashboard and statistics
+         */
+        @Operation(summary = &quot;Get document count&quot;, description = &quot;Get the total number of documents for the current user&quot;)
+        @GetMapping(&quot;/count&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;Long&gt;&gt; getDocumentCount()
+        {
+
+<span class="nc" id="L437">                Long userId = SecurityUtil.getCurrentUserId();</span>
+<span class="nc" id="L438">                log.debug(&quot;Count request: user={}&quot;, userId);</span>
+
+<span class="nc" id="L440">                long count = documentService.getDocumentCount(userId);</span>
+
+<span class="nc" id="L442">                return ResponseEntity.ok(ApiResponse.success(&quot;Document count retrieved&quot;, count));</span>
+        }
+
+        /**
+         * Get available document types
+         *
+         * Business Logic:
+         * 1. Return all available document types from enum
+         * 2. Useful for UI dropdowns and validation
+         */
+        @Operation(summary = &quot;Get available document types&quot;, description = &quot;Retrieve all available document types that can be uploaded&quot;)
+        @GetMapping(&quot;/types&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;DocumentType[]&gt;&gt; getDocumentTypes()
+        {
+
+<span class="nc" id="L457">                log.debug(&quot;Document types request&quot;);</span>
+
+<span class="nc" id="L459">                return ResponseEntity.ok(ApiResponse.success(&quot;Document types retrieved&quot;, DocumentType.values()));</span>
+        }
+
+        /**
+         * Get system configuration information
+         *
+         * Business Logic:
+         * 1. Return system configuration for file uploads
+         * 2. Include size limits, supported types, etc.
+         * 3. Useful for client-side validation and UI
+         */
+        @Operation(summary = &quot;Get upload configuration&quot;, description = &quot;Get system configuration for file uploads including size limits and supported types&quot;)
+        @GetMapping(&quot;/config&quot;)
+        public ResponseEntity&lt;ApiResponse&lt;Object&gt;&gt; getUploadConfig()
+        {
+
+<span class="nc" id="L475">                log.debug(&quot;Config request&quot;);</span>
+
+<span class="nc" id="L477">                var config = new Object()</span>
+<span class="nc" id="L478">                {</span>
+<span class="nc" id="L479">                        public final long maxFileSizeBytes = documentProperties.getFileSize().getMaxFileSizeBytes();</span>
+<span class="nc" id="L480">                        public final long maxFileSizeMB = documentProperties.getMaxFileSizeMB();</span>
+<span class="nc" id="L481">                        public final List&lt;String&gt; supportedImageTypes = documentProperties.getSupportedImageTypes();</span>
+<span class="nc" id="L482">                        public final List&lt;String&gt; supportedDocumentTypes = documentProperties</span>
+<span class="nc" id="L483">                                        .getSupportedDocumentTypes();</span>
+<span class="nc" id="L484">                        public final DocumentType[] availableDocumentTypes = DocumentType.values();</span>
+                };
+
+<span class="nc" id="L487">                return ResponseEntity.ok(ApiResponse.success(&quot;Upload configuration retrieved&quot;, config));</span>
+        }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

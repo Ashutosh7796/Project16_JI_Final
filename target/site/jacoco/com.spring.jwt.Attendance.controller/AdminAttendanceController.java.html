@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminAttendanceController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Attendance.controller</a> &gt; <span class="el_source">AdminAttendanceController.java</span></div><h1>AdminAttendanceController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Attendance.controller;
+
+import com.spring.jwt.Attendance.dto.response.AttendanceResponse;
+import com.spring.jwt.Attendance.dto.response.MonthlyAttendanceResponse;
+import com.spring.jwt.Attendance.service.AttendanceService;
+import com.spring.jwt.utils.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * Admin Attendance Controller
+ * REST API endpoints for admin to manage and view employee attendance
+ */
+@RestController
+@RequestMapping(&quot;/api/v1/admin/attendance&quot;)
+<span class="nc" id="L29">@RequiredArgsConstructor</span>
+<span class="nc" id="L30">@Slf4j</span>
+@PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+@Tag(name = &quot;Admin Attendance&quot;, description = &quot;Admin endpoints for employee attendance management&quot;)
+public class AdminAttendanceController {
+
+    private final AttendanceService attendanceService;
+
+    /**
+     * Get all employees' attendance summary for admin dashboard
+     * GET /api/v1/admin/attendance/all-employees?month=2&amp;year=2026
+     */
+    @GetMapping(&quot;/all-employees&quot;)
+    @Operation(summary = &quot;Get all employees attendance (Admin)&quot;, description = &quot;Get attendance summary for all employees for a specific month&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;List&lt;MonthlyAttendanceResponse&gt;&gt;&gt; getAllEmployeesAttendance(
+            @RequestParam int month,
+            @RequestParam int year) {
+        
+<span class="nc" id="L47">        log.info(&quot;Admin fetching attendance for all employees - {}/{}&quot;, year, month);</span>
+        
+<span class="nc" id="L49">        List&lt;MonthlyAttendanceResponse&gt; response = attendanceService.getAllEmployeesMonthlyAttendance(year, month);</span>
+        
+<span class="nc" id="L51">        return ResponseEntity.ok(ApiResponse.success(&quot;All employees attendance retrieved successfully&quot;, response));</span>
+    }
+
+    /**
+     * Get employee attendance with location history for admin dashboard
+     * GET /api/v1/admin/attendance/employee/{userId}?month=2&amp;year=2026
+     */
+    @GetMapping(&quot;/employee/{userId}&quot;)
+    @Operation(summary = &quot;Get employee attendance (Admin)&quot;, description = &quot;Get employee attendance with location history for a specific month&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;MonthlyAttendanceResponse&gt;&gt; getEmployeeAttendance(
+            @PathVariable Long userId,
+            @RequestParam int month,
+            @RequestParam int year) {
+        
+<span class="nc" id="L65">        log.info(&quot;Admin fetching attendance for employee: {} - {}/{}&quot;, userId, year, month);</span>
+
+<span class="nc" id="L67">        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc" id="L68">        authentication.getAuthorities().forEach(a -&gt;</span>
+<span class="nc" id="L69">                System.err.println(a.getAuthority()));</span>
+
+<span class="nc" id="L71">        MonthlyAttendanceResponse response = attendanceService.getMonthlyAttendance(userId, year, month);</span>
+        
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (response == null) {</span>
+<span class="nc" id="L74">            return ResponseEntity.status(HttpStatus.NOT_FOUND)</span>
+<span class="nc" id="L75">                .body(ApiResponse.error(HttpStatus.NOT_FOUND, &quot;No attendance records found for employee in the specified month&quot;, null));</span>
+        }
+        
+<span class="nc" id="L78">        return ResponseEntity.ok(ApiResponse.success(&quot;Employee attendance retrieved successfully&quot;, response));</span>
+    }
+
+    /**
+     * Get employee attendance for date range (Admin)
+     * GET /api/v1/admin/attendance/employee/{userId}/range?startDate=2026-02-01&amp;endDate=2026-02-28
+     */
+    @GetMapping(&quot;/employee/{userId}/range&quot;)
+    @Operation(summary = &quot;Get employee attendance by date range (Admin)&quot;, description = &quot;Get employee attendance records for a date range&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;List&lt;AttendanceResponse&gt;&gt;&gt; getEmployeeAttendanceByDateRange(
+            @PathVariable Long userId,
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate) {
+        
+<span class="nc" id="L92">        log.info(&quot;Admin fetching attendance for employee: {} from {} to {}&quot;, userId, startDate, endDate);</span>
+
+<span class="nc" id="L94">        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc" id="L95">        authentication.getAuthorities().forEach(a -&gt;</span>
+<span class="nc" id="L96">                System.err.println(a.getAuthority()));</span>
+
+<span class="nc" id="L98">        List&lt;AttendanceResponse&gt; response = attendanceService.getAttendanceByDateRange(userId, startDate, endDate);</span>
+        
+<span class="nc" id="L100">        return ResponseEntity.ok(ApiResponse.success(&quot;Employee attendance records retrieved successfully&quot;, response));</span>
+    }
+
+    /**
+     * Get employee attendance for specific date (Admin)
+     * GET /api/v1/admin/attendance/employee/{userId}/date/{date}
+     */
+    @GetMapping(&quot;/employee/{userId}/date/{date}&quot;)
+    @Operation(summary = &quot;Get employee attendance by date (Admin)&quot;, description = &quot;Get employee attendance for a specific date&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;AttendanceResponse&gt;&gt; getEmployeeAttendanceByDate(
+            @PathVariable Long userId,
+            @PathVariable LocalDate date) {
+
+<span class="nc" id="L113">        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc" id="L114">        authentication.getAuthorities().forEach(a -&gt;</span>
+<span class="nc" id="L115">                System.err.println(a.getAuthority()));</span>
+<span class="nc" id="L116">        log.info(&quot;Admin fetching attendance for employee: {} on date: {}&quot;, userId, date);</span>
+        
+<span class="nc" id="L118">        AttendanceResponse response = attendanceService.getAttendanceByDate(userId, date);</span>
+        
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        if (response == null) {</span>
+<span class="nc" id="L121">            return ResponseEntity.status(HttpStatus.NOT_FOUND)</span>
+<span class="nc" id="L122">                .body(ApiResponse.error(HttpStatus.NOT_FOUND, &quot;No attendance record found for employee on the specified date&quot;, null));</span>
+        }
+        
+<span class="nc" id="L125">        return ResponseEntity.ok(ApiResponse.success(&quot;Employee attendance retrieved successfully&quot;, response));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

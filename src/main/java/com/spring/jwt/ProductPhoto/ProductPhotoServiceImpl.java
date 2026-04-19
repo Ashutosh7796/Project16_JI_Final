@@ -12,8 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -80,6 +85,38 @@ public class ProductPhotoServiceImpl implements ProductPhotoService {
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+    }
+
+    @Override
+    public List<ProductPhotosBatchRow> getAllPhotosByProductIds(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> distinct = productIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(200)
+                .collect(Collectors.toList());
+        if (distinct.isEmpty()) {
+            return List.of();
+        }
+        List<ProductImage> all = productPhotoRepository.findAllByProductIdIn(distinct);
+        Map<Long, List<ProductImage>> grouped = new LinkedHashMap<>();
+        for (Long id : distinct) {
+            grouped.put(id, new ArrayList<>());
+        }
+        for (ProductImage pi : all) {
+            Long pid = pi.getProduct().getProductId();
+            grouped.computeIfAbsent(pid, k -> new ArrayList<>()).add(pi);
+        }
+        List<ProductPhotosBatchRow> out = new ArrayList<>();
+        for (Long id : distinct) {
+            List<ProductPhotoResponseDTO> photos = grouped.getOrDefault(id, List.of()).stream()
+                    .map(this::mapToResponse)
+                    .toList();
+            out.add(new ProductPhotosBatchRow(id, photos));
+        }
+        return out;
     }
 
     @Override

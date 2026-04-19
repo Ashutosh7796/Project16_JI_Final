@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentResponseMapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.mapper</a> &gt; <span class="el_source">DocumentResponseMapper.java</span></div><h1>DocumentResponseMapper.java</h1><pre class="source lang-java linenums">package com.spring.jwt.mapper;
+
+import com.spring.jwt.dto.DocumentDetailResponseDTO;
+import com.spring.jwt.dto.DocumentResponseDTO;
+import com.spring.jwt.dto.PaginatedDocumentResponseDTO;
+import com.spring.jwt.entity.Document;
+import org.springframework.stereotype.Component;
+
+import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Component
+<span class="nc" id="L15">public class DocumentResponseMapper {</span>
+
+    /**
+     * Convert Document entity to DocumentResponseDTO (without file data)
+     * 
+     * @return Optional containing the DTO, or empty if document is null
+     */
+    public Optional&lt;DocumentResponseDTO&gt; toResponseDTO(Document document) {
+<span class="nc" id="L23">        return Optional.ofNullable(document)</span>
+<span class="nc" id="L24">                .map(doc -&gt; DocumentResponseDTO.builder()</span>
+<span class="nc" id="L25">                        .documentId(doc.getDocumentId())</span>
+<span class="nc" id="L26">                        .documentType(doc.getDocumentType())</span>
+<span class="nc" id="L27">                        .fileName(doc.getFileName())</span>
+<span class="nc" id="L28">                        .description(doc.getDescription())</span>
+<span class="nc" id="L29">                        .fileSize(doc.getFileSize())</span>
+<span class="nc" id="L30">                        .contentType(doc.getContentType())</span>
+<span class="nc" id="L31">                        .uploadedAt(doc.getUploadedAt())</span>
+<span class="nc" id="L32">                        .updatedAt(doc.getUpdatedAt())</span>
+<span class="nc" id="L33">                        .build());</span>
+    }
+
+    /**
+     * Convert Document entity to DocumentDetailResponseDTO (with file data)
+     * 
+     * @return Optional containing the detail DTO, or empty if document is null
+     */
+    public Optional&lt;DocumentDetailResponseDTO&gt; toDetailResponseDTO(Document document) {
+<span class="nc" id="L42">        return Optional.ofNullable(document)</span>
+<span class="nc" id="L43">                .map(doc -&gt; {</span>
+<span class="nc bnc" id="L44" title="All 2 branches missed.">                    String base64FileData = doc.getFileData() != null</span>
+<span class="nc" id="L45">                            ? Base64.getEncoder().encodeToString(doc.getFileData())</span>
+<span class="nc" id="L46">                            : null;</span>
+
+<span class="nc" id="L48">                    return DocumentDetailResponseDTO.builder()</span>
+<span class="nc" id="L49">                            .documentId(doc.getDocumentId())</span>
+<span class="nc" id="L50">                            .documentType(doc.getDocumentType())</span>
+<span class="nc" id="L51">                            .fileName(doc.getFileName())</span>
+<span class="nc" id="L52">                            .description(doc.getDescription())</span>
+<span class="nc" id="L53">                            .fileSize(doc.getFileSize())</span>
+<span class="nc" id="L54">                            .contentType(doc.getContentType())</span>
+<span class="nc" id="L55">                            .fileData(base64FileData)</span>
+<span class="nc" id="L56">                            .uploadedAt(doc.getUploadedAt())</span>
+<span class="nc" id="L57">                            .updatedAt(doc.getUpdatedAt())</span>
+<span class="nc" id="L58">                            .build();</span>
+                });
+    }
+
+    /**
+     * Convert list of Document entities to list of DocumentResponseDTOs
+     * Uses streams and flatMap to filter out null documents
+     */
+    public List&lt;DocumentResponseDTO&gt; toResponseDTOList(List&lt;Document&gt; documents) {
+<span class="nc" id="L67">        return Optional.ofNullable(documents)</span>
+<span class="nc" id="L68">                .map(docs -&gt; docs.stream()</span>
+<span class="nc" id="L69">                        .map(this::toResponseDTO)</span>
+<span class="nc" id="L70">                        .flatMap(Optional::stream)</span>
+<span class="nc" id="L71">                        .collect(Collectors.toList()))</span>
+<span class="nc" id="L72">                .orElse(List.of());</span>
+    }
+
+    /**
+     * Convert Spring Data Page to PaginatedDocumentResponseDTO
+     * Centralizes pagination metadata mapping following Single Responsibility
+     * Principle
+     * 
+     * @param documentPage Spring Data Page containing documents
+     * @return Paginated response DTO with all pagination metadata
+     */
+    public PaginatedDocumentResponseDTO toPaginatedResponseDTO(
+            org.springframework.data.domain.Page&lt;Document&gt; documentPage) {
+<span class="nc" id="L85">        List&lt;DocumentResponseDTO&gt; documents = toResponseDTOList(documentPage.getContent());</span>
+
+<span class="nc" id="L87">        return PaginatedDocumentResponseDTO.builder()</span>
+<span class="nc" id="L88">                .documents(documents)</span>
+<span class="nc" id="L89">                .currentPage(documentPage.getNumber())</span>
+<span class="nc" id="L90">                .pageSize(documentPage.getSize())</span>
+<span class="nc" id="L91">                .totalElements(documentPage.getTotalElements())</span>
+<span class="nc" id="L92">                .totalPages(documentPage.getTotalPages())</span>
+<span class="nc" id="L93">                .first(documentPage.isFirst())</span>
+<span class="nc" id="L94">                .last(documentPage.isLast())</span>
+<span class="nc" id="L95">                .hasNext(documentPage.hasNext())</span>
+<span class="nc" id="L96">                .hasPrevious(documentPage.hasPrevious())</span>
+<span class="nc" id="L97">                .numberOfElements(documentPage.getNumberOfElements())</span>
+<span class="nc" id="L98">                .empty(documentPage.isEmpty())</span>
+<span class="nc" id="L99">                .build();</span>
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * 
+     * @deprecated Use {@link #toResponseDTO(Document)} instead
+     */
+    @Deprecated
+    public Optional&lt;DocumentResponseDTO&gt; toDTO(Document document) {
+<span class="nc" id="L109">        return toResponseDTO(document);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

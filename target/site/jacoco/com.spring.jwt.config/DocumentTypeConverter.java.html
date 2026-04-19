@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentTypeConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">DocumentTypeConverter.java</span></div><h1>DocumentTypeConverter.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import com.spring.jwt.Enums.DocumentType;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.stereotype.Component;
+
+/**
+ * Custom converter for DocumentType enum
+ * Handles case-insensitive conversion from String to DocumentType
+ * Supports both enum constant names and display names
+ */
+@Component
+<span class="nc" id="L13">public class DocumentTypeConverter implements Converter&lt;String, DocumentType&gt; {</span>
+
+    @Override
+    public DocumentType convert(String source) {
+<span class="nc bnc" id="L17" title="All 4 branches missed.">        if (source == null || source.trim().isEmpty()) {</span>
+<span class="nc" id="L18">            throw new IllegalArgumentException(&quot;Document type cannot be null or empty&quot;);</span>
+        }
+
+        // Try to match by enum constant name (case-insensitive)
+<span class="nc bnc" id="L22" title="All 2 branches missed.">        for (DocumentType type : DocumentType.values()) {</span>
+<span class="nc bnc" id="L23" title="All 2 branches missed.">            if (type.name().equalsIgnoreCase(source.trim())) {</span>
+<span class="nc" id="L24">                return type;</span>
+            }
+        }
+
+        // Try to match by display name (case-insensitive)
+<span class="nc bnc" id="L29" title="All 2 branches missed.">        for (DocumentType type : DocumentType.values()) {</span>
+<span class="nc bnc" id="L30" title="All 2 branches missed.">            if (type.getDisplayName().equalsIgnoreCase(source.trim())) {</span>
+<span class="nc" id="L31">                return type;</span>
+            }
+        }
+
+        // If no match found, throw exception with helpful message
+<span class="nc" id="L36">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L37">            String.format(&quot;Invalid document type: '%s'. Valid types are: %s&quot;, </span>
+                source, 
+<span class="nc" id="L39">                String.join(&quot;, &quot;, getValidTypeNames())</span>
+            )
+        );
+    }
+
+    private String[] getValidTypeNames() {
+<span class="nc" id="L45">        DocumentType[] types = DocumentType.values();</span>
+<span class="nc" id="L46">        String[] names = new String[types.length];</span>
+<span class="nc bnc" id="L47" title="All 2 branches missed.">        for (int i = 0; i &lt; types.length; i++) {</span>
+<span class="nc" id="L48">            names[i] = types[i].name();</span>
+        }
+<span class="nc" id="L50">        return names;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

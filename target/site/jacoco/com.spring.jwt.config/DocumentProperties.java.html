@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentProperties.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">DocumentProperties.java</span></div><h1>DocumentProperties.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
+
+import java.util.List;
+
+/**
+ * Configuration properties for document management system
+ *
+ * This class centralizes all configuration related to document management,
+ * eliminating hardcoded values and providing type-safe configuration
+ * management.
+ *
+ **/
+
+<span class="nc bnc" id="L22" title="All 54 branches missed.">@Data</span>
+@Configuration
+@ConfigurationProperties(prefix = &quot;app.document&quot;)
+@Validated
+public class DocumentProperties
+{
+
+    /**
+     * File size configurations
+     */
+<span class="nc" id="L32">    @NotNull</span>
+<span class="nc" id="L33">    private FileSizeConfig fileSize = new FileSizeConfig();</span>
+
+    /**
+     * Image processing configurations
+     */
+<span class="nc" id="L38">    @NotNull</span>
+<span class="nc" id="L39">    private ImageConfig image = new ImageConfig();</span>
+
+    /**
+     * PDF processing configurations
+     */
+<span class="nc" id="L44">    @NotNull</span>
+<span class="nc" id="L45">    private PdfConfig pdf = new PdfConfig();</span>
+
+    /**
+     * Supported file types
+     */
+<span class="nc" id="L50">    @NotEmpty</span>
+<span class="nc" id="L51">    private List&lt;String&gt; supportedImageTypes = List.of(&quot;image/jpeg&quot;, &quot;image/jpg&quot;, &quot;image/png&quot;, &quot;image/webp&quot;);</span>
+
+<span class="nc" id="L53">    @NotEmpty</span>
+<span class="nc" id="L54">    private List&lt;String&gt; supportedDocumentTypes = List.of(&quot;application/pdf&quot;);</span>
+
+    /**
+     * Database configurations
+     */
+<span class="nc" id="L59">    @NotNull</span>
+<span class="nc" id="L60">    private DatabaseConfig database = new DatabaseConfig();</span>
+
+<span class="nc bnc" id="L62" title="All 14 branches missed.">    @Data</span>
+    public static class FileSizeConfig
+    {
+<span class="nc" id="L65">        @Min(1)</span>
+<span class="nc" id="L66">        private long maxFileSizeBytes = 15 * 1024 * 1024; // Global Fallback</span>
+
+<span class="nc" id="L68">        @Min(1)</span>
+<span class="nc" id="L69">        private long maxRequestSizeBytes = 20 * 1024 * 1024; // 20MB</span>
+
+<span class="nc" id="L71">        @Min(1)</span>
+<span class="nc" id="L72">        private long fileSizeThresholdBytes = 2 * 1024; // 2KB</span>
+
+<span class="nc" id="L74">        @Min(1)</span>
+<span class="nc" id="L75">        private long targetFileSizeKb = 1536; // 1.5MB (User requested &gt;1MB &amp; &lt;2MB)</span>
+    }
+
+<span class="nc bnc" id="L78" title="All 28 branches missed.">    @Data</span>
+    public static class ImageConfig
+    {
+<span class="nc" id="L81">        @Min(1)</span>
+<span class="nc" id="L82">        private long maxInputSizeBytes = 10 * 1024 * 1024; // 10MB</span>
+
+<span class="nc" id="L84">        @Min(1)</span>
+<span class="nc" id="L85">        private int maxWidth = 2560;</span>
+
+<span class="nc" id="L87">        @Min(1)</span>
+<span class="nc" id="L88">        private int maxHeight = 1080;</span>
+
+<span class="nc" id="L90">        @Min(1)</span>
+<span class="nc" id="L91">        private int profilePhotoSize = 800;</span>
+
+<span class="nc" id="L93">        private float highQuality = 0.95f;</span>
+<span class="nc" id="L94">        private float mediumQuality = 0.85f;</span>
+<span class="nc" id="L95">        private float lowQuality = 0.75f;</span>
+<span class="nc" id="L96">        private float qualityStep = 0.05f;</span>
+
+<span class="nc" id="L98">        @Min(1)</span>
+<span class="nc" id="L99">        private long maxSizeKb = 400;</span>
+
+<span class="nc" id="L101">        @Min(1)</span>
+<span class="nc" id="L102">        private long profilePhotoMaxSizeKb = 200;</span>
+
+<span class="nc" id="L104">        @Min(1)</span>
+<span class="nc" id="L105">        private int profilePhotoInputMultiplier = 10;</span>
+    }
+
+<span class="nc bnc" id="L108" title="All 12 branches missed.">    @Data</span>
+    public static class PdfConfig
+    {
+<span class="nc" id="L111">        @Min(1)</span>
+<span class="nc" id="L112">        private long maxInputSizeBytes = 1 * 1024 * 1024; // 1MB</span>
+
+<span class="nc" id="L114">        @Min(1)</span>
+<span class="nc" id="L115">        private int compressionLevel = 9;</span>
+
+<span class="nc" id="L117">        @Min(1)</span>
+<span class="nc" id="L118">        private long maxSizeKb = 1024;</span>
+    }
+
+<span class="nc bnc" id="L121" title="All 16 branches missed.">    @Data</span>
+    public static class DatabaseConfig
+    {
+<span class="nc" id="L124">        @Min(1)</span>
+<span class="nc" id="L125">        private int batchSize = 50;</span>
+
+<span class="nc" id="L127">        private boolean enableLazyLoading = true;</span>
+<span class="nc" id="L128">        private boolean enableQueryCache = true;</span>
+    }
+
+    /**
+     * Utility methods for easy access and validation
+     * These methods provide convenient access to configuration values
+     * and perform common validation operations
+     */
+
+    /**
+     * Get maximum file size in megabytes for display purposes
+     *
+     * @return maximum file size in MB
+     */
+    public long getMaxFileSizeMB()
+    {
+<span class="nc" id="L144">        return fileSize.maxFileSizeBytes / (1024 * 1024);</span>
+    }
+
+    /**
+     * Check if the given content type is a supported image type
+     *
+     * @param contentType the MIME type to check
+     * @return true if the content type is a supported image type
+     */
+    public boolean isSupportedImageType(String contentType)
+    {
+<span class="nc bnc" id="L155" title="All 4 branches missed.">        return contentType != null &amp;&amp; supportedImageTypes.contains(contentType);</span>
+    }
+
+    /**
+     * Check if the given content type is a supported document type
+     *
+     * @param contentType the MIME type to check
+     * @return true if the content type is a supported document type
+     */
+    public boolean isSupportedDocumentType(String contentType)
+    {
+<span class="nc bnc" id="L166" title="All 4 branches missed.">        return contentType != null &amp;&amp; supportedDocumentTypes.contains(contentType);</span>
+    }
+
+    /**
+     * Check if the given content type is any supported file type
+     *
+     * @param contentType the MIME type to check
+     * @return true if the content type is supported (either image or document)
+     */
+    public boolean isSupportedFileType(String contentType)
+    {
+<span class="nc bnc" id="L177" title="All 4 branches missed.">        return isSupportedImageType(contentType) || isSupportedDocumentType(contentType);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentSecurityServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Document.Service.Impl</a> &gt; <span class="el_source">DocumentSecurityServiceImpl.java</span></div><h1>DocumentSecurityServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Document.Service.Impl;
+
+import com.spring.jwt.Document.DocumentRepository;
+import com.spring.jwt.Document.Service.DocumentSecurityService;
+import com.spring.jwt.Enums.DocumentType;
+import com.spring.jwt.entity.Document;
+import com.spring.jwt.exception.DocumentNotFoundException;
+import com.spring.jwt.exception.UnauthorizedAccessException;
+import com.spring.jwt.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+import java.util.Set;
+
+/**
+ * Implementation of document security service
+ */
+@Service
+<span class="nc" id="L22">@Slf4j</span>
+<span class="nc" id="L23">@RequiredArgsConstructor</span>
+public class DocumentSecurityServiceImpl implements DocumentSecurityService {
+
+    private final DocumentRepository documentRepository;
+    private final UserRepository userRepository;
+
+<span class="nc" id="L29">    private static final Set&lt;DocumentType&gt; MULTIPLE_UPLOAD_ALLOWED = Set.of(</span>
+            DocumentType.EDUCATION_CERTIFICATE,
+            DocumentType.OTHER);
+
+<span class="nc" id="L33">    private static final Set&lt;DocumentType&gt; RESTRICTED_DOCUMENT_TYPES = Set.of(</span>
+            DocumentType.AADHAAR_CARD,
+            DocumentType.PAN_CARD,
+            DocumentType.PASSPORT);
+
+    @Override
+    public boolean canUploadDocument(Long userId, DocumentType documentType) {
+<span class="nc" id="L40">        log.debug(&quot;Checking upload permission for user {} and document type {}&quot;, userId, documentType);</span>
+
+<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (!userRepository.existsById(userId)) {</span>
+<span class="nc" id="L43">            log.warn(&quot;Upload denied: User {} not found&quot;, userId);</span>
+<span class="nc" id="L44">            return false;</span>
+        }
+
+<span class="nc" id="L47">        return true;</span>
+    }
+
+    @Override
+    public boolean canAccessDocument(Long userId, Integer documentId) {
+<span class="nc" id="L52">        log.debug(&quot;Checking access permission for user {} and document {}&quot;, userId, documentId);</span>
+
+        // Admins can access any document
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        if (isCurrentUserAdmin()) {</span>
+<span class="nc" id="L56">            return true;</span>
+        }
+
+        try {
+<span class="nc" id="L60">            Document document = findDocumentById(documentId);</span>
+<span class="nc" id="L61">            boolean canAccess = document.getUser().getUserId().equals(userId);</span>
+
+<span class="nc bnc" id="L63" title="All 2 branches missed.">            if (!canAccess) {</span>
+<span class="nc" id="L64">                log.warn(&quot;Access denied: Document {} does not belong to user {}&quot;, documentId, userId);</span>
+            }
+
+<span class="nc" id="L67">            return canAccess;</span>
+<span class="nc" id="L68">        } catch (DocumentNotFoundException e) {</span>
+<span class="nc" id="L69">            log.warn(&quot;Access denied: Document {} not found&quot;, documentId);</span>
+<span class="nc" id="L70">            return false;</span>
+        }
+    }
+
+    @Override
+    public boolean canModifyDocument(Long userId, Integer documentId) {
+        // Admins can modify any document
+<span class="nc bnc" id="L77" title="All 2 branches missed.">        if (isCurrentUserAdmin()) {</span>
+<span class="nc" id="L78">            return true;</span>
+        }
+<span class="nc" id="L80">        return canAccessDocument(userId, documentId);</span>
+    }
+
+    @Override
+    public boolean canDeleteDocument(Long userId, Integer documentId) {
+        // Admins can delete any document
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (isCurrentUserAdmin()) {</span>
+<span class="nc" id="L87">            return true;</span>
+        }
+
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        if (!canAccessDocument(userId, documentId)) {</span>
+<span class="nc" id="L91">            return false;</span>
+        }
+
+        try {
+<span class="nc" id="L95">            Document document = findDocumentById(documentId);</span>
+<span class="nc" id="L96">            DocumentType documentType = document.getDocumentType();</span>
+
+<span class="nc bnc" id="L98" title="All 2 branches missed.">            if (RESTRICTED_DOCUMENT_TYPES.contains(documentType)) {</span>
+<span class="nc" id="L99">                log.warn(&quot;Deletion restricted for document type: {}&quot;, documentType);</span>
+            }
+
+<span class="nc" id="L102">            return true;</span>
+<span class="nc" id="L103">        } catch (DocumentNotFoundException e) {</span>
+<span class="nc" id="L104">            return false;</span>
+        }
+    }
+
+    @Override
+    public void validateDocumentOwnership(Long userId, Integer documentId) {
+<span class="nc" id="L110">        log.debug(&quot;Validating document ownership for user {} and document {}&quot;, userId, documentId);</span>
+
+        // Admins bypass ownership check
+<span class="nc bnc" id="L113" title="All 2 branches missed.">        if (isCurrentUserAdmin()) {</span>
+<span class="nc" id="L114">            log.debug(&quot;Admin access granted for document {}&quot;, documentId);</span>
+<span class="nc" id="L115">            return;</span>
+        }
+
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (!canAccessDocument(userId, documentId)) {</span>
+<span class="nc" id="L119">            throw new UnauthorizedAccessException(</span>
+<span class="nc" id="L120">                    String.format(&quot;User %d is not authorized to access document %d&quot;, userId, documentId));</span>
+        }
+<span class="nc" id="L122">    }</span>
+
+    /**
+     * Checks if the currently authenticated user has the ADMIN or MANAGER role.
+     */
+    private boolean isCurrentUserAdmin() {
+<span class="nc" id="L128">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L129" title="All 4 branches missed.">        if (auth == null || !auth.isAuthenticated()) {</span>
+<span class="nc" id="L130">            return false;</span>
+        }
+<span class="nc" id="L132">        return auth.getAuthorities().stream()</span>
+<span class="nc bnc" id="L133" title="All 4 branches missed.">                .anyMatch(a -&gt; a.getAuthority().equals(&quot;ROLE_ADMIN&quot;) || a.getAuthority().equals(&quot;ROLE_MANAGER&quot;));</span>
+    }
+
+    @Override
+    public boolean allowsMultipleUploads(DocumentType documentType) {
+<span class="nc" id="L138">        return MULTIPLE_UPLOAD_ALLOWED.contains(documentType);</span>
+    }
+
+
+    private Document findDocumentById(Integer documentId) {
+<span class="nc" id="L143">        return documentRepository.findById(documentId)</span>
+<span class="nc" id="L144">                .orElseThrow(() -&gt; new DocumentNotFoundException(</span>
+                        &quot;Document not found with ID: &quot; + documentId));
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

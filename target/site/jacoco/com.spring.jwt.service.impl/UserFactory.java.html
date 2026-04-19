@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserFactory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.service.impl</a> &gt; <span class="el_source">UserFactory.java</span></div><h1>UserFactory.java</h1><pre class="source lang-java linenums">//package com.spring.jwt.service.impl;
+//
+//import com.spring.jwt.dto.AdminRegistrationRequest;
+//import com.spring.jwt.dto.SecureUserRegistrationRequest;
+//import com.spring.jwt.entity.User;
+//import jakarta.servlet.http.HttpServletRequest;
+//import lombok.RequiredArgsConstructor;
+//import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+//import org.springframework.stereotype.Component;
+//
+//@Component
+//@RequiredArgsConstructor
+//public class UserFactory {
+//
+//    private final BCryptPasswordEncoder passwordEncoder;
+//
+//    public User createUser(SecureUserRegistrationRequest request, HttpServletRequest httpRequest)
+//    {
+//        return buildUser(
+//            request.getEmail(),
+//            request.getPassword(),
+//            request.getMobileNumber(),
+//            request.getFirstName(),
+//            request.getLastName(),
+//            false,
+//            request.getAcceptTerms(),
+//            request.getAcceptPrivacyPolicy()
+//        );
+//    }
+//
+//    public User createAdmin(AdminRegistrationRequest request, HttpServletRequest httpRequest)
+//    {
+//        return buildUser(
+//            request.getEmail(),
+//            request.getPassword(),
+//            request.getMobileNumber(),
+//            request.getFirstName(),
+//            request.getLastName(),
+//            true,
+//            true,
+//            true
+//        );
+//    }
+//
+//    private User buildUser(String email, String password, Long mobileNumber,
+//                          String firstName, String lastName, boolean emailVerified,
+//                          boolean termsAccepted, boolean privacyPolicyAccepted)
+//    {
+//        User user = new User();
+//        user.setEmail(email.toLowerCase().trim());
+//        user.setPassword(passwordEncoder.encode(password));
+//        user.setMobileNumber(mobileNumber);
+//        user.setFirstName(firstName.trim());
+//        user.setLastName(lastName.trim());
+//        user.setEmailVerified(emailVerified);
+//        user.setTermsAccepted(termsAccepted);
+//        user.setPrivacyPolicyAccepted(privacyPolicyAccepted);
+//        user.setAccountLocked(false);
+//        user.setFailedLoginAttempts(0);
+//        return user;
+//    }
+//}
+
+package com.spring.jwt.service.impl;
+
+import com.spring.jwt.Employee.EmployeeRepository;
+import com.spring.jwt.dto.AdminRegistrationRequest;
+import com.spring.jwt.dto.SecureUserRegistrationRequest;
+import com.spring.jwt.entity.Employee;
+import com.spring.jwt.entity.Role;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.repository.RoleRepository;
+import com.spring.jwt.repository.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
+
+import java.util.Set;
+
+@Component
+<span class="nc" id="L87">@RequiredArgsConstructor</span>
+public class UserFactory {
+
+    private final BCryptPasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final EmployeeRepository employeeRepository;
+
+    /* ===================== PUBLIC USER REGISTRATION ===================== */
+
+    @Transactional
+    public User createUser(SecureUserRegistrationRequest request,
+                           HttpServletRequest httpRequest) {
+
+        // BUILD USER
+<span class="nc" id="L102">        User user = buildUser(</span>
+<span class="nc" id="L103">                request.getEmail(),</span>
+<span class="nc" id="L104">                request.getPassword(),</span>
+<span class="nc" id="L105">                request.getMobileNumber(),</span>
+<span class="nc" id="L106">                request.getFirstName(),</span>
+<span class="nc" id="L107">                request.getLastName(),</span>
+                false,
+<span class="nc" id="L109">                request.getAcceptTerms(),</span>
+<span class="nc" id="L110">                request.getAcceptPrivacyPolicy()</span>
+        );
+
+        /* ===================== ROLE LOGIC ===================== */
+
+        // Default to USER role for public registration
+<span class="nc" id="L116">        String roleName = &quot;USER&quot;;</span>
+        
+        // If role is explicitly provided, validate it
+<span class="nc bnc" id="L119" title="All 4 branches missed.">        if (request.getRole() != null &amp;&amp; !request.getRole().isBlank()) {</span>
+<span class="nc" id="L120">            roleName = request.getRole().toUpperCase();</span>
+            
+            // Block ADMIN role - requires special registration endpoint
+<span class="nc bnc" id="L123" title="All 2 branches missed.">            if (&quot;ADMIN&quot;.equals(roleName)) {</span>
+<span class="nc" id="L124">                throw new AccessDeniedException(&quot;ADMIN role cannot be assigned through public registration&quot;);</span>
+            }
+            
+            // MANAGER role requires ADMIN authorization
+<span class="nc bnc" id="L128" title="All 2 branches missed.">            if (&quot;MANAGER&quot;.equals(roleName)) {</span>
+<span class="nc" id="L129">                validateManagerRegistration();</span>
+            }
+        }
+
+<span class="nc" id="L133">        Role role = roleRepository.findByName(roleName);</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">        if (role == null) {</span>
+<span class="nc" id="L135">            throw new IllegalArgumentException(&quot;Invalid role: &quot; + roleName);</span>
+        }
+
+<span class="nc" id="L138">        user.setRoles(new java.util.HashSet&lt;&gt;(Set.of(role)));</span>
+
+<span class="nc" id="L140">        user = userRepository.save(user);</span>
+
+        /* ===================== CREATE EMPLOYEE FOR STAFF ===================== */
+
+<span class="nc bnc" id="L144" title="All 4 branches missed.">        if (&quot;SURVEYOR&quot;.equals(roleName) || &quot;LAB_TECHNICIAN&quot;.equals(roleName)) {</span>
+<span class="nc" id="L145">            createEmployee(user, request);</span>
+        }
+        
+        // MANAGER role requires ADMIN authorization (already validated above)
+<span class="nc bnc" id="L149" title="All 2 branches missed.">        if (&quot;MANAGER&quot;.equals(roleName)) {</span>
+<span class="nc" id="L150">            createEmployee(user, request);</span>
+        }
+
+<span class="nc" id="L153">        return user;</span>
+    }
+
+    /**
+     * Validates that only ADMIN users can register MANAGER role
+     */
+    private void validateManagerRegistration() {
+<span class="nc" id="L160">        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();</span>
+
+        // AnonymousAuthenticationToken still reports isAuthenticated()==true in Spring Security.
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        if (authentication == null</span>
+<span class="nc bnc" id="L164" title="All 4 branches missed.">                || !authentication.isAuthenticated()</span>
+                || authentication instanceof AnonymousAuthenticationToken
+<span class="nc bnc" id="L166" title="All 2 branches missed.">                || &quot;anonymousUser&quot;.equals(String.valueOf(authentication.getPrincipal()))) {</span>
+<span class="nc" id="L167">            throw new AccessDeniedException(</span>
+                    &quot;Authentication required to register MANAGER role. &quot;
+                            + &quot;Send Authorization: Bearer &lt;access_token&gt; or the access_token cookie from an admin login.&quot;);
+        }
+
+<span class="nc" id="L172">        boolean isAdmin = authentication.getAuthorities().stream()</span>
+<span class="nc" id="L173">                .anyMatch(a -&gt; &quot;ROLE_ADMIN&quot;.equals(a.getAuthority()));</span>
+
+<span class="nc bnc" id="L175" title="All 2 branches missed.">        if (!isAdmin) {</span>
+<span class="nc" id="L176">            throw new AccessDeniedException(&quot;Only ADMIN users can register MANAGER role&quot;);</span>
+        }
+<span class="nc" id="L178">    }</span>
+
+    /* ===================== ADMIN REGISTRATION ===================== */
+
+    @Transactional
+    public User createAdmin(AdminRegistrationRequest request,
+                            HttpServletRequest httpRequest) {
+
+<span class="nc" id="L186">        User user = buildUser(</span>
+<span class="nc" id="L187">                request.getEmail(),</span>
+<span class="nc" id="L188">                request.getPassword(),</span>
+<span class="nc" id="L189">                request.getMobileNumber(),</span>
+<span class="nc" id="L190">                request.getFirstName(),</span>
+<span class="nc" id="L191">                request.getLastName(),</span>
+                true,
+                true,
+                true
+        );
+
+<span class="nc" id="L197">        Role adminRole = roleRepository.findByName(&quot;ADMIN&quot;);</span>
+<span class="nc" id="L198">        user.setRoles(new java.util.HashSet&lt;&gt;(Set.of(adminRole)));</span>
+
+<span class="nc" id="L200">        return userRepository.save(user);</span>
+    }
+
+    /* ===================== INTERNAL HELPERS ===================== */
+
+    private User buildUser(String email, String password, Long mobileNumber,
+                           String firstName, String lastName,
+                           boolean emailVerified,
+                           boolean termsAccepted,
+                           boolean privacyPolicyAccepted) {
+
+<span class="nc" id="L211">        User user = new User();</span>
+<span class="nc" id="L212">        user.setEmail(email.toLowerCase().trim());</span>
+<span class="nc" id="L213">        user.setPassword(passwordEncoder.encode(password));</span>
+<span class="nc" id="L214">        user.setMobileNumber(mobileNumber);</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">        user.setFirstName(firstName != null ? firstName.trim() : null);</span>
+<span class="nc bnc" id="L216" title="All 2 branches missed.">        user.setLastName(lastName != null ? lastName.trim() : null);</span>
+<span class="nc" id="L217">        user.setEmailVerified(emailVerified);</span>
+<span class="nc" id="L218">        user.setTermsAccepted(termsAccepted);</span>
+<span class="nc" id="L219">        user.setPrivacyPolicyAccepted(privacyPolicyAccepted);</span>
+<span class="nc" id="L220">        user.setAccountLocked(false);</span>
+<span class="nc" id="L221">        user.setFailedLoginAttempts(0);</span>
+<span class="nc" id="L222">        return user;</span>
+    }
+
+    /* ===================== EMPLOYEE CREATION ===================== */
+
+    private void createEmployee(User user, SecureUserRegistrationRequest request) {
+
+<span class="nc" id="L229">        Employee employee = new Employee();</span>
+<span class="nc" id="L230">        employee.setUser(user);</span>
+
+<span class="nc" id="L232">        employee.setEmployeeCode(</span>
+<span class="nc bnc" id="L233" title="All 2 branches missed.">                request.getEmployeeCode() != null</span>
+<span class="nc" id="L234">                        ? request.getEmployeeCode()</span>
+<span class="nc" id="L235">                        : &quot;EMP-&quot; + user.getUserId()</span>
+        );
+
+<span class="nc" id="L238">        employee.setCompanyName(request.getCompanyName());</span>
+<span class="nc" id="L239">        employee.setAddress(request.getAddress());</span>
+<span class="nc" id="L240">        employee.setPermanentAddress(request.getPermanentAddress());</span>
+<span class="nc" id="L241">        employee.setCity(request.getCity());</span>
+<span class="nc" id="L242">        employee.setDistrict(request.getDistrict());</span>
+<span class="nc" id="L243">        employee.setState(request.getState());</span>
+<span class="nc" id="L244">        employee.setAccountNumber(request.getAccountNumber());</span>
+<span class="nc" id="L245">        employee.setIfscCode(request.getIfscCode());</span>
+<span class="nc" id="L246">        employee.setPfNumber(request.getPfNumber());</span>
+<span class="nc" id="L247">        employee.setInsuranceNumber(request.getInsuranceNumber());</span>
+<span class="nc" id="L248">        employee.setPanNumber(request.getPanNumber());</span>
+<span class="nc" id="L249">        employee.setVehicleNumber(request.getVehicleNumber());</span>
+<span class="nc" id="L250">        employee.setDescription(request.getDescription());</span>
+
+<span class="nc" id="L252">        employeeRepository.save(employee);</span>
+<span class="nc" id="L253">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,829 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.jwt.impl</a> &gt; <span class="el_source">JwtServiceImpl.java</span></div><h1>JwtServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.jwt.impl;
+
+import com.spring.jwt.exception.BaseException;
+import com.spring.jwt.jwt.JwtConfig;
+import com.spring.jwt.jwt.JwtService;
+import com.spring.jwt.jwt.TokenBlacklistService;
+import com.spring.jwt.jwt.ActiveSessionService;
+import com.spring.jwt.repository.UserRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.spring.jwt.service.security.AuthorityStrings;
+import com.spring.jwt.service.security.UserDetailsCustom;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
+import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L44">@Slf4j</span>
+public class JwtServiceImpl implements JwtService {
+    private static final String CLAIM_KEY_DEVICE_FINGERPRINT = &quot;dfp&quot;;
+    private static final String CLAIM_KEY_TOKEN_TYPE = &quot;token_type&quot;;
+    private static final String TOKEN_TYPE_ACCESS = &quot;access&quot;;
+    private static final String TOKEN_TYPE_REFRESH = &quot;refresh&quot;;
+
+    private final UserRepository userRepository;
+    private final JwtConfig jwtConfig;
+    private final UserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
+    /** When true, logs full JWT + decoded header/payload UTF-8 on parse failure only. Never logs signing secret. */
+    private final boolean insecureEmergencyJwtTrace;
+
+    @Autowired
+    public JwtServiceImpl(@Lazy UserDetailsService userDetailsService,
+                          UserRepository userRepository,
+                          @Lazy JwtConfig jwtConfig,
+                          TokenBlacklistService tokenBlacklistService,
+                          ActiveSessionService activeSessionService,
+                          @Value(&quot;${app.security.jwt.diagnostic-logging:false}&quot;) boolean jwtDiagnosticLogging,
+<span class="nc" id="L67">                          @Value(&quot;${app.security.jwt.insecure-emergency-trace:false}&quot;) boolean insecureEmergencyJwtTrace) {</span>
+<span class="nc" id="L68">        this.userDetailsService = userDetailsService;</span>
+<span class="nc" id="L69">        this.userRepository = userRepository;</span>
+<span class="nc" id="L70">        this.jwtConfig = jwtConfig;</span>
+<span class="nc" id="L71">        this.tokenBlacklistService = tokenBlacklistService;</span>
+<span class="nc" id="L72">        this.activeSessionService = activeSessionService;</span>
+<span class="nc" id="L73">        this.jwtDiagnosticLogging = jwtDiagnosticLogging;</span>
+<span class="nc" id="L74">        this.insecureEmergencyJwtTrace = insecureEmergencyJwtTrace;</span>
+<span class="nc" id="L75">    }</span>
+
+    @PostConstruct
+    void validateJwtSecret() {
+        try {
+<span class="nc" id="L80">            getKey();</span>
+<span class="nc" id="L81">            byte[] rawKeyBytes = Decoders.BASE64.decode(jwtConfig.getSecret());</span>
+<span class="nc" id="L82">            byte[] fp = MessageDigest.getInstance(&quot;SHA-256&quot;).digest(rawKeyBytes);</span>
+<span class="nc" id="L83">            String fp12 = HexFormat.of().formatHex(fp).substring(0, 12);</span>
+<span class="nc" id="L84">            log.info(</span>
+                    &quot;JWT signing key loaded (Base64 decode OK). [jwt-signing] keySha256First12={} issuer={} audience={} accessTtlMs={} refreshTtlSec={} clockSkewSec={} dfpEnabled={} — compare keySha256First12 on every instance; mismatch invalidates all tokens.&quot;,
+                    fp12,
+<span class="nc" id="L87">                    asciiSafeLog(jwtConfig.getIssuer(), 80),</span>
+<span class="nc" id="L88">                    asciiSafeLog(jwtConfig.getAudience(), 80),</span>
+<span class="nc" id="L89">                    jwtConfig.getExpiration(),</span>
+<span class="nc" id="L90">                    jwtConfig.getRefreshExpiration(),</span>
+<span class="nc" id="L91">                    jwtConfig.getAllowedClockSkewSeconds(),</span>
+<span class="nc" id="L92">                    jwtConfig.isDeviceFingerprintingEnabled());</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">            if (insecureEmergencyJwtTrace) {</span>
+<span class="nc" id="L94">                log.error(&quot;app.security.jwt.insecure-emergency-trace=true: on JWT parse failure the server will log the FULL compact token and raw header/payload segments. &quot;</span>
+                        + &quot;Signing secret is NEVER logged. Disable immediately after triage.&quot;);
+            }
+<span class="nc" id="L97">        } catch (Exception e) {</span>
+<span class="nc" id="L98">            throw new IllegalStateException(</span>
+                    &quot;Invalid jwt.secret: must be a Base64-encoded key (HS256, sufficient length). &quot;
+                            + &quot;If you use JWT_SECRET env var, it must be identical on every instance and non-empty.&quot;, e);
+<span class="nc" id="L101">        }</span>
+<span class="nc" id="L102">    }</span>
+
+    @Override
+    public Claims extractClaims(String token) {
+<span class="nc" id="L106">        return Jwts</span>
+<span class="nc" id="L107">                .parserBuilder()</span>
+<span class="nc" id="L108">                .setAllowedClockSkewSeconds(jwtConfig.getAllowedClockSkewSeconds())</span>
+<span class="nc" id="L109">                .setSigningKey(getKey())</span>
+<span class="nc" id="L110">                .build()</span>
+<span class="nc" id="L111">                .parseClaimsJws(token)</span>
+<span class="nc" id="L112">                .getBody();</span>
+    }
+
+    @Override
+    public Claims extractClaimsIgnoreExpiration(String token) {
+        try {
+<span class="nc" id="L118">            return Jwts</span>
+<span class="nc" id="L119">                .parserBuilder()</span>
+<span class="nc" id="L120">                .setAllowedClockSkewSeconds(jwtConfig.getAllowedClockSkewSeconds())</span>
+<span class="nc" id="L121">                .setSigningKey(getKey())</span>
+<span class="nc" id="L122">                .build()</span>
+<span class="nc" id="L123">                .parseClaimsJws(token)</span>
+<span class="nc" id="L124">                .getBody();</span>
+<span class="nc" id="L125">        } catch (ExpiredJwtException e) {</span>
+<span class="nc" id="L126">            return e.getClaims();</span>
+<span class="nc" id="L127">        } catch (Exception e) {</span>
+<span class="nc" id="L128">            log.warn(&quot;Error extracting claims ignoring expiration: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L129">            return null;</span>
+        }
+    }
+
+    @Override
+    public Key  getKey() {
+<span class="nc" id="L135">        byte[] key = Decoders.BASE64.decode(jwtConfig.getSecret());</span>
+<span class="nc" id="L136">        return Keys.hmacShaKeyFor(key);</span>
+    }
+
+    /**
+     * Resolves {@code authorities} for JWT signing: scalar JPQL first (fresh {@link String} values),
+     * then normalizes to strict ASCII Spring role tokens and copies through US_ASCII bytes so the JWT
+     * layer never retains Hibernate-managed character state.
+     */
+    private List&lt;String&gt; authorityClaimsForJwt(UserDetailsCustom userDetailsCustom) {
+        try {
+<span class="nc" id="L146">            List&lt;String&gt; roleNames = userRepository.findRoleNamesByUserId(userDetailsCustom.getUserId());</span>
+<span class="nc" id="L147">            log.debug(&quot;authorityClaimsForJwt: userId={} roleNames={}&quot;, userDetailsCustom.getUserId(), roleNames);</span>
+            
+<span class="nc bnc" id="L149" title="All 4 branches missed.">            if (roleNames != null &amp;&amp; !roleNames.isEmpty()) {</span>
+<span class="nc" id="L150">                List&lt;String&gt; processed = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">                for (String roleName : roleNames) {</span>
+<span class="nc" id="L152">                    String afterSpring = AuthorityStrings.springAuthorityFromDatabaseRole(roleName);</span>
+<span class="nc" id="L153">                    String afterIsolate = isolatedAsciiAuthority(afterSpring);</span>
+<span class="nc" id="L154">                    processed.add(afterIsolate);</span>
+<span class="nc" id="L155">                }</span>
+                
+<span class="nc" id="L157">                List&lt;String&gt; result = processed.stream().distinct().collect(Collectors.toList());</span>
+<span class="nc" id="L158">                log.debug(&quot;authorityClaimsForJwt: final result={}&quot;, result);</span>
+<span class="nc" id="L159">                return result;</span>
+            }
+<span class="nc" id="L161">        } catch (Exception ex) {</span>
+<span class="nc" id="L162">            log.warn(&quot;JPQL role fetch for JWT failed; falling back. user={} msg={}&quot;,</span>
+<span class="nc" id="L163">                    maskEmail(userDetailsCustom.getUsername()),</span>
+<span class="nc" id="L164">                    asciiSafeLog(ex.getMessage(), 200));</span>
+<span class="nc" id="L165">        }</span>
+
+        Collection&lt;? extends GrantedAuthority&gt; source;
+        try {
+<span class="nc" id="L169">            UserDetails reloaded = userDetailsService.loadUserByUsername(userDetailsCustom.getUsername());</span>
+<span class="nc" id="L170">            source = reloaded.getAuthorities();</span>
+<span class="nc" id="L171">        } catch (Exception ex) {</span>
+<span class="nc" id="L172">            log.warn(&quot;Could not reload authorities for JWT; using principal copy. user={} msg={}&quot;,</span>
+<span class="nc" id="L173">                    maskEmail(userDetailsCustom.getUsername()),</span>
+<span class="nc" id="L174">                    asciiSafeLog(ex.getMessage(), 200));</span>
+<span class="nc" id="L175">            source = userDetailsCustom.getAuthorities();</span>
+<span class="nc" id="L176">        }</span>
+<span class="nc bnc" id="L177" title="All 4 branches missed.">        if (source == null || source.isEmpty()) {</span>
+<span class="nc" id="L178">            return List.of(isolatedAsciiAuthority(AuthorityStrings.forJwtClaim(&quot;ROLE_USER&quot;)));</span>
+        }
+<span class="nc" id="L180">        return source.stream()</span>
+<span class="nc" id="L181">                .map(GrantedAuthority::getAuthority)</span>
+<span class="nc" id="L182">                .map(AuthorityStrings::forJwtClaim)</span>
+<span class="nc" id="L183">                .map(JwtServiceImpl::isolatedAsciiAuthority)</span>
+<span class="nc" id="L184">                .distinct()</span>
+<span class="nc" id="L185">                .collect(Collectors.toList());</span>
+    }
+
+    private static String isolatedAsciiAuthority(String authority) {
+<span class="nc bnc" id="L189" title="All 2 branches missed.">        String s = authority == null ? &quot;&quot; : authority;</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">        if (!StringUtils.hasText(s)) {</span>
+<span class="nc" id="L191">            s = AuthorityStrings.springAuthorityFromDatabaseRole(&quot;&quot;);</span>
+        }
+        // AuthorityStrings.normalizeAuthorityToken already ensures only safe ASCII chars
+        // No need for US_ASCII conversion which can corrupt data
+<span class="nc" id="L195">        return s;</span>
+    }
+
+    /**
+     * Ensures the signed payload decodes as strict UTF-8 and parses as JSON with a textual {@code authorities} array.
+     * Catches corrupt tokens before they leave the server.
+     */
+    private static void assertJwtPayloadWellFormed(String compact) {
+<span class="nc" id="L203">        String[] parts = compact.split(&quot;\\.&quot;);</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">        if (parts.length &lt; 2) {</span>
+<span class="nc" id="L205">            throw new IllegalStateException(&quot;JWT has no payload segment&quot;);</span>
+        }
+<span class="nc" id="L207">        byte[] raw = Decoders.BASE64URL.decode(parts[1]);</span>
+<span class="nc" id="L208">        CharsetDecoder utf8 = StandardCharsets.UTF_8.newDecoder()</span>
+<span class="nc" id="L209">                .onMalformedInput(CodingErrorAction.REPORT)</span>
+<span class="nc" id="L210">                .onUnmappableCharacter(CodingErrorAction.REPORT);</span>
+        try {
+<span class="nc" id="L212">            utf8.decode(ByteBuffer.wrap(raw));</span>
+<span class="nc" id="L213">        } catch (CharacterCodingException e) {</span>
+<span class="nc" id="L214">            throw new IllegalStateException(&quot;JWT payload is not well-formed UTF-8&quot;, e);</span>
+<span class="nc" id="L215">        }</span>
+        try {
+<span class="nc" id="L217">            JsonNode root = Utf8JwtClaimsSerializer.mapper().readTree(raw);</span>
+<span class="nc" id="L218">            JsonNode auth = root.get(&quot;authorities&quot;);</span>
+<span class="nc bnc" id="L219" title="All 6 branches missed.">            if (auth == null || !auth.isArray() || auth.isEmpty()) {</span>
+<span class="nc" id="L220">                throw new IllegalStateException(&quot;authorities missing or not a non-empty JSON array&quot;);</span>
+            }
+<span class="nc bnc" id="L222" title="All 2 branches missed.">            for (JsonNode n : auth) {</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">                if (!n.isTextual()) {</span>
+<span class="nc" id="L224">                    throw new IllegalStateException(&quot;authorities must be an array of strings&quot;);</span>
+                }
+<span class="nc" id="L226">                String t = n.asText();</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">                for (int i = 0; i &lt; t.length(); ) {</span>
+<span class="nc" id="L228">                    int cp = t.codePointAt(i);</span>
+<span class="nc bnc" id="L229" title="All 6 branches missed.">                    if (cp &lt; 0x20 || cp == 0x7f || cp &gt; 0x7e) {</span>
+<span class="nc" id="L230">                        throw new IllegalStateException(&quot;authority string must be printable ASCII only&quot;);</span>
+                    }
+<span class="nc" id="L232">                    i += Character.charCount(cp);</span>
+<span class="nc" id="L233">                }</span>
+<span class="nc" id="L234">            }</span>
+<span class="nc" id="L235">        } catch (IllegalStateException e) {</span>
+<span class="nc" id="L236">            throw e;</span>
+<span class="nc" id="L237">        } catch (Exception e) {</span>
+<span class="nc" id="L238">            throw new IllegalStateException(&quot;JWT payload is not valid JSON&quot;, e);</span>
+<span class="nc" id="L239">        }</span>
+<span class="nc" id="L240">    }</span>
+
+    @Override
+    public String generateToken(UserDetailsCustom userDetailsCustom) {
+<span class="nc" id="L244">        return generateToken(userDetailsCustom, null);</span>
+    }
+
+    @Override
+    public String generateToken(UserDetailsCustom userDetailsCustom, String deviceFingerprint) {
+<span class="nc" id="L249">        Instant now = Instant.now();</span>
+<span class="nc" id="L250">        Instant notBefore = now;</span>
+
+<span class="nc" id="L252">        List&lt;String&gt; roles = authorityClaimsForJwt(userDetailsCustom);</span>
+
+<span class="nc" id="L254">        log.debug(&quot;Roles for JWT: {}&quot;, roles);</span>
+
+<span class="nc" id="L256">        Long userId = userDetailsCustom.getUserId();</span>
+
+        try {
+<span class="nc" id="L259">            boolean isLocked = userRepository.existsByUserIdAndAccountLockedTrue(Math.toIntExact(userId));</span>
+
+<span class="nc bnc" id="L261" title="All 2 branches missed.">            if (isLocked) {</span>
+<span class="nc" id="L262">                throw new BaseException(</span>
+<span class="nc" id="L263">                        String.valueOf(HttpStatus.BAD_REQUEST.value()),</span>
+                        &quot;connect with admin Your account is lock&quot;
+                );
+            }
+<span class="nc" id="L267">        } catch (BaseException ex) {</span>
+<span class="nc" id="L268">            throw ex;</span>
+<span class="nc" id="L269">        }</span>
+<span class="nc" id="L270">        String firstName = sanitizeForJson(userDetailsCustom.getFirstName());</span>
+        
+<span class="nc" id="L272">        log.debug(&quot;Generating access token for user: {}, device: {}&quot;, </span>
+<span class="nc" id="L273">                userDetailsCustom.getUsername(), </span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">                deviceFingerprint != null ? deviceFingerprint.substring(0, 8) + &quot;...&quot; : &quot;none&quot;);</span>
+
+<span class="nc" id="L276">        String accessJti = UUID.randomUUID().toString();</span>
+            
+<span class="nc" id="L278">        JwtBuilder jwtBuilder = Jwts.builder()</span>
+<span class="nc" id="L279">                .serializeToJsonWith(Utf8JwtClaimsSerializer.INSTANCE)</span>
+<span class="nc" id="L280">                .setSubject(sanitizeForJson(userDetailsCustom.getUsername()))</span>
+<span class="nc" id="L281">                .setIssuer(jwtConfig.getIssuer())</span>
+<span class="nc" id="L282">                .setAudience(jwtConfig.getAudience())</span>
+<span class="nc" id="L283">                .setId(accessJti)</span>
+<span class="nc" id="L284">                .claim(&quot;firstname&quot;, firstName)</span>
+<span class="nc" id="L285">                .claim(&quot;userId&quot;, userId)</span>
+<span class="nc" id="L286">                .claim(&quot;authorities&quot;, roles)</span>
+<span class="nc" id="L287">                .claim(&quot;isEnable&quot;, userDetailsCustom.isEnabled());</span>
+
+<span class="nc bnc" id="L289" title="All 2 branches missed.">        if (userDetailsCustom.getUserProfileId() != null) {</span>
+<span class="nc" id="L290">            jwtBuilder.claim(&quot;userProfileId&quot;, userDetailsCustom.getUserProfileId());</span>
+        }
+
+<span class="nc" id="L293">        jwtBuilder.claim(CLAIM_KEY_TOKEN_TYPE, TOKEN_TYPE_ACCESS)</span>
+<span class="nc" id="L294">                .setIssuedAt(Date.from(now))</span>
+<span class="nc" id="L295">                .setNotBefore(Date.from(notBefore))</span>
+<span class="nc" id="L296">                .setExpiration(Date.from(now.plusMillis(jwtConfig.getExpiration())))</span>
+<span class="nc" id="L297">                .signWith(getKey(), SignatureAlgorithm.HS256);</span>
+
+<span class="nc bnc" id="L299" title="All 4 branches missed.">        if (jwtConfig.isDeviceFingerprintingEnabled() &amp;&amp; StringUtils.hasText(deviceFingerprint)) {</span>
+<span class="nc" id="L300">            jwtBuilder.claim(CLAIM_KEY_DEVICE_FINGERPRINT, deviceFingerprint);</span>
+        }
+
+<span class="nc" id="L303">        String compact = jwtBuilder.compact();</span>
+        
+        try {
+<span class="nc" id="L306">            assertJwtPayloadWellFormed(compact);</span>
+<span class="nc" id="L307">        } catch (RuntimeException e) {</span>
+<span class="nc" id="L308">            log.error(&quot;Signed access JWT failed UTF-8/JSON self-check userMasked={}&quot;, maskEmail(userDetailsCustom.getUsername()), e);</span>
+<span class="nc" id="L309">            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()),</span>
+                    &quot;Could not build a valid access token (internal check failed).&quot;, e);
+<span class="nc" id="L311">        }</span>
+<span class="nc" id="L312">        long expSec = now.plusMillis(jwtConfig.getExpiration()).getEpochSecond();</span>
+<span class="nc" id="L313">        jwtDiag(&quot;signed access userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}&quot;,</span>
+<span class="nc" id="L314">                maskEmail(userDetailsCustom.getUsername()),</span>
+<span class="nc" id="L315">                jtiPrefix(accessJti),</span>
+<span class="nc" id="L316">                expSec,</span>
+<span class="nc" id="L317">                compact.length(),</span>
+<span class="nc bnc" id="L318" title="All 4 branches missed.">                jwtConfig.isDeviceFingerprintingEnabled() &amp;&amp; StringUtils.hasText(deviceFingerprint));</span>
+<span class="nc" id="L319">        return compact;</span>
+    }
+    
+    @Override
+    public String generateRefreshToken(UserDetailsCustom userDetailsCustom, String deviceFingerprint) {
+<span class="nc" id="L324">        Instant now = Instant.now();</span>
+<span class="nc" id="L325">        Instant notBefore = now;</span>
+        
+<span class="nc" id="L327">        log.debug(&quot;Generating refresh token for user: {}, device: {}&quot;, </span>
+<span class="nc" id="L328">                userDetailsCustom.getUsername(), </span>
+<span class="nc bnc" id="L329" title="All 2 branches missed.">                deviceFingerprint != null ? deviceFingerprint.substring(0, 8) + &quot;...&quot; : &quot;none&quot;);</span>
+
+<span class="nc" id="L331">        List&lt;String&gt; roles = authorityClaimsForJwt(userDetailsCustom);</span>
+
+<span class="nc" id="L333">            String refreshJti = UUID.randomUUID().toString();</span>
+<span class="nc" id="L334">            JwtBuilder jwtBuilder = Jwts.builder()</span>
+<span class="nc" id="L335">                .serializeToJsonWith(Utf8JwtClaimsSerializer.INSTANCE)</span>
+<span class="nc" id="L336">                .setSubject(sanitizeForJson(userDetailsCustom.getUsername()))</span>
+<span class="nc" id="L337">                .setIssuer(jwtConfig.getIssuer())</span>
+<span class="nc" id="L338">                .setId(refreshJti)</span>
+<span class="nc" id="L339">                .claim(&quot;userId&quot;, userDetailsCustom.getUserId())</span>
+<span class="nc" id="L340">                .claim(&quot;authorities&quot;, roles);</span>
+
+<span class="nc bnc" id="L342" title="All 2 branches missed.">        if (userDetailsCustom.getUserProfileId() != null) {</span>
+<span class="nc" id="L343">            jwtBuilder.claim(&quot;userProfileId&quot;, userDetailsCustom.getUserProfileId());</span>
+        }
+        
+
+        
+<span class="nc" id="L348">        jwtBuilder.claim(CLAIM_KEY_TOKEN_TYPE, TOKEN_TYPE_REFRESH)</span>
+<span class="nc" id="L349">                .setIssuedAt(Date.from(now))</span>
+<span class="nc" id="L350">                .setNotBefore(Date.from(notBefore))</span>
+<span class="nc" id="L351">                .setExpiration(Date.from(now.plusSeconds(jwtConfig.getRefreshExpiration())))</span>
+<span class="nc" id="L352">                .signWith(getKey(), SignatureAlgorithm.HS256);</span>
+
+<span class="nc bnc" id="L354" title="All 4 branches missed.">        if (jwtConfig.isDeviceFingerprintingEnabled() &amp;&amp; StringUtils.hasText(deviceFingerprint)) {</span>
+<span class="nc" id="L355">            jwtBuilder.claim(CLAIM_KEY_DEVICE_FINGERPRINT, deviceFingerprint);</span>
+        }
+
+<span class="nc" id="L358">        String compact = jwtBuilder.compact();</span>
+        try {
+<span class="nc" id="L360">            assertJwtPayloadWellFormed(compact);</span>
+<span class="nc" id="L361">        } catch (RuntimeException e) {</span>
+<span class="nc" id="L362">            log.error(&quot;Signed refresh JWT failed UTF-8/JSON self-check userMasked={}&quot;, maskEmail(userDetailsCustom.getUsername()), e);</span>
+<span class="nc" id="L363">            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()),</span>
+                    &quot;Could not build a valid refresh token (internal check failed).&quot;, e);
+<span class="nc" id="L365">        }</span>
+<span class="nc" id="L366">        long expSec = now.plusSeconds(jwtConfig.getRefreshExpiration()).getEpochSecond();</span>
+<span class="nc" id="L367">        jwtDiag(&quot;signed refresh userMasked={} jti={} expEpochSec={} tokenLen={} dfpEmbedded={}&quot;,</span>
+<span class="nc" id="L368">                maskEmail(userDetailsCustom.getUsername()),</span>
+<span class="nc" id="L369">                jtiPrefix(refreshJti),</span>
+<span class="nc" id="L370">                expSec,</span>
+<span class="nc" id="L371">                compact.length(),</span>
+<span class="nc bnc" id="L372" title="All 4 branches missed.">                jwtConfig.isDeviceFingerprintingEnabled() &amp;&amp; StringUtils.hasText(deviceFingerprint));</span>
+<span class="nc" id="L373">        return compact;</span>
+    }
+    
+    @Override
+    public String extractDeviceFingerprint(String token) {
+        try {
+<span class="nc" id="L379">            Claims claims = extractClaims(token);</span>
+<span class="nc" id="L380">            return claims.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class);</span>
+<span class="nc" id="L381">        } catch (Exception e) {</span>
+<span class="nc" id="L382">            log.warn(&quot;Error extracting device fingerprint from token&quot;, e);</span>
+<span class="nc" id="L383">            return null;</span>
+        }
+    }
+    
+    @Override
+    public boolean isRefreshToken(String token) {
+        try {
+<span class="nc" id="L390">            Claims claims = extractAllClaims(token);</span>
+<span class="nc" id="L391">            String tokenType = claims.get(CLAIM_KEY_TOKEN_TYPE, String.class);</span>
+<span class="nc" id="L392">            log.debug(&quot;Token type: {}&quot;, tokenType);</span>
+<span class="nc" id="L393">            return TOKEN_TYPE_REFRESH.equals(tokenType);</span>
+<span class="nc" id="L394">        } catch (Exception e) {</span>
+<span class="nc" id="L395">            log.warn(&quot;Error checking if token is refresh token: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L396">            return false;</span>
+        }
+    }
+    
+    @Override
+    public String generateDeviceFingerprint(HttpServletRequest request) {
+<span class="nc bnc" id="L402" title="All 2 branches missed.">        if (request == null) {</span>
+<span class="nc" id="L403">            return null;</span>
+        }
+        
+        try {
+<span class="nc" id="L407">            String ip = request.getHeader(&quot;X-Forwarded-For&quot;);</span>
+<span class="nc bnc" id="L408" title="All 4 branches missed.">            if (ip != null &amp;&amp; ip.contains(&quot;,&quot;)) {</span>
+<span class="nc" id="L409">                ip = ip.split(&quot;,&quot;)[0].trim();</span>
+            }
+<span class="nc bnc" id="L411" title="All 4 branches missed.">            if (ip == null || ip.isBlank()) {</span>
+<span class="nc" id="L412">                ip = request.getRemoteAddr();</span>
+            }
+<span class="nc" id="L414">            String ua = request.getHeader(&quot;User-Agent&quot;);</span>
+<span class="nc" id="L415">            String lang = request.getHeader(&quot;Accept-Language&quot;);</span>
+<span class="nc" id="L416">            String enc = request.getHeader(&quot;Accept-Encoding&quot;);</span>
+
+<span class="nc" id="L418">            StringBuilder deviceInfo = new StringBuilder();</span>
+<span class="nc" id="L419">            deviceInfo.append(ua).append(&quot;|&quot;);</span>
+<span class="nc" id="L420">            deviceInfo.append(ip).append(&quot;|&quot;);</span>
+<span class="nc" id="L421">            deviceInfo.append(lang).append(&quot;|&quot;);</span>
+<span class="nc" id="L422">            deviceInfo.append(enc);</span>
+
+<span class="nc" id="L424">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L425">            byte[] hash = digest.digest(deviceInfo.toString().getBytes(StandardCharsets.UTF_8));</span>
+
+<span class="nc" id="L427">            return Base64.getEncoder().encodeToString(hash);</span>
+<span class="nc" id="L428">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L429">            log.error(&quot;Error generating device fingerprint&quot;, e);</span>
+<span class="nc" id="L430">            return null;</span>
+        }
+    }
+    
+    @Override
+    public Map&lt;String, Object&gt; extractAllCustomClaims(String token) {
+<span class="nc" id="L436">        Claims claims = extractClaims(token);</span>
+
+<span class="nc" id="L438">        Map&lt;String, Object&gt; customClaims = new HashMap&lt;&gt;(claims);</span>
+<span class="nc" id="L439">        customClaims.remove(&quot;sub&quot;);</span>
+<span class="nc" id="L440">        customClaims.remove(&quot;iat&quot;);</span>
+<span class="nc" id="L441">        customClaims.remove(&quot;exp&quot;);</span>
+<span class="nc" id="L442">        customClaims.remove(&quot;jti&quot;);</span>
+<span class="nc" id="L443">        customClaims.remove(&quot;iss&quot;);</span>
+<span class="nc" id="L444">        customClaims.remove(&quot;aud&quot;);</span>
+<span class="nc" id="L445">        customClaims.remove(&quot;nbf&quot;);</span>
+        
+<span class="nc" id="L447">        return customClaims;</span>
+    }
+
+    @Override
+    public boolean isValidToken(String token) {
+<span class="nc" id="L452">        return isValidToken(token, null);</span>
+    }
+    
+    @Override
+    public boolean isValidToken(String token, String deviceFingerprint) {
+        Claims claims;
+        try {
+<span class="nc" id="L459">            claims = extractAllClaims(token);</span>
+<span class="nc" id="L460">        } catch (Exception e) {</span>
+<span class="nc" id="L461">            log.warn(&quot;[jwt-reject] phase=parse tokenLen={} parts={} exType={} msg={}&quot;,</span>
+<span class="nc bnc" id="L462" title="All 2 branches missed.">                    token != null ? token.length() : 0,</span>
+<span class="nc" id="L463">                    tokenPartCount(token),</span>
+<span class="nc" id="L464">                    e.getClass().getSimpleName(),</span>
+<span class="nc" id="L465">                    asciiSafeLog(tokenParseDetailForLogs(e), 400));</span>
+<span class="nc" id="L466">            jwtDiag(&quot;parse failure: {}&quot;, asciiSafeLog(tokenParseDetailForLogs(e), 400));</span>
+<span class="nc bnc" id="L467" title="All 4 branches missed.">            if (insecureEmergencyJwtTrace &amp;&amp; StringUtils.hasText(token)) {</span>
+<span class="nc" id="L468">                log.error(&quot;======== JWT_INSECURE_EMERGENCY_TRACE parse_failed (signing secret NOT logged) ========&quot;);</span>
+<span class="nc" id="L469">                log.error(&quot;JWT_INSECURE_EMERGENCY_TRACE compact_token={}&quot;, token);</span>
+<span class="nc" id="L470">                log.error(&quot;JWT_INSECURE_EMERGENCY_TRACE header_segment_decoded_utf8={}&quot;, jwtSegmentDecodedUtf8(token, 0));</span>
+<span class="nc" id="L471">                log.error(&quot;JWT_INSECURE_EMERGENCY_TRACE payload_segment_decoded_utf8={}&quot;, jwtSegmentDecodedUtf8(token, 1));</span>
+<span class="nc" id="L472">                log.error(&quot;JWT_INSECURE_EMERGENCY_TRACE exception_chain={}&quot;, asciiSafeLog(tokenParseDetailForLogs(e), 800));</span>
+<span class="nc" id="L473">                log.error(&quot;======== END JWT_INSECURE_EMERGENCY_TRACE ========&quot;);</span>
+            }
+<span class="nc" id="L475">            return false;</span>
+<span class="nc" id="L476">        }</span>
+
+        try {
+<span class="nc" id="L479">            jwtDiag(&quot;validate: parsed tokenType={} subjectMasked={} jti={} expEpochSec={} hasDfpClaim={}&quot;,</span>
+<span class="nc" id="L480">                    claims.get(CLAIM_KEY_TOKEN_TYPE, String.class),</span>
+<span class="nc" id="L481">                    maskEmail(claims.getSubject()),</span>
+<span class="nc" id="L482">                    jtiPrefix(claims.getId()),</span>
+<span class="nc bnc" id="L483" title="All 2 branches missed.">                    claims.getExpiration() != null ? claims.getExpiration().getTime() / 1000L : -1L,</span>
+<span class="nc" id="L484">                    StringUtils.hasText(claims.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class)));</span>
+
+<span class="nc" id="L486">            String tokenId = claims.getId();</span>
+<span class="nc bnc" id="L487" title="All 4 branches missed.">            if (tokenId != null &amp;&amp; tokenBlacklistService.isBlacklisted(tokenId)) {</span>
+<span class="nc" id="L488">                log.warn(&quot;[jwt-reject] phase=blacklist jtiPrefix={}&quot;, jtiPrefix(tokenId));</span>
+<span class="nc" id="L489">                jwtDiag(&quot;validate: rejected blacklist jti={}&quot;, jtiPrefix(tokenId));</span>
+<span class="nc" id="L490">                return false;</span>
+            }
+
+<span class="nc" id="L493">            final String username = claims.getSubject();</span>
+            
+<span class="nc bnc" id="L495" title="All 2 branches missed.">            if (!StringUtils.hasText(username)) {</span>
+<span class="nc" id="L496">                log.warn(&quot;[jwt-reject] phase=claims subject empty jtiPrefix={}&quot;, jtiPrefix(tokenId));</span>
+<span class="nc" id="L497">                return false;</span>
+            }
+    
+<span class="nc" id="L500">            UserDetails userDetails = userDetailsService.loadUserByUsername(username);</span>
+            
+<span class="nc bnc" id="L502" title="All 2 branches missed.">            if (ObjectUtils.isEmpty(userDetails)) {</span>
+<span class="nc" id="L503">                log.warn(&quot;[jwt-reject] phase=user_load subject={}&quot;, maskEmail(username));</span>
+<span class="nc" id="L504">                return false;</span>
+            }
+
+<span class="nc" id="L507">            Date nbf = claims.getNotBefore();</span>
+<span class="nc bnc" id="L508" title="All 4 branches missed.">            if (nbf != null &amp;&amp; nbf.after(new Date())) {</span>
+<span class="nc" id="L509">                log.warn(&quot;[jwt-reject] phase=nbf notBefore={} now={}&quot;, nbf, new Date());</span>
+<span class="nc" id="L510">                return false;</span>
+            }
+<span class="nc bnc" id="L512" title="All 2 branches missed.">            if (jwtConfig.isDeviceFingerprintingEnabled()) {</span>
+<span class="nc" id="L513">                String tokenDeviceFingerprint = claims.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class);</span>
+<span class="nc bnc" id="L514" title="All 4 branches missed.">                if (StringUtils.hasText(deviceFingerprint) &amp;&amp; StringUtils.hasText(tokenDeviceFingerprint)</span>
+<span class="nc bnc" id="L515" title="All 2 branches missed.">                        &amp;&amp; !tokenDeviceFingerprint.equals(deviceFingerprint)) {</span>
+<span class="nc" id="L516">                    log.warn(&quot;Device fingerprint mismatch: token={}, request={}&quot;,</span>
+<span class="nc" id="L517">                            tokenDeviceFingerprint.substring(0, 8) + &quot;...&quot;,</span>
+<span class="nc" id="L518">                            deviceFingerprint.substring(0, 8) + &quot;...&quot;);</span>
+<span class="nc" id="L519">                    jwtDiag(&quot;validate: rejected dfp tokenPrefix={} requestPrefix={}&quot;,</span>
+<span class="nc bnc" id="L520" title="All 2 branches missed.">                            tokenDeviceFingerprint.length() &gt;= 8 ? tokenDeviceFingerprint.substring(0, 8) + &quot;...&quot; : tokenDeviceFingerprint,</span>
+<span class="nc bnc" id="L521" title="All 2 branches missed.">                            deviceFingerprint.length() &gt;= 8 ? deviceFingerprint.substring(0, 8) + &quot;...&quot; : deviceFingerprint);</span>
+<span class="nc" id="L522">                    return false;</span>
+                }
+            }
+            
+            try {
+<span class="nc" id="L527">                String tokenType = claims.get(CLAIM_KEY_TOKEN_TYPE, String.class);</span>
+                
+<span class="nc bnc" id="L529" title="All 2 branches missed.">                if (StringUtils.hasText(tokenId)) {</span>
+<span class="nc bnc" id="L530" title="All 2 branches missed.">                    if (TOKEN_TYPE_REFRESH.equals(tokenType)) {</span>
+<span class="nc bnc" id="L531" title="All 2 branches missed.">                        if (!activeSessionService.isCurrentRefreshToken(username, tokenId)) {</span>
+<span class="nc" id="L532">                            log.warn(&quot;Refresh token is not current for user: {}&quot;, username);</span>
+<span class="nc" id="L533">                            jwtDiag(&quot;validate: rejected session tokenType=refresh subjectMasked={} jti={}&quot;,</span>
+<span class="nc" id="L534">                                    maskEmail(username), jtiPrefix(tokenId));</span>
+<span class="nc" id="L535">                            return false;</span>
+                        }
+                    } else {
+<span class="nc bnc" id="L538" title="All 2 branches missed.">                        if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {</span>
+<span class="nc" id="L539">                            log.warn(&quot;Access token is not current for user: {}&quot;, username);</span>
+<span class="nc" id="L540">                            jwtDiag(&quot;validate: rejected session tokenType=access subjectMasked={} jti={}&quot;,</span>
+<span class="nc" id="L541">                                    maskEmail(username), jtiPrefix(tokenId));</span>
+<span class="nc" id="L542">                            return false;</span>
+                        }
+                    }
+                }
+<span class="nc" id="L546">            } catch (Exception e) {</span>
+<span class="nc" id="L547">                log.warn(&quot;Could not verify active session: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L548">            }</span>
+
+<span class="nc" id="L550">            jwtDiag(&quot;Token validation successful for user={}&quot;, maskEmail(username));</span>
+<span class="nc" id="L551">            return true;</span>
+<span class="nc" id="L552">        } catch (Exception e) {</span>
+<span class="nc" id="L553">            log.warn(&quot;[jwt-reject] phase=post_claims exType={} msg={}&quot;,</span>
+<span class="nc" id="L554">                    e.getClass().getSimpleName(),</span>
+<span class="nc" id="L555">                    asciiSafeLog(e.getMessage(), 240));</span>
+<span class="nc" id="L556">            jwtDiag(&quot;post-claims failure: {}&quot;, asciiSafeLog(e.toString(), 400));</span>
+<span class="nc" id="L557">            return false;</span>
+        }
+    }
+
+    private void jwtDiag(String format, Object... args) {
+<span class="nc bnc" id="L562" title="All 2 branches missed.">        if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L563">            log.info(&quot;[jwt-diag] &quot; + format, args);</span>
+        }
+<span class="nc" id="L565">    }</span>
+
+    private static int tokenPartCount(String token) {
+<span class="nc bnc" id="L568" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+<span class="nc" id="L569">            return 0;</span>
+        }
+<span class="nc" id="L571">        return token.split(&quot;\\.&quot;).length;</span>
+    }
+
+    private static String jtiPrefix(String jti) {
+<span class="nc bnc" id="L575" title="All 2 branches missed.">        if (!StringUtils.hasText(jti)) {</span>
+<span class="nc" id="L576">            return &quot;(none)&quot;;</span>
+        }
+<span class="nc bnc" id="L578" title="All 2 branches missed.">        return jti.length() &lt;= 8 ? jti : jti.substring(0, 8) + &quot;...&quot;;</span>
+    }
+
+    /**
+     * Decode JWT segment (0=header, 1=payload) as UTF-8 for emergency trace only. Does not verify signature.
+     */
+    private static String jwtSegmentDecodedUtf8(String jwt, int segmentIndex) {
+        try {
+<span class="nc" id="L586">            String[] parts = jwt.split(&quot;\\.&quot;);</span>
+<span class="nc bnc" id="L587" title="All 4 branches missed.">            if (segmentIndex &lt; 0 || segmentIndex &gt;= parts.length) {</span>
+<span class="nc" id="L588">                return &quot;(no segment &quot; + segmentIndex + &quot;)&quot;;</span>
+            }
+<span class="nc" id="L590">            byte[] raw = Decoders.BASE64URL.decode(parts[segmentIndex]);</span>
+<span class="nc" id="L591">            return new String(raw, StandardCharsets.UTF_8);</span>
+<span class="nc" id="L592">        } catch (Exception ex) {</span>
+<span class="nc" id="L593">            return &quot;(segment decode failed: &quot; + ex.getMessage() + &quot;)&quot;;</span>
+        }
+    }
+
+    /**
+     * Full JWT parse failure text for logs (includes {@link BaseException} outcome + cause chain e.g. MalformedJwtException).
+     */
+    private static String tokenParseDetailForLogs(Throwable e) {
+<span class="nc bnc" id="L601" title="All 2 branches missed.">        if (e instanceof BaseException be) {</span>
+<span class="nc" id="L602">            StringBuilder sb = new StringBuilder(be.getOutcomeDescription());</span>
+<span class="nc" id="L603">            Throwable c = be.getCause();</span>
+<span class="nc" id="L604">            int depth = 0;</span>
+<span class="nc bnc" id="L605" title="All 4 branches missed.">            while (c != null &amp;&amp; depth &lt; 5) {</span>
+<span class="nc" id="L606">                sb.append(&quot; &lt;- &quot;).append(c.getClass().getSimpleName());</span>
+<span class="nc bnc" id="L607" title="All 2 branches missed.">                if (StringUtils.hasText(c.getMessage())) {</span>
+<span class="nc" id="L608">                    sb.append(&quot;:&quot;).append(c.getMessage());</span>
+                }
+<span class="nc" id="L610">                c = c.getCause();</span>
+<span class="nc" id="L611">                depth++;</span>
+            }
+<span class="nc" id="L613">            return sb.toString();</span>
+        }
+<span class="nc bnc" id="L615" title="All 2 branches missed.">        if (e.getMessage() != null) {</span>
+<span class="nc" id="L616">            return e.getMessage();</span>
+        }
+<span class="nc" id="L618">        return e.toString();</span>
+    }
+
+    /**
+     * Printable ASCII, single line — avoids journald/syslog treating log fields as binary blobs.
+     */
+    private static String asciiSafeLog(String s, int maxLen) {
+<span class="nc bnc" id="L625" title="All 2 branches missed.">        if (!StringUtils.hasText(s)) {</span>
+<span class="nc" id="L626">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L628">        int n = Math.min(s.length(), maxLen);</span>
+<span class="nc" id="L629">        StringBuilder b = new StringBuilder(n);</span>
+<span class="nc bnc" id="L630" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L631">            char c = s.charAt(i);</span>
+<span class="nc bnc" id="L632" title="All 6 branches missed.">            if (c == '\n' || c == '\r' || c == '\t') {</span>
+<span class="nc" id="L633">                b.append(' ');</span>
+<span class="nc bnc" id="L634" title="All 4 branches missed.">            } else if (c &gt;= 32 &amp;&amp; c &lt;= 126) {</span>
+<span class="nc" id="L635">                b.append(c);</span>
+            } else {
+<span class="nc" id="L637">                b.append('_');</span>
+            }
+        }
+<span class="nc" id="L640">        return b.toString();</span>
+    }
+
+    private static String maskEmail(String username) {
+<span class="nc bnc" id="L644" title="All 4 branches missed.">        if (!StringUtils.hasText(username) || !username.contains(&quot;@&quot;)) {</span>
+<span class="nc bnc" id="L645" title="All 4 branches missed.">            return username != null &amp;&amp; username.length() &gt; 2</span>
+<span class="nc" id="L646">                    ? username.charAt(0) + &quot;***&quot; + username.charAt(username.length() - 1)</span>
+<span class="nc" id="L647">                    : &quot;(short)&quot;;</span>
+        }
+<span class="nc" id="L649">        int at = username.indexOf('@');</span>
+<span class="nc" id="L650">        String local = username.substring(0, at);</span>
+<span class="nc bnc" id="L651" title="All 2 branches missed.">        String tail = local.length() &gt; 1 ? local.substring(0, 1) + &quot;***&quot; : &quot;*&quot;;</span>
+<span class="nc" id="L652">        return tail + &quot;@&quot; + username.substring(at + 1);</span>
+    }
+
+    /**
+     * Sanitize string for safe JSON serialization by removing non-printable and invalid UTF-8 characters.
+     * This prevents JWT parsing failures caused by corrupted character data in claims.
+     */
+    private String sanitizeForJson(String input) {
+<span class="nc bnc" id="L660" title="All 2 branches missed.">        if (!StringUtils.hasText(input)) {</span>
+<span class="nc" id="L661">            return input;</span>
+        }
+        
+        // Remove any non-printable ASCII characters and invalid UTF-8 sequences
+<span class="nc" id="L665">        StringBuilder sanitized = new StringBuilder(input.length());</span>
+<span class="nc bnc" id="L666" title="All 2 branches missed.">        for (int i = 0; i &lt; input.length(); i++) {</span>
+<span class="nc" id="L667">            char c = input.charAt(i);</span>
+            // Keep only valid printable characters (ASCII 32-126) and common extended characters
+<span class="nc bnc" id="L669" title="All 6 branches missed.">            if ((c &gt;= 32 &amp;&amp; c &lt;= 126) || c &gt;= 128) {</span>
+                // For extended characters, verify they're valid UTF-16
+<span class="nc bnc" id="L671" title="All 4 branches missed.">                if (Character.isDefined(c) &amp;&amp; !Character.isISOControl(c)) {</span>
+<span class="nc" id="L672">                    sanitized.append(c);</span>
+                }
+            }
+        }
+        
+<span class="nc" id="L677">        String result = sanitized.toString();</span>
+<span class="nc bnc" id="L678" title="All 2 branches missed.">        if (!result.equals(input)) {</span>
+<span class="nc" id="L679">            log.warn(&quot;Sanitized claim value from '{}' to '{}' - contained invalid characters&quot;, </span>
+<span class="nc" id="L680">                    asciiSafeLog(input, 100), asciiSafeLog(result, 100));</span>
+        }
+        
+<span class="nc" id="L683">        return result;</span>
+    }
+
+    private String extractUsername(String token){
+<span class="nc" id="L687">        return extractClaims(token, Claims::getSubject);</span>
+    }
+
+    private &lt;T&gt; T extractClaims(String token, Function&lt;Claims, T&gt; claimsTFunction){
+<span class="nc" id="L691">        final Claims claims = extractAllClaims(token);</span>
+<span class="nc" id="L692">        return claimsTFunction.apply(claims);</span>
+    }
+
+    private Claims extractAllClaims(String token){
+        Claims claims;
+
+        try {
+<span class="nc" id="L699">            claims = Jwts.parserBuilder()</span>
+<span class="nc" id="L700">                    .setSigningKey(getKey())</span>
+<span class="nc" id="L701">                    .setAllowedClockSkewSeconds(jwtConfig.getAllowedClockSkewSeconds())</span>
+<span class="nc" id="L702">                    .build()</span>
+<span class="nc" id="L703">                    .parseClaimsJws(token)</span>
+<span class="nc" id="L704">                    .getBody();</span>
+<span class="nc" id="L705">        } catch (ExpiredJwtException e) {</span>
+<span class="nc" id="L706">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), &quot;Token expiration&quot;, e);</span>
+<span class="nc" id="L707">        } catch (UnsupportedJwtException e) {</span>
+<span class="nc" id="L708">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), &quot;Token's not supported&quot;, e);</span>
+<span class="nc" id="L709">        } catch (MalformedJwtException e) {</span>
+            // Three dot-separated segments does not guarantee valid Base64URL / JSON; do not imply &quot;wrong part count&quot;.
+<span class="nc bnc" id="L711" title="All 2 branches missed.">            String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();</span>
+<span class="nc" id="L712">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), &quot;Malformed JWT: &quot; + detail, e);</span>
+<span class="nc" id="L713">        } catch (SignatureException e) {</span>
+<span class="nc" id="L714">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), &quot;Invalid JWT signature&quot;, e);</span>
+<span class="nc" id="L715">        } catch (Exception e) {</span>
+<span class="nc" id="L716">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()),</span>
+<span class="nc bnc" id="L717" title="All 2 branches missed.">                    e.getLocalizedMessage() != null ? e.getLocalizedMessage() : e.getClass().getSimpleName(), e);</span>
+<span class="nc" id="L718">        }</span>
+
+<span class="nc" id="L720">        return claims;</span>
+    }
+
+    @Override
+    public void blacklistToken(String token) {
+        try {
+<span class="nc" id="L726">            Claims claims = extractClaims(token);</span>
+<span class="nc" id="L727">            String tokenId = claims.getId();</span>
+<span class="nc" id="L728">            Date expiration = claims.getExpiration();</span>
+            
+<span class="nc bnc" id="L730" title="All 4 branches missed.">            if (tokenId != null &amp;&amp; expiration != null) {</span>
+<span class="nc" id="L731">                tokenBlacklistService.blacklistToken(tokenId, expiration.toInstant());</span>
+<span class="nc" id="L732">                log.debug(&quot;Token blacklisted: {}&quot;, tokenId);</span>
+            }
+<span class="nc" id="L734">        } catch (Exception e) {</span>
+<span class="nc" id="L735">            log.error(&quot;Error blacklisting token: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L736">        }</span>
+<span class="nc" id="L737">    }</span>
+    
+    @Override
+    public String extractTokenId(String token) {
+        try {
+<span class="nc" id="L742">            Claims claims = extractClaims(token);</span>
+<span class="nc" id="L743">            return claims.getId();</span>
+<span class="nc" id="L744">        } catch (Exception e) {</span>
+<span class="nc" id="L745">            log.warn(&quot;Error extracting token ID: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L746">            return null;</span>
+        }
+    }
+    
+    @Override
+    public boolean isBlacklisted(String token) {
+        try {
+<span class="nc" id="L753">            String tokenId = extractTokenId(token);</span>
+<span class="nc bnc" id="L754" title="All 4 branches missed.">            return tokenId != null &amp;&amp; tokenBlacklistService.isBlacklisted(tokenId);</span>
+<span class="nc" id="L755">        } catch (Exception e) {</span>
+<span class="nc" id="L756">            log.warn(&quot;Error checking blacklist: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L757">            return false;</span>
+        }
+    }
+
+    @Override
+    public void logIssuedPairDiagnostics(String event, String subjectUsername, String accessToken, String refreshToken) {
+<span class="nc bnc" id="L763" title="All 2 branches missed.">        if (!jwtDiagnosticLogging) {</span>
+<span class="nc" id="L764">            return;</span>
+        }
+        try {
+<span class="nc" id="L767">            Claims a = extractClaims(accessToken);</span>
+<span class="nc" id="L768">            Claims r = extractClaims(refreshToken);</span>
+<span class="nc bnc" id="L769" title="All 2 branches missed.">            String issState = Objects.equals(jwtConfig.getIssuer(), a.getIssuer()) ? &quot;iss_match&quot; : &quot;iss_mismatch_cfg_vs_token&quot;;</span>
+<span class="nc" id="L770">            log.info(</span>
+                    &quot;[jwt-diag] issued event={} subjectMasked={} accessJti={} refreshJti={} accessExpEpochSec={} refreshExpEpochSec={} accessLen={} refreshLen={} issState={}&quot;,
+<span class="nc" id="L772">                    asciiSafeLog(event, 60),</span>
+<span class="nc" id="L773">                    maskEmail(subjectUsername),</span>
+<span class="nc" id="L774">                    jtiPrefix(a.getId()),</span>
+<span class="nc" id="L775">                    jtiPrefix(r.getId()),</span>
+<span class="nc bnc" id="L776" title="All 2 branches missed.">                    a.getExpiration() != null ? a.getExpiration().getTime() / 1000L : -1L,</span>
+<span class="nc bnc" id="L777" title="All 2 branches missed.">                    r.getExpiration() != null ? r.getExpiration().getTime() / 1000L : -1L,</span>
+<span class="nc" id="L778">                    accessToken.length(),</span>
+<span class="nc" id="L779">                    refreshToken.length(),</span>
+                    issState);
+<span class="nc" id="L781">        } catch (Exception e) {</span>
+<span class="nc" id="L782">            log.warn(&quot;[jwt-diag] issued metadata parse failed event={} msg={}&quot;,</span>
+<span class="nc" id="L783">                    asciiSafeLog(event, 60), asciiSafeLog(e.getMessage(), 200));</span>
+<span class="nc" id="L784">        }</span>
+<span class="nc" id="L785">    }</span>
+
+    @Override
+    public void logInboundTokenDiagnostics(HttpServletRequest request, String token, String hint) {
+<span class="nc bnc" id="L789" title="All 2 branches missed.">        if (!jwtDiagnosticLogging) {</span>
+<span class="nc" id="L790">            return;</span>
+        }
+<span class="nc" id="L792">        String reqDfp = generateDeviceFingerprint(request);</span>
+<span class="nc bnc" id="L793" title="All 4 branches missed.">        String reqDfpP = StringUtils.hasText(reqDfp) &amp;&amp; reqDfp.length() &gt;= 8</span>
+<span class="nc" id="L794">                ? reqDfp.substring(0, 8) + &quot;...&quot; : &quot;(none)&quot;;</span>
+<span class="nc bnc" id="L795" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+<span class="nc" id="L796">            log.info(&quot;[jwt-diag] inbound hint={} tokenEmpty=true requestDfpPrefix={} hasUserAgent={}&quot;,</span>
+<span class="nc bnc" id="L797" title="All 2 branches missed.">                    asciiSafeLog(hint, 160), reqDfpP, request.getHeader(&quot;User-Agent&quot;) != null);</span>
+<span class="nc" id="L798">            return;</span>
+        }
+<span class="nc" id="L800">        Claims c = extractClaimsIgnoreExpiration(token);</span>
+<span class="nc bnc" id="L801" title="All 2 branches missed.">        if (c == null) {</span>
+<span class="nc" id="L802">            log.info(&quot;[jwt-diag] inbound hint={} tokenLen={} parts={} claimsDecodeSkipped requestDfpPrefix={}&quot;,</span>
+<span class="nc" id="L803">                    asciiSafeLog(hint, 160), token.length(), tokenPartCount(token), reqDfpP);</span>
+<span class="nc" id="L804">            return;</span>
+        }
+<span class="nc" id="L806">        String tokenDfp = c.get(CLAIM_KEY_DEVICE_FINGERPRINT, String.class);</span>
+<span class="nc bnc" id="L807" title="All 4 branches missed.">        String tokenDfpP = StringUtils.hasText(tokenDfp) &amp;&amp; tokenDfp.length() &gt;= 8</span>
+<span class="nc" id="L808">                ? tokenDfp.substring(0, 8) + &quot;...&quot; : &quot;(none)&quot;;</span>
+<span class="nc bnc" id="L809" title="All 2 branches missed.">        String issState = Objects.equals(jwtConfig.getIssuer(), c.getIssuer()) ? &quot;iss_match&quot; : &quot;iss_mismatch_cfg_vs_token&quot;;</span>
+<span class="nc bnc" id="L810" title="All 4 branches missed.">        boolean dfpComparable = StringUtils.hasText(tokenDfp) &amp;&amp; StringUtils.hasText(reqDfp);</span>
+<span class="nc" id="L811">        log.info(</span>
+                &quot;[jwt-diag] inbound hint={} tokenLen={} parts={} subjectMasked={} jti={} typ={} expEpochSec={} tokenDfpPrefix={} reqDfpPrefix={} dfpEqual={} issState={} xffPrefix={}&quot;,
+<span class="nc" id="L813">                asciiSafeLog(hint, 160),</span>
+<span class="nc" id="L814">                token.length(),</span>
+<span class="nc" id="L815">                tokenPartCount(token),</span>
+<span class="nc" id="L816">                maskEmail(c.getSubject()),</span>
+<span class="nc" id="L817">                jtiPrefix(c.getId()),</span>
+<span class="nc" id="L818">                c.get(CLAIM_KEY_TOKEN_TYPE, String.class),</span>
+<span class="nc bnc" id="L819" title="All 2 branches missed.">                c.getExpiration() != null ? c.getExpiration().getTime() / 1000L : -1L,</span>
+                tokenDfpP,
+                reqDfpP,
+<span class="nc bnc" id="L822" title="All 2 branches missed.">                !dfpComparable ? &quot;n/a&quot; : Boolean.toString(tokenDfp.equals(reqDfp)),</span>
+                issState,
+<span class="nc" id="L824">                asciiSafeLog(request.getHeader(&quot;X-Forwarded-For&quot;), 80));</span>
+<span class="nc" id="L825">    }</span>
+}
+
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

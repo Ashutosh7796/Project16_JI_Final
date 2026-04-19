@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ErrorResponseDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">ErrorResponseDTO.java</span></div><h1>ErrorResponseDTO.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+<span class="nc bnc" id="L15" title="All 94 branches missed.">@Data</span>
+<span class="nc" id="L16">@Builder</span>
+<span class="nc" id="L17">@NoArgsConstructor</span>
+<span class="nc" id="L18">@AllArgsConstructor</span>
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(description = &quot;Standardized error response with detailed information&quot;)
+public class ErrorResponseDTO {
+
+    @Schema(description = &quot;HTTP status code&quot;, example = &quot;400&quot;)
+<span class="nc" id="L24">    private Integer status;</span>
+
+    @Schema(description = &quot;Machine-readable error code for programmatic handling&quot;, example = &quot;AUTHENTICATION_REQUIRED&quot;)
+<span class="nc" id="L27">    private String errorCode;</span>
+
+    @Schema(description = &quot;Human-readable error message&quot;, example = &quot;Authentication token is required&quot;)
+<span class="nc" id="L30">    private String message;</span>
+
+    @Schema(description = &quot;Detailed error description with context&quot;, example = &quot;Please provide a valid JWT token in the Authorization header&quot;)
+<span class="nc" id="L33">    private String details;</span>
+
+    @Schema(description = &quot;API endpoint that caused the error&quot;, example = &quot;/api/v1/documents/upload&quot;)
+<span class="nc" id="L36">    private String path;</span>
+
+    @Schema(description = &quot;HTTP method used&quot;, example = &quot;POST&quot;)
+<span class="nc" id="L39">    private String method;</span>
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = &quot;yyyy-MM-dd'T'HH:mm:ss&quot;)
+    @Schema(description = &quot;Timestamp when error occurred&quot;)
+<span class="nc" id="L43">    private LocalDateTime timestamp;</span>
+
+    @Schema(description = &quot;Suggested actions to resolve the error&quot;)
+<span class="nc" id="L46">    private List&lt;String&gt; suggestedActions;</span>
+
+    @Schema(description = &quot;Field-specific validation errors&quot;)
+<span class="nc" id="L49">    private Map&lt;String, String&gt; fieldErrors;</span>
+
+    @Schema(description = &quot;Additional context or debugging information&quot;)
+<span class="nc" id="L52">    private Map&lt;String, Object&gt; additionalInfo;</span>
+
+    @Schema(description = &quot;Reference documentation URL&quot;, example = &quot;https://api-docs.example.com/errors/AUTHENTICATION_REQUIRED&quot;)
+<span class="nc" id="L55">    private String documentationUrl;</span>
+
+    /**
+     * Create error response for authentication failures
+     */
+    public static ErrorResponseDTO authenticationRequired(String path, String method) {
+<span class="nc" id="L61">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L62">                .status(401)</span>
+<span class="nc" id="L63">                .errorCode(&quot;AUTHENTICATION_REQUIRED&quot;)</span>
+<span class="nc" id="L64">                .message(&quot;Authentication token is required&quot;)</span>
+<span class="nc" id="L65">                .details(&quot;Please provide a valid JWT token in the Authorization header using Bearer scheme&quot;)</span>
+<span class="nc" id="L66">                .path(path)</span>
+<span class="nc" id="L67">                .method(method)</span>
+<span class="nc" id="L68">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L69">                .suggestedActions(List.of(</span>
+                        &quot;Include 'Authorization: Bearer &lt;your-jwt-token&gt;' header in your request&quot;,
+                        &quot;Ensure your JWT token is valid and not expired&quot;,
+                        &quot;Login again to get a fresh token if needed&quot;
+                ))
+<span class="nc" id="L74">                .documentationUrl(&quot;/docs/authentication&quot;)</span>
+<span class="nc" id="L75">                .build();</span>
+    }
+
+    /**
+     * Create error response for authorization failures
+     */
+    public static ErrorResponseDTO accessDenied(String path, String method, String resource) {
+<span class="nc" id="L82">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L83">                .status(403)</span>
+<span class="nc" id="L84">                .errorCode(&quot;ACCESS_DENIED&quot;)</span>
+<span class="nc" id="L85">                .message(&quot;Access denied to the requested resource&quot;)</span>
+<span class="nc" id="L86">                .details(String.format(&quot;You don't have permission to access %s&quot;, resource))</span>
+<span class="nc" id="L87">                .path(path)</span>
+<span class="nc" id="L88">                .method(method)</span>
+<span class="nc" id="L89">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L90">                .suggestedActions(List.of(</span>
+                        &quot;Verify you have the required permissions&quot;,
+                        &quot;Contact administrator if you believe this is an error&quot;,
+                        &quot;Ensure you're accessing your own resources&quot;
+                ))
+<span class="nc" id="L95">                .build();</span>
+    }
+
+    /**
+     * Create error response for validation failures
+     */
+    public static ErrorResponseDTO validationFailed(String path, String method, Map&lt;String, String&gt; fieldErrors) {
+<span class="nc" id="L102">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L103">                .status(400)</span>
+<span class="nc" id="L104">                .errorCode(&quot;VALIDATION_FAILED&quot;)</span>
+<span class="nc" id="L105">                .message(&quot;Request validation failed&quot;)</span>
+<span class="nc" id="L106">                .details(&quot;One or more fields contain invalid values&quot;)</span>
+<span class="nc" id="L107">                .path(path)</span>
+<span class="nc" id="L108">                .method(method)</span>
+<span class="nc" id="L109">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L110">                .fieldErrors(fieldErrors)</span>
+<span class="nc" id="L111">                .suggestedActions(List.of(</span>
+                        &quot;Check the fieldErrors for specific validation issues&quot;,
+                        &quot;Ensure all required fields are provided&quot;,
+                        &quot;Verify field formats match the expected patterns&quot;
+                ))
+<span class="nc" id="L116">                .build();</span>
+    }
+
+    /**
+     * Create error response for file upload issues
+     */
+    public static ErrorResponseDTO fileUploadError(String path, String method, String reason, long maxSizeMB) {
+<span class="nc" id="L123">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L124">                .status(400)</span>
+<span class="nc" id="L125">                .errorCode(&quot;FILE_UPLOAD_ERROR&quot;)</span>
+<span class="nc" id="L126">                .message(&quot;File upload failed&quot;)</span>
+<span class="nc" id="L127">                .details(reason)</span>
+<span class="nc" id="L128">                .path(path)</span>
+<span class="nc" id="L129">                .method(method)</span>
+<span class="nc" id="L130">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L131">                .suggestedActions(List.of(</span>
+<span class="nc" id="L132">                        String.format(&quot;Ensure file size is less than %dMB&quot;, maxSizeMB),</span>
+                        &quot;Use supported file formats: PDF, JPEG, PNG, WEBP&quot;,
+                        &quot;Check that the file is not corrupted&quot;,
+                        &quot;Verify the file parameter name is 'file'&quot;
+                ))
+<span class="nc" id="L137">                .additionalInfo(Map.of(&quot;maxFileSizeMB&quot;, maxSizeMB))</span>
+<span class="nc" id="L138">                .build();</span>
+    }
+
+    /**
+     * Create error response for resource not found
+     */
+    public static ErrorResponseDTO resourceNotFound(String path, String method, String resourceType, String identifier) {
+<span class="nc" id="L145">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L146">                .status(404)</span>
+<span class="nc" id="L147">                .errorCode(&quot;RESOURCE_NOT_FOUND&quot;)</span>
+<span class="nc" id="L148">                .message(String.format(&quot;%s not found&quot;, resourceType))</span>
+<span class="nc" id="L149">                .details(String.format(&quot;No %s found with identifier: %s&quot;, resourceType.toLowerCase(), identifier))</span>
+<span class="nc" id="L150">                .path(path)</span>
+<span class="nc" id="L151">                .method(method)</span>
+<span class="nc" id="L152">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L153">                .suggestedActions(List.of(</span>
+                        &quot;Verify the resource identifier is correct&quot;,
+                        &quot;Check if the resource exists and you have access to it&quot;,
+                        &quot;Ensure you're using the correct API endpoint&quot;
+                ))
+<span class="nc" id="L158">                .build();</span>
+    }
+
+    /**
+     * Create error response for server errors
+     */
+    public static ErrorResponseDTO internalServerError(String path, String method, String details) {
+<span class="nc" id="L165">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L166">                .status(500)</span>
+<span class="nc" id="L167">                .errorCode(&quot;INTERNAL_SERVER_ERROR&quot;)</span>
+<span class="nc" id="L168">                .message(&quot;An internal server error occurred&quot;)</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">                .details(details != null ? details : &quot;The server encountered an unexpected condition&quot;)</span>
+<span class="nc" id="L170">                .path(path)</span>
+<span class="nc" id="L171">                .method(method)</span>
+<span class="nc" id="L172">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L173">                .suggestedActions(List.of(</span>
+                        &quot;Try the request again after a few moments&quot;,
+                        &quot;Contact support if the problem persists&quot;,
+                        &quot;Check system status page for known issues&quot;
+                ))
+<span class="nc" id="L178">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

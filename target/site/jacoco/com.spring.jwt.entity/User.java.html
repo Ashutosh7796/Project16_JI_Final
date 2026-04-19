@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>User.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.entity</a> &gt; <span class="el_source">User.java</span></div><h1>User.java</h1><pre class="source lang-java linenums">package com.spring.jwt.entity;
+
+import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.util.Set;
+
+@Entity
+@Table(name = &quot;users&quot;)
+<span class="nc bnc" id="L16" title="All 182 branches missed.">@Data</span>
+<span class="nc" id="L17">@AllArgsConstructor</span>
+<span class="nc" id="L18">@NoArgsConstructor</span>
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = &quot;user_seq&quot;)
+    @SequenceGenerator(name = &quot;user_seq&quot;, sequenceName = &quot;user_sequence&quot;, allocationSize = 1, initialValue = 10000)
+    @Column(name = &quot;user_id&quot;)
+<span class="nc" id="L25">    private Long userId;</span>
+
+
+    @NotBlank(message = &quot;Email cannot be blank&quot;)
+    @Email
+    @Pattern(regexp = &quot;^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$&quot;, message = &quot;Invalid email format&quot;)
+    @Column(name = &quot;email&quot;, nullable = false, length = 250, unique = true)
+<span class="nc" id="L32">    private String email;</span>
+
+    @Column(name = &quot;mobile_number&quot;)
+<span class="nc" id="L35">    private Long mobileNumber;</span>
+
+    @Column(name = &quot;password&quot;)
+<span class="nc" id="L38">    private String password;</span>
+
+    @Column(name = &quot;status&quot;)
+<span class="nc" id="L41">    private Boolean status;</span>
+
+    @Column(name = &quot;reset_password_token&quot;)
+<span class="nc" id="L44">    private String resetPasswordToken;</span>
+
+    @Column(name = &quot;reset_password_token_expiry&quot;)
+<span class="nc" id="L47">    private LocalDateTime resetPasswordTokenExpiry;</span>
+
+    @Column(name = &quot;device_fingerprint&quot;, length = 1024)
+<span class="nc" id="L50">    private String deviceFingerprint;</span>
+
+    @Column(name = &quot;last_login&quot;)
+<span class="nc" id="L53">    private LocalDateTime lastLogin;</span>
+
+<span class="nc" id="L55">    @Column(name = &quot;login_attempts&quot;)</span>
+<span class="nc" id="L56">    private Integer loginAttempts = 0;</span>
+
+    @Column(name = &quot;account_locked_until&quot;)
+<span class="nc" id="L59">    private LocalDateTime accountLockedUntil;</span>
+
+<span class="nc" id="L61">    @Column(name = &quot;email_verified&quot;, nullable = false)</span>
+<span class="nc" id="L62">    private Boolean emailVerified = false;</span>
+
+    @Column(name = &quot;first_name&quot;, length = 50)
+<span class="nc" id="L65">    private String firstName;</span>
+
+    @Column(name = &quot;last_name&quot;, length = 50)
+<span class="nc" id="L68">    private String lastName;</span>
+
+<span class="nc" id="L70">    @Column(name = &quot;account_locked&quot;, nullable = false)</span>
+<span class="nc" id="L71">    private Boolean accountLocked = false;</span>
+
+<span class="nc" id="L73">    @Column(name = &quot;failed_login_attempts&quot;)</span>
+<span class="nc" id="L74">    private Integer failedLoginAttempts = 0;</span>
+
+    @Column(name = &quot;created_at&quot;)
+<span class="nc" id="L77">    private LocalDateTime createdAt;</span>
+
+    @Column(name = &quot;updated_at&quot;)
+<span class="nc" id="L80">    private LocalDateTime updatedAt;</span>
+
+<span class="nc" id="L82">    @Column(name = &quot;terms_accepted&quot;)</span>
+<span class="nc" id="L83">    private Boolean termsAccepted = false;</span>
+
+<span class="nc" id="L85">    @Column(name = &quot;privacy_policy_accepted&quot;)</span>
+<span class="nc" id="L86">    private Boolean privacyPolicyAccepted = false;</span>
+
+    @PrePersist
+    protected void onCreate() {
+<span class="nc" id="L90">        createdAt = LocalDateTime.now();</span>
+<span class="nc" id="L91">        updatedAt = LocalDateTime.now();</span>
+<span class="nc" id="L92">    }</span>
+
+    @PreUpdate
+    protected void onUpdate() {
+<span class="nc" id="L96">        updatedAt = LocalDateTime.now();</span>
+<span class="nc" id="L97">    }</span>
+
+    @ManyToMany(fetch = FetchType.EAGER, cascade = CascadeType.MERGE)
+    @JoinTable(name = &quot;user_role&quot;, joinColumns = @JoinColumn(name = &quot;user_id&quot;, referencedColumnName = &quot;user_id&quot;), inverseJoinColumns = @JoinColumn(name = &quot;role_id&quot;, referencedColumnName = &quot;role_id&quot;))
+<span class="nc" id="L101">    private Set&lt;Role&gt; roles;</span>
+
+    @OneToOne(
+            mappedBy = &quot;user&quot;,
+            cascade = CascadeType.ALL,
+            fetch = FetchType.LAZY
+    )
+<span class="nc" id="L108">    private Employee employee;</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

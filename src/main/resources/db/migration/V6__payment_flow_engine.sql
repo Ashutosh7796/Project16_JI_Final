@@ -1,0 +1,27 @@
+-- Production-grade payment flow (gateway-agnostic). See com.spring.jwt.paymentflow package.
+CREATE TABLE IF NOT EXISTS payment_flow_payments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    order_ref VARCHAR(128) NOT NULL,
+    amount DECIMAL(14, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+    status VARCHAR(32) NOT NULL,
+    gateway_kind VARCHAR(32) NOT NULL DEFAULT 'CCAVENUE_FORM',
+    gateway_transaction_id VARCHAR(128) NULL,
+    idempotency_key VARCHAR(128) NULL,
+    initiate_idempotency_key VARCHAR(128) NULL,
+    error_code VARCHAR(64) NULL,
+    error_message VARCHAR(512) NULL,
+    metadata_json TEXT NULL,
+    gateway_client_payload_json TEXT NULL,
+    abandon_secret VARCHAR(64) NOT NULL,
+    abandoned_at DATETIME(6) NULL,
+    pending_gateway_since DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_payment_flow_idem (user_id, idempotency_key),
+    INDEX idx_payment_flow_status_pending (status, pending_gateway_since),
+    INDEX idx_payment_flow_status_abandon (status, abandoned_at),
+    INDEX idx_payment_flow_gateway_txn (gateway_transaction_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

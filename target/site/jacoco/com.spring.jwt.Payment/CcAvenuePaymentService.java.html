@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CcAvenuePaymentService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Payment</a> &gt; <span class="el_source">CcAvenuePaymentService.java</span></div><h1>CcAvenuePaymentService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Payment;
+
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.text.DecimalFormat;
+
+@Service
+<span class="nc" id="L11">@RequiredArgsConstructor</span>
+<span class="nc" id="L12">@Slf4j</span>
+public class CcAvenuePaymentService {
+
+    private final CcAvenueConfig config;
+
+<span class="nc" id="L17">    private static final DecimalFormat AMOUNT_FORMAT = new DecimalFormat(&quot;0.00&quot;);</span>
+
+    @PostConstruct
+    void validateConfig() {
+<span class="nc" id="L21">        boolean valid = true;</span>
+<span class="nc" id="L22">        String workingKey = trimToEmpty(config.getWorkingKey());</span>
+<span class="nc" id="L23">        String accessCode = trimToEmpty(config.getAccessCode());</span>
+<span class="nc" id="L24">        String merchantId = trimToEmpty(config.getMerchantId());</span>
+
+<span class="nc bnc" id="L26" title="All 2 branches missed.">        if (isBlank(workingKey)) { log.error(&quot;CCAvenue workingKey is EMPTY&quot;); valid = false; }</span>
+<span class="nc bnc" id="L27" title="All 2 branches missed.">        if (isBlank(accessCode))  { log.error(&quot;CCAvenue accessCode is EMPTY&quot;); valid = false; }</span>
+<span class="nc bnc" id="L28" title="All 2 branches missed.">        if (isBlank(merchantId))   { log.error(&quot;CCAvenue merchantId is EMPTY&quot;); valid = false; }</span>
+<span class="nc bnc" id="L29" title="All 2 branches missed.">        if (isBlank(config.getPaymentUrl()))   { log.error(&quot;CCAvenue paymentUrl is EMPTY&quot;); valid = false; }</span>
+<span class="nc bnc" id="L30" title="All 2 branches missed.">        if (isBlank(config.getRedirectUrl()))  { log.warn(&quot;CCAvenue redirectUrl is EMPTY&quot;);  }</span>
+<span class="nc bnc" id="L31" title="All 2 branches missed.">        if (isBlank(config.getCancelUrl()))    { log.warn(&quot;CCAvenue cancelUrl is EMPTY&quot;);    }</span>
+<span class="nc bnc" id="L32" title="All 2 branches missed.">        if (!workingKey.matches(&quot;^[A-Fa-f0-9]{32}$&quot;)) {</span>
+<span class="nc" id="L33">            log.error(&quot;CCAvenue workingKey format invalid. Expected 32 hex characters, got length={}&quot;, workingKey.length());</span>
+<span class="nc" id="L34">            valid = false;</span>
+        }
+
+<span class="nc bnc" id="L37" title="All 2 branches missed.">        if (valid) {</span>
+<span class="nc" id="L38">            log.info(&quot;CCAvenue config loaded: merchantId={}, accessCode={}..., paymentUrl={}, redirectUrl={}, cancelUrl={}&quot;,</span>
+                    merchantId,
+<span class="nc" id="L40">                    accessCode.substring(0, Math.min(4, accessCode.length())) + &quot;****&quot;,</span>
+<span class="nc" id="L41">                    config.getPaymentUrl(),</span>
+<span class="nc" id="L42">                    config.getRedirectUrl(),</span>
+<span class="nc" id="L43">                    config.getCancelUrl());</span>
+        }
+<span class="nc" id="L45">    }</span>
+
+    public String generatePaymentForm(CcAvenuePaymentRequest request) {
+<span class="nc" id="L48">        String amount = AMOUNT_FORMAT.format(request.getAmount());</span>
+
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        String redirectUrl = request.getRedirectUrl() != null ? request.getRedirectUrl() : config.getRedirectUrl();</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        String cancelUrl = request.getCancelUrl() != null ? request.getCancelUrl() : config.getCancelUrl();</span>
+
+<span class="nc" id="L53">        String merchantId = trimToEmpty(config.getMerchantId());</span>
+<span class="nc" id="L54">        String accessCode = trimToEmpty(config.getAccessCode());</span>
+<span class="nc" id="L55">        String workingKey = trimToEmpty(config.getWorkingKey());</span>
+
+<span class="nc" id="L57">        StringBuilder data = new StringBuilder();</span>
+<span class="nc" id="L58">        data.append(&quot;merchant_id=&quot;).append(merchantId)</span>
+<span class="nc" id="L59">                .append(&quot;&amp;order_id=&quot;).append(sanitizeOrderId(request.getOrderId()))</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">                .append(&quot;&amp;currency=&quot;).append(request.getCurrency() != null ? request.getCurrency() : &quot;INR&quot;)</span>
+<span class="nc" id="L61">                .append(&quot;&amp;amount=&quot;).append(amount)</span>
+<span class="nc" id="L62">                .append(&quot;&amp;redirect_url=&quot;).append(nullSafe(redirectUrl))</span>
+<span class="nc" id="L63">                .append(&quot;&amp;cancel_url=&quot;).append(nullSafe(cancelUrl))</span>
+<span class="nc" id="L64">                .append(&quot;&amp;language=EN&quot;)</span>
+<span class="nc" id="L65">                .append(&quot;&amp;billing_name=&quot;).append(sanitizeText(request.getBillingName()))</span>
+<span class="nc" id="L66">                .append(&quot;&amp;billing_address=&quot;).append(sanitizeText(request.getBillingAddress()))</span>
+<span class="nc" id="L67">                .append(&quot;&amp;billing_tel=&quot;).append(sanitizePhone(request.getBillingTel()));</span>
+
+<span class="nc bnc" id="L69" title="All 4 branches missed.">        if (request.getBillingEmail() != null &amp;&amp; !request.getBillingEmail().isBlank()) {</span>
+<span class="nc" id="L70">            data.append(&quot;&amp;billing_email=&quot;).append(sanitizeEmail(request.getBillingEmail()));</span>
+        }
+
+<span class="nc" id="L73">        String plainText = data.toString();</span>
+
+<span class="nc" id="L75">        String encrypted = CcAvenueUtil.encrypt(plainText, workingKey);</span>
+<span class="nc" id="L76">        log.debug(&quot;CCAvenue payment request prepared for orderId={}, amount={}&quot;,</span>
+<span class="nc" id="L77">                sanitizeOrderId(request.getOrderId()), amount);</span>
+
+<span class="nc" id="L79">        return &quot;&lt;html&gt;&lt;body onload='document.forms[0].submit()'&gt;&quot;</span>
+<span class="nc" id="L80">                + &quot;&lt;form method='post' action='&quot; + config.getPaymentUrl() + &quot;'&gt;&quot;</span>
+                + &quot;&lt;input type='hidden' name='encRequest' value='&quot; + encrypted + &quot;'/&gt;&quot;
+                + &quot;&lt;input type='hidden' name='access_code' value='&quot; + accessCode + &quot;'/&gt;&quot;
+                + &quot;&lt;/form&gt;&lt;/body&gt;&lt;/html&gt;&quot;;
+    }
+
+    /**
+     * Strips characters that break CCAvenue's key=value&amp;key=value format.
+     * Removes: &amp; (param separator), = (kv separator), # and newlines/tabs.
+     * Keeps: letters, digits, spaces, commas, periods, hyphens, slashes, parentheses, etc.
+     */
+    private String sanitizeText(String value) {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (value == null) return &quot;&quot;;</span>
+<span class="nc" id="L93">        return value.replaceAll(&quot;[&amp;=#\r\n\t]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    /** Order ID: alphanumeric, hyphens, underscores, dots only */
+    private String sanitizeOrderId(String value) {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (value == null) return &quot;&quot;;</span>
+<span class="nc" id="L99">        return value.replaceAll(&quot;[^a-zA-Z0-9_.\\-]&quot;, &quot;&quot;);</span>
+    }
+
+    /** Phone: digits, plus, hyphens, spaces only */
+    private String sanitizePhone(String value) {
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        if (value == null) return &quot;&quot;;</span>
+<span class="nc" id="L105">        return value.replaceAll(&quot;[^0-9+\\- ]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    /** Email: standard email chars only */
+    private String sanitizeEmail(String value) {
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        if (value == null) return &quot;&quot;;</span>
+<span class="nc" id="L111">        return value.replaceAll(&quot;[^a-zA-Z0-9@.+_\\-]&quot;, &quot;&quot;).trim();</span>
+    }
+
+    private String nullSafe(String value) {
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        return value != null ? value : &quot;&quot;;</span>
+    }
+
+    private boolean isBlank(String s) {
+<span class="nc bnc" id="L119" title="All 4 branches missed.">        return s == null || s.isBlank();</span>
+    }
+
+    private String trimToEmpty(String s) {
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        return s == null ? &quot;&quot; : s.trim();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

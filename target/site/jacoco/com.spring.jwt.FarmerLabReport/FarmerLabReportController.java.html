@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerLabReportController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.FarmerLabReport</a> &gt; <span class="el_source">FarmerLabReportController.java</span></div><h1>FarmerLabReportController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.FarmerLabReport;
+
+import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+/**
+ * REST controller for managing Farmer Lab Reports.
+ *
+ * &lt;p&gt;
+ * This controller exposes APIs to upload, view, update, delete,
+ * and download lab report PDF documents associated with
+ * {@code EmployeeFarmerSurvey}.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * All successful responses are wrapped using {@link BaseResponseDTO1}
+ * to maintain a consistent API response structure across the application.
+ * &lt;/p&gt;
+ *
+ * Base URL:
+ * &lt;pre&gt;
+ * /api/v1/lab-report
+ * &lt;/pre&gt;
+ */
+@RestController
+@RequestMapping(&quot;/api/v1/lab_report&quot;)
+<span class="nc" id="L33">@RequiredArgsConstructor</span>
+public class FarmerLabReportController {
+
+    private final FarmerLabReportService labReportService;
+    private final SurveyIdResolver surveyIdResolver;
+
+    /* ===================== UPLOAD ===================== */
+
+    @PostMapping(
+            value = &quot;/upload/{surveyId}&quot;,
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerLabReportUploadDTO&gt;&gt; upload(
+            @PathVariable String surveyId,
+            @RequestParam MultipartFile file) {
+<span class="nc" id="L48">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+<span class="nc" id="L50">        FarmerLabReportUploadDTO response =</span>
+<span class="nc" id="L51">                labReportService.uploadLabReport(internalSurveyId, file);</span>
+
+<span class="nc" id="L53">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Lab report uploaded successfully&quot;,
+                        response
+                )
+        );
+    }
+
+    /* ===================== VIEW ===================== */
+
+    @GetMapping(&quot;/view/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerLabReportViewDTO&gt;&gt; view(
+            @PathVariable String surveyId) {
+<span class="nc" id="L67">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+<span class="nc" id="L69">        FarmerLabReportViewDTO response =</span>
+<span class="nc" id="L70">                labReportService.viewLabReport(internalSurveyId);</span>
+
+<span class="nc" id="L72">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Lab report fetched successfully&quot;,
+                        response
+                )
+        );
+    }
+
+
+    @GetMapping(&quot;/get/{reportId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerLabReportViewDTO&gt;&gt; getById(
+            @PathVariable Long reportId) {
+
+<span class="nc" id="L86">        FarmerLabReportViewDTO response =</span>
+<span class="nc" id="L87">                labReportService.getLabReportById(reportId);</span>
+
+<span class="nc" id="L89">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Lab report fetched successfully&quot;,
+                        response
+                )
+        );
+    }
+
+    /* ===================== UPDATE ===================== */
+
+    @PatchMapping(
+            value = &quot;/update/{surveyId}&quot;,
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity&lt;BaseResponseDTO1&lt;FarmerLabReportUploadDTO&gt;&gt; update(
+            @PathVariable String surveyId,
+            @RequestParam MultipartFile file) {
+<span class="nc" id="L107">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+<span class="nc" id="L109">        FarmerLabReportUploadDTO response =</span>
+<span class="nc" id="L110">                labReportService.updateLabReportBySurveyId(internalSurveyId, file);</span>
+
+<span class="nc" id="L112">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Lab report updated successfully&quot;,
+                        response
+                )
+        );
+    }
+
+    /* ===================== DELETE ===================== */
+
+    @DeleteMapping(&quot;/delete/{surveyId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Void&gt;&gt; delete(
+            @PathVariable String surveyId) {
+<span class="nc" id="L126">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+<span class="nc" id="L128">        labReportService.deleteLabReportBySurveyId(internalSurveyId);</span>
+
+<span class="nc" id="L130">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Lab report deleted successfully&quot;,
+                        null
+                )
+        );
+    }
+
+    /* ===================== DOWNLOAD ===================== */
+
+    @GetMapping(
+            value = &quot;/download/{surveyId}&quot;,
+            produces = MediaType.APPLICATION_PDF_VALUE
+    )
+    public ResponseEntity&lt;byte[]&gt; download(@PathVariable String surveyId) {
+<span class="nc" id="L146">        Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+
+<span class="nc" id="L148">        byte[] pdf = labReportService.downloadLabReport(internalSurveyId);</span>
+
+<span class="nc" id="L150">        return ResponseEntity.ok()</span>
+<span class="nc" id="L151">                .header(</span>
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        &quot;attachment; filename=lab-report-&quot; + surveyId + &quot;.pdf&quot;
+                )
+<span class="nc" id="L155">                .contentType(MediaType.APPLICATION_PDF)</span>
+<span class="nc" id="L156">                .body(pdf);</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

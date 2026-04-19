@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.exception</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package com.spring.jwt.exception;
+
+import com.spring.jwt.dto.ErrorResponseDTO;
+import com.spring.jwt.utils.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+<span class="nc" id="L21">@Slf4j</span>
+<span class="nc" id="L22">public class GlobalExceptionHandler {</span>
+
+    @ExceptionHandler(BaseException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleBaseException(BaseException ex, HttpServletRequest request) {
+<span class="nc" id="L26">        log.error(&quot;Base exception: {} - {}&quot;, ex.getCode(), ex.getMessage());</span>
+
+<span class="nc" id="L28">        HttpStatus status = determineHttpStatus(ex);</span>
+        
+<span class="nc bnc" id="L30" title="All 2 branches missed.">        return buildResponse(status, ex.getCode() != null ? ex.getCode() : &quot;APPLICATION_ERROR&quot;, </span>
+<span class="nc bnc" id="L31" title="All 2 branches missed.">                           ex.getMessage() != null ? ex.getMessage() : &quot;An application error occurred&quot;, </span>
+                           request);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleResourceNotFoundException(ResourceNotFoundException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L38">        log.error(&quot;Resource not found: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L39">        return buildResponse(HttpStatus.NOT_FOUND, &quot;RESOURCE_NOT_FOUND&quot;, ex.getMessage(), request);</span>
+    }
+
+    @ExceptionHandler(ResourceAlreadyExistsException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleResourceAlreadyExistsException(ResourceAlreadyExistsException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L45">        log.error(&quot;Resource already exists: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L46">        return buildResponse(HttpStatus.CONFLICT, &quot;RESOURCE_ALREADY_EXISTS&quot;, ex.getMessage(), request);</span>
+    }
+
+    @ExceptionHandler(AttendanceException.class)
+    public ResponseEntity&lt;ApiResponse&lt;Void&gt;&gt; handleAttendanceException(AttendanceException ex) {
+<span class="nc" id="L51">        log.error(&quot;Attendance exception: {}&quot;, ex.getMessage());</span>
+
+<span class="nc" id="L53">        return ResponseEntity</span>
+<span class="nc" id="L54">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L55">                .body(ApiResponse.error(HttpStatus.BAD_REQUEST, ex.getMessage(), null));</span>
+    }
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleOptimisticLockingFailureException(
+            OptimisticLockingFailureException ex, HttpServletRequest request) {
+<span class="nc" id="L60">        log.error(&quot;Optimistic locking failure: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L61">        return buildResponse(HttpStatus.CONFLICT, &quot;CONCURRENT_UPDATE_FAILURE&quot;,</span>
+                &quot;Data was updated by another user. Please refresh and try again.&quot;, request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleAccessDeniedException(AccessDeniedException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L68">        log.warn(&quot;Access denied (caught by GlobalExceptionHandler): {} - Path: {} - Method: {} - User attempted to access admin endpoint without proper role&quot;, </span>
+<span class="nc" id="L69">                ex.getMessage(), request.getRequestURI(), request.getMethod());</span>
+        
+        // Provide context-aware error message
+<span class="nc" id="L72">        String message = &quot;You do not have permission to access this resource.&quot;;</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (request.getRequestURI().contains(&quot;/user/&quot;)) {</span>
+<span class="nc" id="L74">            message = &quot;Admin role required to access user-specific resources.&quot;;</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">        } else if (request.getRequestURI().contains(&quot;/admin&quot;)) {</span>
+<span class="nc" id="L76">            message = &quot;Admin role required to access administrative resources.&quot;;</span>
+<span class="nc bnc" id="L77" title="All 4 branches missed.">        } else if (request.getMethod().equals(&quot;GET&quot;) &amp;&amp; (request.getRequestURI().endsWith(&quot;/profiles&quot;) || </span>
+<span class="nc bnc" id="L78" title="All 4 branches missed.">                   request.getRequestURI().endsWith(&quot;/horoscope&quot;) || request.getRequestURI().endsWith(&quot;/family-background&quot;))) {</span>
+<span class="nc" id="L79">            message = &quot;Admin role required to browse all resources.&quot;;</span>
+        }
+        
+<span class="nc" id="L82">        return buildResponse(HttpStatus.FORBIDDEN, &quot;ACCESS_DENIED&quot;, message, request);</span>
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleValidationExceptions(MethodArgumentNotValidException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L88">        Map&lt;String, String&gt; errors = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L89">        ex.getBindingResult().getAllErrors().forEach((error) -&gt; {</span>
+<span class="nc" id="L90">            String fieldName = ((FieldError) error).getField();</span>
+<span class="nc" id="L91">            String errorMessage = error.getDefaultMessage();</span>
+<span class="nc" id="L92">            errors.put(fieldName, errorMessage);</span>
+<span class="nc" id="L93">        });</span>
+
+<span class="nc" id="L95">        log.error(&quot;Validation error: {}&quot;, errors);</span>
+
+<span class="nc" id="L97">        return ResponseEntity.status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L98">                .body(ErrorResponseDTO.builder()</span>
+<span class="nc" id="L99">                        .status(HttpStatus.BAD_REQUEST.value())</span>
+<span class="nc" id="L100">                        .errorCode(&quot;VALIDATION_ERROR&quot;)</span>
+<span class="nc" id="L101">                        .message(&quot;Validation failed&quot;)</span>
+<span class="nc" id="L102">                        .details(errors.toString())</span>
+<span class="nc" id="L103">                        .path(request.getRequestURI())</span>
+<span class="nc" id="L104">                        .method(request.getMethod())</span>
+<span class="nc" id="L105">                        .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L106">                        .build());</span>
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleIllegalArgumentException(IllegalArgumentException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L112">        log.error(&quot;Validation error: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L113">        return buildResponse(HttpStatus.BAD_REQUEST, &quot;VALIDATION_ERROR&quot;, ex.getMessage(), request);</span>
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleRuntimeException(RuntimeException ex,
+            HttpServletRequest request) {
+<span class="nc" id="L119">        log.error(&quot;Runtime error: {}&quot;, ex.getMessage(), ex);</span>
+        
+        // Check if it's a specific business logic error
+<span class="nc" id="L122">        String message = ex.getMessage();</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        if (message != null) {</span>
+<span class="nc bnc" id="L124" title="All 4 branches missed.">            if (message.contains(&quot;Profile not found&quot;) || message.contains(&quot;User not found&quot;)) {</span>
+<span class="nc" id="L125">                return buildResponse(HttpStatus.NOT_FOUND, &quot;PROFILE_NOT_FOUND&quot;, </span>
+                    &quot;The target user's profile is not complete. Please try again later.&quot;, request);
+            }
+<span class="nc bnc" id="L128" title="All 4 branches missed.">            if (message.contains(&quot;already exists&quot;) || message.contains(&quot;duplicate&quot;)) {</span>
+<span class="nc" id="L129">                return buildResponse(HttpStatus.CONFLICT, &quot;INTEREST_ALREADY_EXISTS&quot;, </span>
+                    &quot;You have already expressed interest in this user.&quot;, request);
+            }
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            if (message.contains(&quot;daily limit&quot;)) {</span>
+<span class="nc" id="L133">                return buildResponse(HttpStatus.TOO_MANY_REQUESTS, &quot;DAILY_LIMIT_EXCEEDED&quot;, </span>
+                    &quot;You have reached your daily limit for expressing interest. Try again tomorrow.&quot;, request);
+            }
+<span class="nc bnc" id="L136" title="All 4 branches missed.">            if (message.contains(&quot;subscription&quot;) || message.contains(&quot;premium&quot;)) {</span>
+<span class="nc" id="L137">                return buildResponse(HttpStatus.PAYMENT_REQUIRED, &quot;SUBSCRIPTION_REQUIRED&quot;, </span>
+                    &quot;An active subscription is required to express interest.&quot;, request);
+            }
+        }
+        
+<span class="nc" id="L142">        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, &quot;INTERNAL_SERVER_ERROR&quot;, </span>
+            &quot;An unexpected error occurred. Please try again later.&quot;, request);
+    }
+
+    private ResponseEntity&lt;ErrorResponseDTO&gt; buildResponse(HttpStatus status, String errorCode, String message,
+            HttpServletRequest request) {
+<span class="nc" id="L148">        return ResponseEntity.status(status)</span>
+<span class="nc" id="L149">                .body(ErrorResponseDTO.builder()</span>
+<span class="nc" id="L150">                        .status(status.value())</span>
+<span class="nc" id="L151">                        .errorCode(errorCode)</span>
+<span class="nc" id="L152">                        .message(message)</span>
+<span class="nc" id="L153">                        .path(request.getRequestURI())</span>
+<span class="nc" id="L154">                        .method(request.getMethod())</span>
+<span class="nc" id="L155">                        .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L156">                        .build());</span>
+    }
+
+    /**
+     * Determine appropriate HTTP status based on BaseException details
+     */
+    private HttpStatus determineHttpStatus(BaseException ex) {
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        String message = ex.getMessage() != null ? ex.getMessage().toLowerCase() : &quot;&quot;;</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">        String code = ex.getCode() != null ? ex.getCode().toUpperCase() : &quot;&quot;;</span>
+
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (code.contains(&quot;PAYMENT_IDEMPOTENCY_CONFLICT&quot;)) {</span>
+<span class="nc" id="L167">            return HttpStatus.CONFLICT;</span>
+        }
+
+        // Check for specific error patterns
+<span class="nc bnc" id="L171" title="All 4 branches missed.">        if (message.contains(&quot;already registered&quot;) || message.contains(&quot;already exists&quot;) || </span>
+<span class="nc bnc" id="L172" title="All 4 branches missed.">            code.contains(&quot;ALREADY_EXISTS&quot;) || code.contains(&quot;DUPLICATE&quot;)) {</span>
+<span class="nc" id="L173">            return HttpStatus.CONFLICT; // 409</span>
+        }
+        
+<span class="nc bnc" id="L176" title="All 4 branches missed.">        if (message.contains(&quot;not found&quot;) || code.contains(&quot;NOT_FOUND&quot;)) {</span>
+<span class="nc" id="L177">            return HttpStatus.NOT_FOUND; // 404</span>
+        }
+        
+<span class="nc bnc" id="L180" title="All 4 branches missed.">        if (message.contains(&quot;invalid&quot;) || message.contains(&quot;validation&quot;) || </span>
+<span class="nc bnc" id="L181" title="All 4 branches missed.">            code.contains(&quot;INVALID&quot;) || code.contains(&quot;VALIDATION&quot;)) {</span>
+<span class="nc" id="L182">            return HttpStatus.BAD_REQUEST;</span>
+        }
+        
+<span class="nc bnc" id="L185" title="All 4 branches missed.">        if (message.contains(&quot;unauthorized&quot;) || message.contains(&quot;access denied&quot;) || </span>
+<span class="nc bnc" id="L186" title="All 4 branches missed.">            code.contains(&quot;UNAUTHORIZED&quot;) || code.contains(&quot;ACCESS_DENIED&quot;)) {</span>
+<span class="nc" id="L187">            return HttpStatus.FORBIDDEN;</span>
+        }
+
+<span class="nc" id="L190">        return HttpStatus.BAD_REQUEST;</span>
+    }
+
+    @ExceptionHandler(DocumentAlreadyExistsException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleDocumentAlreadyExistsException(
+            DocumentAlreadyExistsException ex,
+            HttpServletRequest request) {
+
+<span class="nc" id="L198">        log.error(&quot;Duplicate document: {}&quot;, ex.getMessage());</span>
+
+<span class="nc" id="L200">        return buildResponse(</span>
+                HttpStatus.CONFLICT,
+                &quot;RESOURCE_ALREADY_EXISTS&quot;,
+<span class="nc" id="L203">                ex.getMessage(),</span>
+                request
+        );
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

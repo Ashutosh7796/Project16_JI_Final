@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmailService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">EmailService.java</span></div><h1>EmailService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import com.spring.jwt.config.EmailProperties;
+import jakarta.mail.*;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.stereotype.Service;
+
+import java.util.Properties;
+
+/**
+ * Email Service - Industrial Standard Implementation
+ * 
+ * Features:
+ * - Externalized configuration via EmailProperties
+ * - Retry mechanism for failed sends
+ * - Proper error handling and logging
+ * - HTML email templates
+ * - Security best practices
+ * 
+ * @author System
+ * @version 2.0
+ */
+@Service
+<span class="nc" id="L29">@RequiredArgsConstructor</span>
+<span class="nc" id="L30">@Slf4j</span>
+public class EmailService {
+
+    private final EmailProperties emailProperties;
+
+    /**
+     * Sends password reset email with retry mechanism
+     * 
+     * @param to Recipient email address
+     * @param resetLink Password reset link with token
+     * @throws RuntimeException if email fails after retries
+     */
+    @Retryable(
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 1000, multiplier = 2),
+        retryFor = {MessagingException.class}
+    )
+    public void sendResetPasswordEmail(String to, String resetLink) {
+<span class="nc" id="L48">        String subject = &quot;Password Reset Request - &quot; + emailProperties.getCompanyName();</span>
+<span class="nc" id="L49">        String emailContent = generatePasswordResetEmailContent(resetLink);</span>
+
+        try {
+<span class="nc" id="L52">            sendEmail(to, subject, emailContent);</span>
+<span class="nc" id="L53">            log.info(&quot;Password reset email sent successfully to: {}&quot;, maskEmail(to));</span>
+<span class="nc" id="L54">        } catch (MessagingException e) {</span>
+<span class="nc" id="L55">            log.error(&quot;Failed to send password reset email to: {}&quot;, maskEmail(to), e);</span>
+<span class="nc" id="L56">            throw new RuntimeException(&quot;Failed to send password reset email&quot;, e);</span>
+<span class="nc" id="L57">        }</span>
+<span class="nc" id="L58">    }</span>
+
+    /**
+     * Sends email using configured SMTP settings
+     */
+    private void sendEmail(String to, String subject, String htmlContent) throws MessagingException {
+<span class="nc" id="L64">        Session session = createEmailSession();</span>
+<span class="nc" id="L65">        MimeMessage message = new MimeMessage(session);</span>
+        
+        try {
+<span class="nc" id="L68">            message.setFrom(new InternetAddress(</span>
+<span class="nc" id="L69">                emailProperties.getFromEmail(), </span>
+<span class="nc" id="L70">                emailProperties.getFromName()</span>
+            ));
+<span class="nc" id="L72">        } catch (java.io.UnsupportedEncodingException e) {</span>
+            // Fallback to email without personal name
+<span class="nc" id="L74">            message.setFrom(new InternetAddress(emailProperties.getFromEmail()));</span>
+<span class="nc" id="L75">        }</span>
+        
+<span class="nc" id="L77">        message.addRecipient(Message.RecipientType.TO, new InternetAddress(to));</span>
+<span class="nc" id="L78">        message.setSubject(subject);</span>
+<span class="nc" id="L79">        message.setContent(htmlContent, &quot;text/html; charset=utf-8&quot;);</span>
+
+<span class="nc" id="L81">        Transport.send(message);</span>
+<span class="nc" id="L82">    }</span>
+
+    /**
+     * Creates email session with SMTP configuration
+     */
+    private Session createEmailSession() {
+<span class="nc" id="L88">        Properties properties = new Properties();</span>
+<span class="nc" id="L89">        properties.put(&quot;mail.smtp.host&quot;, emailProperties.getSmtpHost());</span>
+<span class="nc" id="L90">        properties.put(&quot;mail.smtp.port&quot;, emailProperties.getSmtpPort());</span>
+<span class="nc" id="L91">        properties.put(&quot;mail.smtp.ssl.enable&quot;, emailProperties.isSslEnable());</span>
+<span class="nc" id="L92">        properties.put(&quot;mail.smtp.auth&quot;, emailProperties.isAuthEnable());</span>
+<span class="nc" id="L93">        properties.put(&quot;mail.smtp.connectiontimeout&quot;, &quot;10000&quot;);</span>
+<span class="nc" id="L94">        properties.put(&quot;mail.smtp.timeout&quot;, &quot;10000&quot;);</span>
+<span class="nc" id="L95">        properties.put(&quot;mail.smtp.writetimeout&quot;, &quot;10000&quot;);</span>
+
+<span class="nc" id="L97">        return Session.getInstance(properties, new Authenticator() {</span>
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication() {
+<span class="nc" id="L100">                return new PasswordAuthentication(</span>
+<span class="nc" id="L101">                    emailProperties.getUsername(), </span>
+<span class="nc" id="L102">                    emailProperties.getPassword()</span>
+                );
+            }
+        });
+    }
+
+    /**
+     * Generates HTML content for password reset email
+     * 
+     * Professional template with:
+     * - Responsive design
+     * - Clear call-to-action
+     * - Security warnings
+     * - Company branding
+     */
+    private String generatePasswordResetEmailContent(String resetLink) {
+<span class="nc" id="L118">        return &quot;&quot;&quot;</span>
+            &lt;!DOCTYPE html&gt;
+            &lt;html lang=&quot;en&quot;&gt;
+            &lt;head&gt;
+                &lt;meta charset=&quot;UTF-8&quot;&gt;
+                &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+                &lt;title&gt;Password Reset&lt;/title&gt;
+            &lt;/head&gt;
+            &lt;body style=&quot;margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;&quot;&gt;
+                &lt;table role=&quot;presentation&quot; style=&quot;width: 100%%; border-collapse: collapse;&quot;&gt;
+                    &lt;tr&gt;
+                        &lt;td align=&quot;center&quot; style=&quot;padding: 40px 0;&quot;&gt;
+                            &lt;table role=&quot;presentation&quot; style=&quot;width: 600px; max-width: 100%%; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);&quot;&gt;
+                                &lt;!-- Header --&gt;
+                                &lt;tr&gt;
+                                    &lt;td style=&quot;padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); border-radius: 8px 8px 0 0;&quot;&gt;
+                                        &lt;h1 style=&quot;margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;&quot;&gt;Password Reset Request&lt;/h1&gt;
+                                    &lt;/td&gt;
+                                &lt;/tr&gt;
+                                
+                                &lt;!-- Content --&gt;
+                                &lt;tr&gt;
+                                    &lt;td style=&quot;padding: 40px;&quot;&gt;
+                                        &lt;p style=&quot;margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;&quot;&gt;Hello,&lt;/p&gt;
+                                        
+                                        &lt;p style=&quot;margin: 0 0 20px; color: #333333; font-size: 16px; line-height: 1.6;&quot;&gt;
+                                            We received a request to reset your password. Click the button below to create a new password:
+                                        &lt;/p&gt;
+                                        
+                                        &lt;!-- CTA Button --&gt;
+                                        &lt;table role=&quot;presentation&quot; style=&quot;margin: 30px 0;&quot;&gt;
+                                            &lt;tr&gt;
+                                                &lt;td align=&quot;center&quot;&gt;
+                                                    &lt;a href=&quot;%s&quot; style=&quot;display: inline-block; padding: 16px 40px; background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);&quot;&gt;Reset My Password&lt;/a&gt;
+                                                &lt;/td&gt;
+                                            &lt;/tr&gt;
+                                        &lt;/table&gt;
+                                        
+                                        &lt;!-- Security Notice --&gt;
+                                        &lt;div style=&quot;margin: 30px 0; padding: 20px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;&quot;&gt;
+                                            &lt;p style=&quot;margin: 0; color: #856404; font-size: 14px; line-height: 1.6;&quot;&gt;
+                                                &lt;strong&gt;⚠️ Security Notice:&lt;/strong&gt;&lt;br&gt;
+                                                This link will expire in 30 minutes for your security.
+                                            &lt;/p&gt;
+                                        &lt;/div&gt;
+                                        
+                                        &lt;p style=&quot;margin: 20px 0 0; color: #666666; font-size: 14px; line-height: 1.6;&quot;&gt;
+                                            If you didn't request this password reset, please ignore this email or contact our support team if you have concerns.
+                                        &lt;/p&gt;
+                                        
+                                        &lt;!-- Alternative Link --&gt;
+                                        &lt;div style=&quot;margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 4px;&quot;&gt;
+                                            &lt;p style=&quot;margin: 0 0 10px; color: #666666; font-size: 13px;&quot;&gt;
+                                                If the button doesn't work, copy and paste this link into your browser:
+                                            &lt;/p&gt;
+                                            &lt;p style=&quot;margin: 0; color: #667eea; font-size: 13px; word-break: break-all;&quot;&gt;
+                                                %s
+                                            &lt;/p&gt;
+                                        &lt;/div&gt;
+                                    &lt;/td&gt;
+                                &lt;/tr&gt;
+                                
+                                &lt;!-- Footer --&gt;
+                                &lt;tr&gt;
+                                    &lt;td style=&quot;padding: 30px 40px; background-color: #f8f9fa; border-radius: 0 0 8px 8px; text-align: center;&quot;&gt;
+                                        &lt;p style=&quot;margin: 0 0 10px; color: #666666; font-size: 14px;&quot;&gt;
+                                            Best regards,&lt;br&gt;
+                                            &lt;strong&gt;%s Team&lt;/strong&gt;
+                                        &lt;/p&gt;
+                                        &lt;p style=&quot;margin: 10px 0 0; color: #999999; font-size: 12px;&quot;&gt;
+                                            Need help? Contact us at &lt;a href=&quot;mailto:%s&quot; style=&quot;color: #667eea; text-decoration: none;&quot;&gt;%s&lt;/a&gt;
+                                        &lt;/p&gt;
+                                        &lt;p style=&quot;margin: 10px 0 0; color: #999999; font-size: 12px;&quot;&gt;
+                                            &lt;a href=&quot;%s&quot; style=&quot;color: #667eea; text-decoration: none;&quot;&gt;%s&lt;/a&gt;
+                                        &lt;/p&gt;
+                                    &lt;/td&gt;
+                                &lt;/tr&gt;
+                            &lt;/table&gt;
+                        &lt;/td&gt;
+                    &lt;/tr&gt;
+                &lt;/table&gt;
+            &lt;/body&gt;
+            &lt;/html&gt;
+<span class="nc" id="L201">            &quot;&quot;&quot;.formatted(</span>
+                resetLink,
+                resetLink,
+<span class="nc" id="L204">                emailProperties.getCompanyName(),</span>
+<span class="nc" id="L205">                emailProperties.getSupportEmail(),</span>
+<span class="nc" id="L206">                emailProperties.getSupportEmail(),</span>
+<span class="nc" id="L207">                emailProperties.getWebsiteUrl(),</span>
+<span class="nc" id="L208">                emailProperties.getWebsiteUrl()</span>
+            );
+    }
+
+    /**
+     * Masks email for logging (security best practice)
+     */
+    private String maskEmail(String email) {
+<span class="nc bnc" id="L216" title="All 4 branches missed.">        if (email == null || !email.contains(&quot;@&quot;)) {</span>
+<span class="nc" id="L217">            return &quot;***&quot;;</span>
+        }
+<span class="nc" id="L219">        int atIndex = email.indexOf('@');</span>
+<span class="nc" id="L220">        return email.charAt(0) + &quot;***&quot; + email.substring(atIndex);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

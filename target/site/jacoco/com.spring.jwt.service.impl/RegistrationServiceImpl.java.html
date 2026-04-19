@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RegistrationServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.service.impl</a> &gt; <span class="el_source">RegistrationServiceImpl.java</span></div><h1>RegistrationServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.service.impl;
+
+import com.spring.jwt.dto.*;
+import com.spring.jwt.entity.Role;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.BaseException;
+import com.spring.jwt.repository.RoleRepository;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.SecureAuthenticationService;
+import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.DataMaskingUtils;
+import com.spring.jwt.utils.EncryptionUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Supplier;
+
+@Service
+<span class="nc" id="L32">@RequiredArgsConstructor</span>
+<span class="nc" id="L33">@Slf4j</span>
+public class RegistrationServiceImpl implements SecureAuthenticationService {
+
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
+    private final UserFactory userFactory;
+    private final ValidationService validationService;
+    private final AccountSecurityService accountSecurityService;
+    private final DeviceFingerprintService deviceFingerprintService;
+
+    @Value(&quot;${app.admin.secret-key}&quot;)
+    private String adminSecretKey;
+
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final int ACCOUNT_LOCK_DURATION_MINUTES = 30;
+
+//    @Override
+//    @Transactional
+//    public BaseResponseDTO registerUser(SecureUserRegistrationRequest request, HttpServletRequest httpRequest)
+//    {
+//        log.info(&quot;Starting user registration for email: {}&quot;, DataMaskingUtils.maskEmail(request.getEmail()));
+//
+//        return executeRegistration(
+//            () -&gt; {
+//                validationService.validateUserRegistration(request);
+//                checkEmailAndMobileAvailability(request.getEmail(), request.getMobileNumber());
+//                return userFactory.createUser(request, httpRequest);
+//            },
+//            &quot;USER&quot;,
+//            &quot;User registered successfully&quot;
+//        );
+//    }
+@Override
+@Transactional
+public BaseResponseDTO registerUser(
+        SecureUserRegistrationRequest request,
+        HttpServletRequest httpRequest) {
+
+<span class="nc" id="L72">    return executeRegistration1(</span>
+            () -&gt; {
+<span class="nc" id="L74">                validationService.validateUserRegistration(request);</span>
+<span class="nc" id="L75">                checkEmailAndMobileAvailability(</span>
+<span class="nc" id="L76">                        request.getEmail(),</span>
+<span class="nc" id="L77">                        request.getMobileNumber()</span>
+                );
+<span class="nc" id="L79">                return userFactory.createUser(request, httpRequest);</span>
+            },
+            &quot;User registered successfully&quot;
+    );
+}
+
+    @Override
+    @Transactional
+    public BaseResponseDTO registerAdmin(AdminRegistrationRequest request, HttpServletRequest httpRequest)
+    {
+<span class="nc" id="L89">        log.info(&quot;Starting admin registration for email: {}&quot;, DataMaskingUtils.maskEmail(request.getEmail()));</span>
+
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (!validateAdminSecretKey(request.getAdminSecretKey())) {</span>
+<span class="nc" id="L92">            log.warn(&quot;Invalid admin secret key provided for registration&quot;);</span>
+<span class="nc" id="L93">            throw new BaseException(String.valueOf(HttpStatus.FORBIDDEN.value()), &quot;Invalid admin secret key&quot;);</span>
+        }
+
+<span class="nc" id="L96">        return executeRegistration(</span>
+            () -&gt; {
+<span class="nc" id="L98">                validationService.validateAdminRegistration(request);</span>
+<span class="nc" id="L99">                checkEmailAvailability(request.getEmail());</span>
+<span class="nc" id="L100">                return userFactory.createAdmin(request, httpRequest);</span>
+            },
+            &quot;ADMIN&quot;,
+            &quot;Admin registered successfully&quot;
+        );
+    }
+
+    @Override
+    public BaseResponseDTO authenticateUser(SecureLoginRequest request, HttpServletRequest httpRequest)
+    {
+<span class="nc" id="L110">        log.info(&quot;Authentication attempt for email: {}&quot;, DataMaskingUtils.maskEmail(request.getEmail()));</span>
+
+<span class="nc" id="L112">        accountSecurityService.checkAccountLock(request.getEmail());</span>
+        
+<span class="nc" id="L114">        User user = authenticateCredentials(request);</span>
+        
+<span class="nc" id="L116">        accountSecurityService.resetFailedAttempts(user.getEmail());</span>
+<span class="nc" id="L117">        updateUserLoginInfo(user, httpRequest, request.getDeviceInfo());</span>
+        
+<span class="nc" id="L119">        log.info(&quot;User authenticated successfully: {}&quot;, DataMaskingUtils.maskEmail(request.getEmail()));</span>
+        
+<span class="nc" id="L121">        return createSuccessResponse(HttpStatus.OK, &quot;Authentication successful&quot;, user.getUserId());</span>
+    }
+
+    @Override
+    public boolean validateAdminSecretKey(String secretKey)
+    {
+<span class="nc" id="L127">        return adminSecretKey.equals(secretKey);</span>
+    }
+
+    @Override
+    public String generateDeviceFingerprint(HttpServletRequest request, DeviceInfo deviceInfo)
+    {
+<span class="nc" id="L133">        return deviceFingerprintService.generateFingerprint(request, deviceInfo);</span>
+    }
+
+    @Override
+    public boolean isAccountLocked(String email)
+    {
+<span class="nc" id="L139">        return accountSecurityService.isAccountLocked(email);</span>
+    }
+
+    @Override
+    @Transactional
+    public void lockAccount(String email)
+    {
+<span class="nc" id="L146">        accountSecurityService.lockAccount(email, ACCOUNT_LOCK_DURATION_MINUTES);</span>
+<span class="nc" id="L147">    }</span>
+
+    @Override
+    @Transactional
+    public void resetFailedLoginAttempts(String email)
+    {
+<span class="nc" id="L153">        accountSecurityService.resetFailedAttempts(email);</span>
+<span class="nc" id="L154">    }</span>
+
+    @Override
+    @Transactional
+    public void incrementFailedLoginAttempts(String email)
+    {
+<span class="nc" id="L160">        accountSecurityService.incrementFailedAttempts(email, MAX_FAILED_ATTEMPTS);</span>
+<span class="nc" id="L161">    }</span>
+
+    private BaseResponseDTO executeRegistration(Supplier&lt;User&gt; userCreator, String roleName, String successMessage)
+    {
+        try {
+<span class="nc" id="L166">            User user = userCreator.get();</span>
+//            assignRole(user, roleName);
+<span class="nc" id="L168">            User savedUser = userRepository.save(user);</span>
+
+<span class="nc" id="L170">            log.info(&quot;{} registered successfully with ID: {}&quot;, roleName.toLowerCase(), savedUser.getUserId());</span>
+
+<span class="nc" id="L172">            return createSuccessResponse(HttpStatus.CREATED, successMessage, Long.valueOf(savedUser.getUserId()));</span>
+
+<span class="nc" id="L174">        } catch (BaseException e) {</span>
+<span class="nc" id="L175">            throw e;</span>
+<span class="nc" id="L176">        } catch (Exception e) {</span>
+<span class="nc" id="L177">            log.error(&quot;Error during {} registration: {}&quot;, roleName.toLowerCase(), e.getMessage(), e);</span>
+<span class="nc" id="L178">            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()),</span>
+                &quot;Registration failed. Please try again.&quot;);
+        }
+    }
+    private BaseResponseDTO executeRegistration1(
+            Supplier&lt;User&gt; userCreator,
+            String successMessage) {
+
+<span class="nc" id="L186">        User savedUser = userCreator.get(); // already saved inside factory</span>
+
+<span class="nc" id="L188">        log.info(&quot;User registered successfully with ID: {}&quot;, savedUser.getUserId());</span>
+
+<span class="nc" id="L190">        return createSuccessResponse(</span>
+                HttpStatus.CREATED,
+                successMessage,
+<span class="nc" id="L193">                savedUser.getUserId()</span>
+        );
+    }
+
+
+    private void checkEmailAndMobileAvailability(String email, Long mobileNumber) {
+<span class="nc" id="L199">        checkEmailAvailability(email);</span>
+        
+<span class="nc bnc" id="L201" title="All 2 branches missed.">        if (userRepository.findByMobileNumber(mobileNumber).isPresent()) {</span>
+<span class="nc" id="L202">            log.warn(&quot;Registration attempt with existing mobile number&quot;);</span>
+<span class="nc" id="L203">            throw new BaseException(String.valueOf(HttpStatus.BAD_REQUEST.value()), </span>
+                &quot;Mobile number is already registered&quot;);
+        }
+<span class="nc" id="L206">    }</span>
+
+    private void checkEmailAvailability(String email) {
+<span class="nc bnc" id="L209" title="All 2 branches missed.">        if (userRepository.findByEmail(email) != null) {</span>
+<span class="nc" id="L210">            log.warn(&quot;Registration attempt with existing email: {}&quot;, DataMaskingUtils.maskEmail(email));</span>
+<span class="nc" id="L211">            throw new BaseException(String.valueOf(HttpStatus.BAD_REQUEST.value()), </span>
+                &quot;Email is already registered&quot;);
+        }
+<span class="nc" id="L214">    }</span>
+
+    private void assignRole(User user, String roleName) {
+<span class="nc" id="L217">        Role role = roleRepository.findByName(roleName);</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        if (role == null) {</span>
+<span class="nc" id="L219">            throw new BaseException(String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR.value()), </span>
+                roleName + &quot; role not found&quot;);
+        }
+        
+<span class="nc" id="L223">        Set&lt;Role&gt; roles = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L224">        roles.add(role);</span>
+<span class="nc" id="L225">        user.setRoles(roles);</span>
+<span class="nc" id="L226">    }</span>
+
+    private User authenticateCredentials(SecureLoginRequest request) {
+<span class="nc" id="L229">        User user = userRepository.findByEmail(request.getEmail());</span>
+        
+<span class="nc bnc" id="L231" title="All 4 branches missed.">        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {</span>
+<span class="nc" id="L232">            accountSecurityService.incrementFailedAttempts(request.getEmail(), MAX_FAILED_ATTEMPTS);</span>
+<span class="nc" id="L233">            log.warn(&quot;Invalid login credentials for email: {}&quot;, DataMaskingUtils.maskEmail(request.getEmail()));</span>
+<span class="nc" id="L234">            throw new BaseException(String.valueOf(HttpStatus.UNAUTHORIZED.value()), </span>
+                &quot;Invalid email or password&quot;);
+        }
+        
+<span class="nc" id="L238">        return user;</span>
+    }
+
+    private void updateUserLoginInfo(User user, HttpServletRequest httpRequest, DeviceInfo deviceInfo) {
+<span class="nc" id="L242">        String deviceFingerprint = deviceFingerprintService.generateFingerprint(httpRequest, deviceInfo);</span>
+<span class="nc" id="L243">        user.setDeviceFingerprint(deviceFingerprint);</span>
+<span class="nc" id="L244">        user.setLastLogin(LocalDateTime.now());</span>
+<span class="nc" id="L245">        userRepository.save(user);</span>
+<span class="nc" id="L246">    }</span>
+
+    private BaseResponseDTO createSuccessResponse(HttpStatus status, String message, Long userId) {
+<span class="nc" id="L249">        BaseResponseDTO response = new BaseResponseDTO();</span>
+<span class="nc" id="L250">        response.setCode(String.valueOf(status.value()));</span>
+<span class="nc" id="L251">        response.setMessage(message);</span>
+<span class="nc" id="L252">        response.setUserID(userId);</span>
+<span class="nc" id="L253">        return response;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

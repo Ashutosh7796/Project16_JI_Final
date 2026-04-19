@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SqlInjectionFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config.filter</a> &gt; <span class="el_source">SqlInjectionFilter.java</span></div><h1>SqlInjectionFilter.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config.filter;
+
+import jakarta.servlet.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
+import org.springframework.core.Ordered;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.regex.Pattern;
+
+/**
+ * Filter to protect against SQL injection attacks by sanitizing request parameters.
+ * &lt;p&gt;
+ * Headers that carry opaque bearer tokens or session cookies (Authorization, Cookie)
+ * are &lt;b&gt;excluded&lt;/b&gt; from sanitization because their base64url content can
+ * accidentally match SQL keywords, corrupting JWTs.
+ * &lt;p&gt;
+ * Parameter sanitization only targets clear SQL injection patterns (multi-statement,
+ * tautologies, UNION attacks). It does NOT strip legitimate characters like apostrophes,
+ * quotes, semicolons, or hashes — those break names (O'Brien), hashtags, and text input.
+ * SQL injection is properly prevented by parameterized queries (JPA/Hibernate), not
+ * by mangling user input.
+ */
+@Component
+<span class="nc" id="L27">public class SqlInjectionFilter implements Filter, Ordered {</span>
+
+    /** Headers whose values must never be mutated (lower-case for comparison). */
+<span class="nc" id="L30">    private static final Set&lt;String&gt; EXCLUDED_HEADERS = Set.of(</span>
+            &quot;authorization&quot;, &quot;cookie&quot;, &quot;set-cookie&quot;
+    );
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+<span class="nc" id="L37">        HttpServletRequest httpRequest = (HttpServletRequest) request;</span>
+
+<span class="nc bnc" id="L39" title="All 2 branches missed.">        if (&quot;OPTIONS&quot;.equalsIgnoreCase(httpRequest.getMethod())) {</span>
+<span class="nc" id="L40">            chain.doFilter(request, response);</span>
+<span class="nc" id="L41">            return;</span>
+        }
+        
+<span class="nc" id="L44">        SqlInjectionRequestWrapper wrappedRequest = new SqlInjectionRequestWrapper(httpRequest);</span>
+<span class="nc" id="L45">        chain.doFilter(wrappedRequest, response);</span>
+<span class="nc" id="L46">    }</span>
+
+    @Override
+    public void init(FilterConfig filterConfig) {
+
+<span class="nc" id="L51">    }</span>
+
+    @Override
+    public void destroy() {
+<span class="nc" id="L55">    }</span>
+    
+    @Override
+    public int getOrder() {
+<span class="nc" id="L59">        return Ordered.HIGHEST_PRECEDENCE + 45;</span>
+    }
+    
+    /**
+     * Request wrapper that sanitizes parameters to prevent SQL injection attacks.
+     * &lt;p&gt;
+     * IMPORTANT: The primary defense against SQL injection is parameterized queries
+     * (JPA/Hibernate). This filter is a defense-in-depth measure that only targets
+     * clear attack patterns, not legitimate text containing SQL keywords.
+     */
+    private static class SqlInjectionRequestWrapper extends HttpServletRequestWrapper {
+
+        /**
+         * Only match clear SQL injection attack patterns — NOT isolated SQL keywords
+         * in normal text. A search field containing &quot;select the best option from menu&quot;
+         * should NOT be stripped.
+         */
+<span class="nc" id="L76">        private static final Pattern[] SQL_INJECTION_PATTERNS = {</span>
+            // UNION-based injection (most common attack vector)
+<span class="nc" id="L78">            Pattern.compile(&quot;(?i)union\\s+(all\\s+)?select\\b&quot;),</span>
+            // Stacked queries: &quot;; DROP TABLE&quot; etc. (but not standalone semicolons)
+<span class="nc" id="L80">            Pattern.compile(&quot;;\\s*(drop|alter|truncate|delete|insert|update|create|exec)\\b&quot;, Pattern.CASE_INSENSITIVE),</span>
+            // Always-true tautologies used in WHERE clause injection
+<span class="nc" id="L82">            Pattern.compile(&quot;'\\s*or\\s+'\\s*'\\s*=\\s*'&quot;, Pattern.CASE_INSENSITIVE),</span>
+<span class="nc" id="L83">            Pattern.compile(&quot;'\\s*or\\s+1\\s*=\\s*1&quot;, Pattern.CASE_INSENSITIVE),</span>
+<span class="nc" id="L84">            Pattern.compile(&quot;\&quot;\\s*or\\s+\&quot;\\s*\&quot;\\s*=\\s*\&quot;&quot;, Pattern.CASE_INSENSITIVE),</span>
+            // SQL comment injection (used to truncate queries)
+<span class="nc" id="L86">            Pattern.compile(&quot;(?i)/\\*.*?\\*/&quot;),</span>
+<span class="nc" id="L87">            Pattern.compile(&quot;--\\s+.*$&quot;, Pattern.MULTILINE),</span>
+            // Time-based blind injection
+<span class="nc" id="L89">            Pattern.compile(&quot;(?i)\\bsleep\\s*\\(\\s*\\d+\\s*\\)&quot;),</span>
+<span class="nc" id="L90">            Pattern.compile(&quot;(?i)\\bbenchmark\\s*\\(&quot;),</span>
+            // Error-based injection
+<span class="nc" id="L92">            Pattern.compile(&quot;(?i)\\bextractvalue\\s*\\(&quot;),</span>
+<span class="nc" id="L93">            Pattern.compile(&quot;(?i)\\bupdatexml\\s*\\(&quot;),</span>
+        };
+
+        private Map&lt;String, String[]&gt; sanitizedParameterMap;
+
+        public SqlInjectionRequestWrapper(HttpServletRequest request) {
+<span class="nc" id="L99">            super(request);</span>
+<span class="nc" id="L100">        }</span>
+
+        @Override
+        public String getParameter(String name) {
+<span class="nc" id="L104">            String parameter = super.getParameter(name);</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">            return parameter != null ? sanitize(parameter) : null;</span>
+        }
+
+        @Override
+        public String[] getParameterValues(String name) {
+<span class="nc" id="L110">            String[] values = super.getParameterValues(name);</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">            if (values == null) {</span>
+<span class="nc" id="L112">                return null;</span>
+            }
+            
+<span class="nc" id="L115">            String[] sanitizedValues = new String[values.length];</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            for (int i = 0; i &lt; values.length; i++) {</span>
+<span class="nc" id="L117">                sanitizedValues[i] = sanitize(values[i]);</span>
+            }
+            
+<span class="nc" id="L120">            return sanitizedValues;</span>
+        }
+
+        @Override
+        public Map&lt;String, String[]&gt; getParameterMap() {
+<span class="nc bnc" id="L125" title="All 2 branches missed.">            if (sanitizedParameterMap == null) {</span>
+<span class="nc" id="L126">                Map&lt;String, String[]&gt; rawParameterMap = super.getParameterMap();</span>
+<span class="nc" id="L127">                sanitizedParameterMap = new HashMap&lt;&gt;(rawParameterMap.size());</span>
+                
+<span class="nc bnc" id="L129" title="All 2 branches missed.">                for (Map.Entry&lt;String, String[]&gt; entry : rawParameterMap.entrySet()) {</span>
+<span class="nc" id="L130">                    String[] rawValues = entry.getValue();</span>
+<span class="nc" id="L131">                    String[] sanitizedValues = new String[rawValues.length];</span>
+                    
+<span class="nc bnc" id="L133" title="All 2 branches missed.">                    for (int i = 0; i &lt; rawValues.length; i++) {</span>
+<span class="nc" id="L134">                        sanitizedValues[i] = sanitize(rawValues[i]);</span>
+                    }
+                    
+<span class="nc" id="L137">                    sanitizedParameterMap.put(entry.getKey(), sanitizedValues);</span>
+<span class="nc" id="L138">                }</span>
+            }
+            
+<span class="nc" id="L141">            return Collections.unmodifiableMap(sanitizedParameterMap);</span>
+        }
+
+        @Override
+        public String getHeader(String name) {
+<span class="nc" id="L146">            String header = super.getHeader(name);</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">            if (header == null) {</span>
+<span class="nc" id="L148">                return null;</span>
+            }
+            // Never sanitize headers that carry opaque tokens (JWT, session cookies)
+<span class="nc bnc" id="L151" title="All 2 branches missed.">            if (EXCLUDED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {</span>
+<span class="nc" id="L152">                return header;</span>
+            }
+<span class="nc" id="L154">            return sanitize(header);</span>
+        }
+
+        @Override
+        public Enumeration&lt;String&gt; getHeaders(String name) {
+<span class="nc" id="L159">            Enumeration&lt;String&gt; headers = super.getHeaders(name);</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">            if (headers == null) {</span>
+<span class="nc" id="L161">                return null;</span>
+            }
+
+            // Never sanitize headers that carry opaque tokens
+<span class="nc bnc" id="L165" title="All 2 branches missed.">            if (EXCLUDED_HEADERS.contains(name.toLowerCase(Locale.ROOT))) {</span>
+<span class="nc" id="L166">                return headers;</span>
+            }
+
+<span class="nc" id="L169">            return new Enumeration&lt;String&gt;() {</span>
+                @Override
+                public boolean hasMoreElements() {
+<span class="nc" id="L172">                    return headers.hasMoreElements();</span>
+                }
+
+                @Override
+                public String nextElement() {
+<span class="nc" id="L177">                    return sanitize(headers.nextElement());</span>
+                }
+            };
+        }
+
+        /**
+         * Strips only clear SQL injection attack patterns.
+         * Does NOT strip: apostrophes, quotes, semicolons, hashes, hex values.
+         * Those are legitimate in user text and handled by parameterized queries.
+         */
+        private String sanitize(String value) {
+<span class="nc bnc" id="L188" title="All 2 branches missed.">            if (value == null) {</span>
+<span class="nc" id="L189">                return null;</span>
+            }
+
+<span class="nc" id="L192">            String sanitizedValue = value;</span>
+<span class="nc bnc" id="L193" title="All 2 branches missed.">            for (Pattern pattern : SQL_INJECTION_PATTERNS) {</span>
+<span class="nc" id="L194">                sanitizedValue = pattern.matcher(sanitizedValue).replaceAll(&quot;&quot;);</span>
+            }
+            
+<span class="nc" id="L197">            return sanitizedValue;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

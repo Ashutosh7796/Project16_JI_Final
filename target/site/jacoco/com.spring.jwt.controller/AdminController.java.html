@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.controller</a> &gt; <span class="el_source">AdminController.java</span></div><h1>AdminController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.controller;
+
+import com.spring.jwt.dto.AdminDashboardStatsDTO;
+import com.spring.jwt.dto.UserDTO;
+import com.spring.jwt.entity.Role;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.repository.RoleRepository;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.AdminDashboardService;
+import com.spring.jwt.utils.ApiResponse;
+import com.spring.jwt.utils.BaseResponseDTO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping(&quot;/api/v1/admin&quot;)
+<span class="nc" id="L26">@RequiredArgsConstructor</span>
+<span class="nc" id="L27">@Slf4j</span>
+public class AdminController {
+
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AdminDashboardService adminDashboardService;
+
+    /**
+     * Dashboard KPIs + 8-week order track. Allowed for admin and manager roles.
+     */
+    @GetMapping(&quot;/users/dashboard/stats&quot;)
+    @PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;AdminDashboardStatsDTO&gt;&gt; getDashboardStats() {
+<span class="nc" id="L41">        AdminDashboardStatsDTO dto = adminDashboardService.buildStats();</span>
+<span class="nc" id="L42">        return ResponseEntity.ok(ApiResponse.success(&quot;Dashboard stats&quot;, dto));</span>
+    }
+
+    @PostMapping(&quot;/employees&quot;)
+    @PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; createEmployee(@RequestBody UserDTO userDTO) {
+<span class="nc bnc" id="L48" title="All 2 branches missed.">        if (userRepository.findByEmail(userDTO.getEmail()) != null) {</span>
+<span class="nc" id="L49">            return ResponseEntity.status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L50">                    .body(new BaseResponseDTO(&quot;400&quot;, &quot;Email already exists&quot;, null));</span>
+        }
+
+<span class="nc" id="L53">        User user = new User();</span>
+<span class="nc" id="L54">        user.setEmail(userDTO.getEmail());</span>
+<span class="nc" id="L55">        user.setPassword(passwordEncoder.encode(userDTO.getPassword()));</span>
+<span class="nc" id="L56">        user.setMobileNumber(userDTO.getMobileNumber());</span>
+<span class="nc" id="L57">        user.setFirstName(userDTO.getFirstName());</span>
+<span class="nc" id="L58">        user.setLastName(userDTO.getLastName());</span>
+<span class="nc" id="L59">        user.setEmailVerified(true);</span>
+<span class="nc" id="L60">        user.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L61">        user.setStatus(true);</span>
+
+<span class="nc" id="L63">        Set&lt;Role&gt; roles = new HashSet&lt;&gt;();</span>
+
+<span class="nc" id="L65">        String roleName = userDTO.getRole();</span>
+<span class="nc bnc" id="L66" title="All 4 branches missed.">        if (roleName != null &amp;&amp; !roleName.isEmpty()) {</span>
+<span class="nc" id="L67">            Role role = roleRepository.findByName(roleName.toUpperCase());</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">            if (role != null) {</span>
+<span class="nc" id="L69">                roles.add(role);</span>
+            } else {
+<span class="nc" id="L71">                return ResponseEntity.status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L72">                        .body(new BaseResponseDTO(&quot;400&quot;, &quot;Invalid Role. Use SURVEYOR, LAB_TECHNICIAN, or MANAGER&quot;, null));</span>
+            }
+<span class="nc" id="L74">        } else {</span>
+<span class="nc" id="L75">            return ResponseEntity.status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L76">                    .body(new BaseResponseDTO(&quot;400&quot;, &quot;Role is required (SURVEYOR, LAB_TECHNICIAN, or MANAGER)&quot;, null));</span>
+        }
+<span class="nc" id="L78">        user.setRoles(roles);</span>
+
+<span class="nc" id="L80">        userRepository.save(user);</span>
+
+<span class="nc" id="L82">        return ResponseEntity.ok(new BaseResponseDTO(&quot;200&quot;, &quot;Employee created successfully&quot;, null));</span>
+    }
+
+    @GetMapping(&quot;/employees&quot;)
+    @PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+    public ResponseEntity&lt;List&lt;UserDTO&gt;&gt; getAllEmployees() {
+
+<span class="nc" id="L89">        List&lt;User&gt; users = userRepository.findStaffRolesForAdminList();</span>
+<span class="nc" id="L90">        List&lt;UserDTO&gt; employees = users.stream()</span>
+<span class="nc" id="L91">                .filter(u -&gt; u.getRoles().stream()</span>
+<span class="nc bnc" id="L92" title="All 4 branches missed.">                        .anyMatch(r -&gt; r.getName().equals(&quot;SURVEYOR&quot;) || r.getName().equals(&quot;LAB_TECHNICIAN&quot;)</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">                                || r.getName().equals(&quot;ADMIN&quot;)))</span>
+<span class="nc" id="L94">                .map(this::convertToDTO)</span>
+<span class="nc" id="L95">                .collect(Collectors.toList());</span>
+<span class="nc" id="L96">        return ResponseEntity.ok(employees);</span>
+    }
+
+    @PutMapping(&quot;/employees/{userId}&quot;)
+    @PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; updateEmployee(@PathVariable Long userId, @RequestBody UserDTO userDTO) {
+<span class="nc" id="L102">        Optional&lt;User&gt; userOpt = userRepository.findById(userId);</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (userOpt.isEmpty()) {</span>
+<span class="nc" id="L104">            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponseDTO(&quot;404&quot;, &quot;User not found&quot;, null));</span>
+        }
+<span class="nc" id="L106">        User user = userOpt.get();</span>
+<span class="nc" id="L107">        user.setFirstName(userDTO.getFirstName());</span>
+<span class="nc" id="L108">        user.setLastName(userDTO.getLastName());</span>
+<span class="nc" id="L109">        user.setMobileNumber(userDTO.getMobileNumber());</span>
+<span class="nc bnc" id="L110" title="All 4 branches missed.">        if (userDTO.getPassword() != null &amp;&amp; !userDTO.getPassword().isEmpty()) {</span>
+<span class="nc" id="L111">            user.setPassword(passwordEncoder.encode(userDTO.getPassword()));</span>
+        }
+
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        if (userDTO.getRole() != null) {</span>
+<span class="nc" id="L115">            Role role = roleRepository.findByName(userDTO.getRole().toUpperCase());</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            if (role != null) {</span>
+<span class="nc" id="L117">                user.setRoles(Collections.singleton(role));</span>
+            }
+        }
+
+<span class="nc" id="L121">        userRepository.save(user);</span>
+<span class="nc" id="L122">        return ResponseEntity.ok(new BaseResponseDTO(&quot;200&quot;, &quot;Employee updated successfully&quot;, null));</span>
+    }
+
+    @DeleteMapping(&quot;/employees/{userId}&quot;)
+    @PreAuthorize(&quot;hasAnyRole('ADMIN','MANAGER')&quot;)
+    public ResponseEntity&lt;BaseResponseDTO&gt; deactivateEmployee(@PathVariable Long userId) {
+<span class="nc" id="L128">        Optional&lt;User&gt; userOpt = userRepository.findById(userId);</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">        if (userOpt.isEmpty()) {</span>
+<span class="nc" id="L130">            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new BaseResponseDTO(&quot;404&quot;, &quot;User not found&quot;, null));</span>
+        }
+<span class="nc" id="L132">        User user = userOpt.get();</span>
+<span class="nc" id="L133">        user.setStatus(false);</span>
+
+<span class="nc" id="L135">        userRepository.save(user);</span>
+<span class="nc" id="L136">        return ResponseEntity.ok(new BaseResponseDTO(&quot;200&quot;, &quot;Employee deactivated successfully&quot;, null));</span>
+    }
+
+    private UserDTO convertToDTO(User user) {
+<span class="nc" id="L140">        UserDTO dto = new UserDTO();</span>
+<span class="nc" id="L141">        dto.setUserId(user.getUserId());</span>
+<span class="nc" id="L142">        dto.setEmail(user.getEmail());</span>
+<span class="nc" id="L143">        dto.setMobileNumber(user.getMobileNumber());</span>
+<span class="nc" id="L144">        dto.setFirstName(user.getFirstName());</span>
+<span class="nc" id="L145">        dto.setLastName(user.getLastName());</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">        if (!user.getRoles().isEmpty()) {</span>
+<span class="nc" id="L147">            dto.setRole(user.getRoles().iterator().next().getName());</span>
+        }
+<span class="nc" id="L149">        return dto;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

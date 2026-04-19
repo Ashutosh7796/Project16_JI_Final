@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerLabReportServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.FarmerLabReport</a> &gt; <span class="el_source">FarmerLabReportServiceImpl.java</span></div><h1>FarmerLabReportServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.FarmerLabReport;
+
+import com.spring.jwt.EmployeeFarmerSurvey.EmployeeFarmerSurveyRepository;
+import com.spring.jwt.entity.EmployeeFarmerSurvey;
+import com.spring.jwt.entity.FarmerLabReport;
+import com.spring.jwt.exception.DocumentAlreadyExistsException;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDateTime;
+
+@Service
+<span class="nc" id="L17">@RequiredArgsConstructor</span>
+<span class="nc" id="L18">@Slf4j</span>
+public class FarmerLabReportServiceImpl implements FarmerLabReportService {
+
+    private final FarmerLabReportRepository labReportRepository;
+    private final EmployeeFarmerSurveyRepository surveyRepository;
+
+    /* ===================== UPLOAD ===================== */
+
+    @Override
+    @Transactional
+    public FarmerLabReportUploadDTO uploadLabReport(Long surveyId, MultipartFile file) {
+
+<span class="nc" id="L30">        validateSurveyId(surveyId);</span>
+<span class="nc" id="L31">        validatePdf(file);</span>
+
+<span class="nc" id="L33">        EmployeeFarmerSurvey survey = surveyRepository.findById(surveyId)</span>
+<span class="nc" id="L34">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L35">                        new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+
+<span class="nc bnc" id="L37" title="All 2 branches missed.">        if (labReportRepository.existsBySurvey_SurveyId(surveyId)) {</span>
+<span class="nc" id="L38">            throw new DocumentAlreadyExistsException(</span>
+                    &quot;Lab report already uploaded for survey ID: &quot; + surveyId);
+        }
+
+        try {
+<span class="nc" id="L43">            FarmerLabReport report = new FarmerLabReport();</span>
+<span class="nc" id="L44">            report.setSurvey(survey);</span>
+
+            // ✅ SAVE DIRECTLY AS BLOB
+<span class="nc" id="L47">            report.setPdfUrl(file.getBytes());</span>
+
+<span class="nc" id="L49">            report.setUploadedAt(LocalDateTime.now());</span>
+
+<span class="nc" id="L51">            FarmerLabReport saved = labReportRepository.save(report);</span>
+
+<span class="nc" id="L53">            log.info(&quot;Lab report uploaded successfully for surveyId={}&quot;, surveyId);</span>
+
+<span class="nc" id="L55">            return mapToUploadDTO(saved);</span>
+
+<span class="nc" id="L57">        } catch (Exception e) {</span>
+<span class="nc" id="L58">            log.error(&quot;Failed to upload lab report for survey {}&quot;, surveyId, e);</span>
+<span class="nc" id="L59">            throw new RuntimeException(&quot;Failed to upload lab report&quot;, e);</span>
+        }
+    }
+
+    /* ===================== VIEW ===================== */
+
+    @Override
+    public FarmerLabReportViewDTO viewLabReport(Long surveyId) {
+
+<span class="nc" id="L68">        FarmerLabReport report = labReportRepository.findBySurvey_SurveyId(surveyId)</span>
+<span class="nc" id="L69">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L70">                        new ResourceNotFoundException(&quot;Lab report not found for survey ID: &quot; + surveyId));</span>
+
+<span class="nc" id="L72">        return mapToViewDTO(report);</span>
+    }
+
+    @Override
+    public FarmerLabReportViewDTO getLabReportById(Long reportId) {
+
+<span class="nc" id="L78">        FarmerLabReport report = labReportRepository.findById(reportId)</span>
+<span class="nc" id="L79">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L80">                        new ResourceNotFoundException(&quot;Lab report not found with ID: &quot; + reportId));</span>
+
+<span class="nc" id="L82">        return mapToViewDTO(report);</span>
+    }
+
+    /* ===================== UPDATE ===================== */
+
+    @Override
+    @Transactional
+    public FarmerLabReportUploadDTO updateLabReportBySurveyId(Long surveyId, MultipartFile file) {
+
+<span class="nc" id="L91">        validateSurveyId(surveyId);</span>
+<span class="nc" id="L92">        validatePdf(file);</span>
+
+<span class="nc" id="L94">        FarmerLabReport report = labReportRepository.findBySurvey_SurveyId(surveyId)</span>
+<span class="nc" id="L95">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L96">                        new ResourceNotFoundException(&quot;Lab report not found for survey ID: &quot; + surveyId));</span>
+
+        try {
+            // ✅ UPDATE BLOB
+<span class="nc" id="L100">            report.setPdfUrl(file.getBytes());</span>
+<span class="nc" id="L101">            report.setUploadedAt(LocalDateTime.now());</span>
+
+<span class="nc" id="L103">            FarmerLabReport updated = labReportRepository.save(report);</span>
+
+<span class="nc" id="L105">            log.info(&quot;Lab report updated successfully for surveyId={}&quot;, surveyId);</span>
+<span class="nc" id="L106">            return mapToUploadDTO(updated);</span>
+
+<span class="nc" id="L108">        } catch (Exception e) {</span>
+<span class="nc" id="L109">            log.error(&quot;Failed to update lab report for survey {}&quot;, surveyId, e);</span>
+<span class="nc" id="L110">            throw new RuntimeException(&quot;Failed to update lab report&quot;, e);</span>
+        }
+    }
+
+    /* ===================== DELETE ===================== */
+
+    @Override
+    @Transactional
+    public void deleteLabReportBySurveyId(Long surveyId) {
+
+<span class="nc" id="L120">        FarmerLabReport report = labReportRepository.findBySurvey_SurveyId(surveyId)</span>
+<span class="nc" id="L121">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L122">                        new ResourceNotFoundException(&quot;Lab report not found for survey ID: &quot; + surveyId));</span>
+
+<span class="nc" id="L124">        labReportRepository.delete(report);</span>
+<span class="nc" id="L125">        log.info(&quot;Lab report deleted successfully for surveyId={}&quot;, surveyId);</span>
+<span class="nc" id="L126">    }</span>
+
+    /* ===================== DOWNLOAD ===================== */
+
+    @Override
+    public byte[] downloadLabReport(Long surveyId) {
+
+<span class="nc" id="L133">        FarmerLabReport report = labReportRepository.findBySurvey_SurveyId(surveyId)</span>
+<span class="nc" id="L134">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L135">                        new ResourceNotFoundException(&quot;Lab report not found for survey ID: &quot; + surveyId));</span>
+
+        // ✅ RETURN RAW PDF BYTES FROM MYSQL
+<span class="nc" id="L138">        return report.getPdfUrl();</span>
+    }
+
+    /* ===================== VALIDATIONS ===================== */
+
+    private void validateSurveyId(Long surveyId) {
+<span class="nc bnc" id="L144" title="All 4 branches missed.">        if (surveyId == null || surveyId &lt;= 0) {</span>
+<span class="nc" id="L145">            throw new IllegalArgumentException(&quot;Invalid survey ID&quot;);</span>
+        }
+<span class="nc" id="L147">    }</span>
+
+    private void validatePdf(MultipartFile file) {
+
+<span class="nc bnc" id="L151" title="All 4 branches missed.">        if (file == null || file.isEmpty()) {</span>
+<span class="nc" id="L152">            throw new IllegalArgumentException(&quot;PDF file is required&quot;);</span>
+        }
+
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        if (file.getContentType() == null ||</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                !file.getContentType().equalsIgnoreCase(&quot;application/pdf&quot;)) {</span>
+<span class="nc" id="L157">            throw new IllegalArgumentException(&quot;Only PDF files are allowed&quot;);</span>
+        }
+
+<span class="nc" id="L160">        long maxSize = 5 * 1024 * 1024; // 5 MB</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">        if (file.getSize() &gt; maxSize) {</span>
+<span class="nc" id="L162">            throw new IllegalArgumentException(&quot;PDF size must be less than 5MB&quot;);</span>
+        }
+<span class="nc" id="L164">    }</span>
+
+    /* ===================== DTO MAPPERS ===================== */
+
+
+    private FarmerLabReportViewDTO mapToViewDTO(FarmerLabReport report) {
+<span class="nc" id="L170">        FarmerLabReportViewDTO dto = new FarmerLabReportViewDTO();</span>
+<span class="nc" id="L171">        dto.setReportId(report.getReportId());</span>
+<span class="nc" id="L172">        dto.setSurveyId(report.getSurvey().getSurveyId());</span>
+<span class="nc" id="L173">        dto.setUploadedAt(report.getUploadedAt());</span>
+<span class="nc" id="L174">        dto.setDownloadUrl(</span>
+<span class="nc" id="L175">                &quot;/api/v1/lab_report/download/&quot; + report.getSurvey().getSurveyId()</span>
+        );
+
+<span class="nc" id="L178">        return dto;</span>
+    }
+
+    private FarmerLabReportUploadDTO mapToUploadDTO(FarmerLabReport report) {
+<span class="nc" id="L182">        FarmerLabReportUploadDTO dto = new FarmerLabReportUploadDTO();</span>
+<span class="nc" id="L183">        dto.setReportId(report.getReportId());</span>
+<span class="nc" id="L184">        dto.setSurveyId(report.getSurvey().getSurveyId());</span>
+<span class="nc" id="L185">        return dto;</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

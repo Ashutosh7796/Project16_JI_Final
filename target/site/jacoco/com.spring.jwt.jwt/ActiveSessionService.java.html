@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ActiveSessionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.jwt</a> &gt; <span class="el_source">ActiveSessionService.java</span></div><h1>ActiveSessionService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.jwt;
+
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+<span class="nc" id="L13">@Slf4j</span>
+<span class="nc" id="L14">public class ActiveSessionService {</span>
+
+<span class="nc" id="L16">	private final Map&lt;String, SessionInfo&gt; usernameToSession = new ConcurrentHashMap&lt;&gt;();</span>
+
+	public SessionInfo replaceActiveSession(String username, String newAccessTokenId, String newRefreshTokenId,
+			Instant accessExpiresAt, Instant refreshExpiresAt) {
+<span class="nc bnc" id="L20" title="All 2 branches missed.">		if (username == null) {</span>
+<span class="nc" id="L21">			return null;</span>
+		}
+		
+<span class="nc" id="L24">		SessionInfo newInfo = new SessionInfo(newAccessTokenId, newRefreshTokenId, accessExpiresAt, refreshExpiresAt, Instant.now());</span>
+<span class="nc" id="L25">		SessionInfo previous = usernameToSession.get(username);</span>
+		
+<span class="nc bnc" id="L27" title="All 2 branches missed.">		if (previous != null) {</span>
+<span class="nc" id="L28">			newInfo.setPreviousAccessTokenId(previous.getAccessTokenId());</span>
+<span class="nc" id="L29">			newInfo.setPreviousRefreshTokenId(previous.getRefreshTokenId());</span>
+		}
+		
+<span class="nc" id="L32">		usernameToSession.put(username, newInfo);</span>
+<span class="nc" id="L33">		log.debug(&quot;Active session set for user: {} (access jti: {}, refresh jti: {})&quot;, username, shortId(newAccessTokenId), shortId(newRefreshTokenId));</span>
+<span class="nc" id="L34">		return previous;</span>
+	}
+
+	public void removeActiveSession(String username) {
+<span class="nc bnc" id="L38" title="All 2 branches missed.">		if (username != null) {</span>
+<span class="nc" id="L39">			usernameToSession.remove(username);</span>
+<span class="nc" id="L40">			log.debug(&quot;Active session removed for user: {}&quot;, username);</span>
+		}
+<span class="nc" id="L42">	}</span>
+
+	public boolean isCurrentAccessToken(String username, String tokenId) {
+<span class="nc" id="L45">		SessionInfo info = usernameToSession.get(username);</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">		if (info == null) return true; // Gracefully allow if no session in memory (e.g., server restart)</span>
+<span class="nc bnc" id="L47" title="All 2 branches missed.">		if (tokenId == null) return false;</span>
+		
+<span class="nc bnc" id="L49" title="All 2 branches missed.">		if (tokenId.equals(info.getAccessTokenId())) return true;</span>
+		
+		// 60-second grace period for previous token to prevent race conditions during refresh
+<span class="nc bnc" id="L52" title="All 2 branches missed.">		if (tokenId.equals(info.getPreviousAccessTokenId())) {</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">			if (Instant.now().isBefore(info.getUpdatedAt().plusSeconds(60))) {</span>
+<span class="nc" id="L54">				log.debug(&quot;Allowed previous access token during grace period for user: {}&quot;, username);</span>
+<span class="nc" id="L55">				return true;</span>
+			}
+		}
+<span class="nc" id="L58">		return false;</span>
+	}
+
+	public boolean isCurrentRefreshToken(String username, String tokenId) {
+<span class="nc" id="L62">		SessionInfo info = usernameToSession.get(username);</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">		if (info == null) return true; // Gracefully allow if no session in memory</span>
+<span class="nc bnc" id="L64" title="All 2 branches missed.">		if (tokenId == null) return false;</span>
+		
+<span class="nc bnc" id="L66" title="All 2 branches missed.">		if (tokenId.equals(info.getRefreshTokenId())) return true;</span>
+		
+		// 60-second grace period for previous token to prevent race conditions during refresh
+<span class="nc bnc" id="L69" title="All 2 branches missed.">		if (tokenId.equals(info.getPreviousRefreshTokenId())) {</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">			if (Instant.now().isBefore(info.getUpdatedAt().plusSeconds(60))) {</span>
+<span class="nc" id="L71">				log.debug(&quot;Allowed previous refresh token during grace period for user: {}&quot;, username);</span>
+<span class="nc" id="L72">				return true;</span>
+			}
+		}
+<span class="nc" id="L75">		return false;</span>
+	}
+
+	@Scheduled(fixedRate = 3600000)
+	public void cleanupExpiredSessions() {
+<span class="nc" id="L80">		Instant now = Instant.now();</span>
+<span class="nc" id="L81">		int before = usernameToSession.size();</span>
+<span class="nc" id="L82">		usernameToSession.entrySet().removeIf(e -&gt; {</span>
+<span class="nc" id="L83">			SessionInfo s = e.getValue();</span>
+<span class="nc bnc" id="L84" title="All 4 branches missed.">			return (s.getRefreshExpiresAt() != null &amp;&amp; s.getRefreshExpiresAt().isBefore(now))</span>
+<span class="nc bnc" id="L85" title="All 4 branches missed.">				|| (s.getAccessExpiresAt() != null &amp;&amp; s.getAccessExpiresAt().isBefore(now));</span>
+		});
+<span class="nc" id="L87">		int evicted = before - usernameToSession.size();</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">		if (evicted &gt; 0) {</span>
+<span class="nc" id="L89">			log.info(&quot;Evicted {} expired sessions, {} remaining&quot;, evicted, usernameToSession.size());</span>
+		}
+<span class="nc" id="L91">	}</span>
+
+	private String shortId(String id) {
+<span class="nc bnc" id="L94" title="All 4 branches missed.">		if (id == null || id.length() &lt; 6) return &quot;***&quot;;</span>
+<span class="nc" id="L95">		return id.substring(0, 3) + &quot;...&quot; + id.substring(id.length() - 3);</span>
+	}
+
+<span class="nc bnc" id="L98" title="All 62 branches missed.">	@Data</span>
+	public static class SessionInfo {
+<span class="nc" id="L100">		private final String accessTokenId;</span>
+<span class="nc" id="L101">		private final String refreshTokenId;</span>
+<span class="nc" id="L102">		private final Instant accessExpiresAt;</span>
+<span class="nc" id="L103">		private final Instant refreshExpiresAt;</span>
+<span class="nc" id="L104">		private final Instant updatedAt;</span>
+<span class="nc" id="L105">		private String previousAccessTokenId;</span>
+<span class="nc" id="L106">		private String previousRefreshTokenId;</span>
+	}
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

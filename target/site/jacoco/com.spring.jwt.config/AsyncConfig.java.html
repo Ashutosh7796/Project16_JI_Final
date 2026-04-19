@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AsyncConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">AsyncConfig.java</span></div><h1>AsyncConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
+
+/**
+ * Dedicated pool for payment callbacks; separate default pool for {@code @Async} without a qualifier.
+ */
+@Configuration
+@EnableAsync
+<span class="nc" id="L21">@Slf4j</span>
+<span class="nc" id="L22">public class AsyncConfig {</span>
+
+    @Bean(name = &quot;applicationTaskExecutor&quot;)
+    public ThreadPoolTaskExecutor applicationTaskExecutor(
+            @Value(&quot;${app.async.default.core-pool-size:2}&quot;) int corePoolSize,
+            @Value(&quot;${app.async.default.max-pool-size:4}&quot;) int maxPoolSize,
+            @Value(&quot;${app.async.default.queue-capacity:50}&quot;) int queueCapacity) {
+<span class="nc" id="L29">        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+<span class="nc" id="L30">        executor.setCorePoolSize(corePoolSize);</span>
+<span class="nc" id="L31">        executor.setMaxPoolSize(maxPoolSize);</span>
+<span class="nc" id="L32">        executor.setQueueCapacity(queueCapacity);</span>
+<span class="nc" id="L33">        executor.setThreadNamePrefix(&quot;async-app-&quot;);</span>
+<span class="nc" id="L34">        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());</span>
+<span class="nc" id="L35">        executor.setWaitForTasksToCompleteOnShutdown(true);</span>
+<span class="nc" id="L36">        executor.setAwaitTerminationSeconds(60);</span>
+<span class="nc" id="L37">        executor.initialize();</span>
+<span class="nc" id="L38">        log.info(&quot;Default async executor: core={}, max={}, queue={}&quot;, corePoolSize, maxPoolSize, queueCapacity);</span>
+<span class="nc" id="L39">        return executor;</span>
+    }
+
+    @Bean(name = &quot;paymentCallbackExecutor&quot;)
+    public ThreadPoolTaskExecutor paymentCallbackExecutor(
+            @Value(&quot;${payment.callback.async.core-pool-size:5}&quot;) int corePoolSize,
+            @Value(&quot;${payment.callback.async.max-pool-size:10}&quot;) int maxPoolSize,
+            @Value(&quot;${payment.callback.async.queue-capacity:100}&quot;) int queueCapacity) {
+<span class="nc" id="L47">        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+<span class="nc" id="L48">        executor.setCorePoolSize(corePoolSize);</span>
+<span class="nc" id="L49">        executor.setMaxPoolSize(maxPoolSize);</span>
+<span class="nc" id="L50">        executor.setQueueCapacity(queueCapacity);</span>
+<span class="nc" id="L51">        executor.setThreadNamePrefix(&quot;payment-callback-&quot;);</span>
+<span class="nc" id="L52">        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());</span>
+<span class="nc" id="L53">        executor.setWaitForTasksToCompleteOnShutdown(true);</span>
+<span class="nc" id="L54">        executor.setAwaitTerminationSeconds(60);</span>
+<span class="nc" id="L55">        executor.initialize();</span>
+<span class="nc" id="L56">        log.info(&quot;Payment callback async executor: core={}, max={}, queue={}&quot;, corePoolSize, maxPoolSize, queueCapacity);</span>
+<span class="nc" id="L57">        return executor;</span>
+    }
+
+    @Bean(name = &quot;documentProcessingExecutor&quot;)
+    public ThreadPoolTaskExecutor documentProcessingExecutor(
+            @Value(&quot;${document.async.core-pool-size:3}&quot;) int corePoolSize,
+            @Value(&quot;${document.async.max-pool-size:6}&quot;) int maxPoolSize,
+            @Value(&quot;${document.async.queue-capacity:50}&quot;) int queueCapacity) {
+<span class="nc" id="L65">        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+<span class="nc" id="L66">        executor.setCorePoolSize(corePoolSize);</span>
+<span class="nc" id="L67">        executor.setMaxPoolSize(maxPoolSize);</span>
+<span class="nc" id="L68">        executor.setQueueCapacity(queueCapacity);</span>
+<span class="nc" id="L69">        executor.setThreadNamePrefix(&quot;doc-process-&quot;);</span>
+<span class="nc" id="L70">        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());</span>
+<span class="nc" id="L71">        executor.setWaitForTasksToCompleteOnShutdown(true);</span>
+<span class="nc" id="L72">        executor.setAwaitTerminationSeconds(60);</span>
+<span class="nc" id="L73">        executor.initialize();</span>
+<span class="nc" id="L74">        log.info(&quot;Document processing async executor: core={}, max={}, queue={}&quot;, corePoolSize, maxPoolSize, queueCapacity);</span>
+<span class="nc" id="L75">        return executor;</span>
+    }
+
+    @Bean(name = &quot;dashboardStatsExecutor&quot;)
+    public ThreadPoolTaskExecutor dashboardStatsExecutor(
+            @Value(&quot;${dashboard.async.core-pool-size:4}&quot;) int corePoolSize,
+            @Value(&quot;${dashboard.async.max-pool-size:8}&quot;) int maxPoolSize,
+            @Value(&quot;${dashboard.async.queue-capacity:32}&quot;) int queueCapacity) {
+<span class="nc" id="L83">        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();</span>
+<span class="nc" id="L84">        executor.setCorePoolSize(corePoolSize);</span>
+<span class="nc" id="L85">        executor.setMaxPoolSize(maxPoolSize);</span>
+<span class="nc" id="L86">        executor.setQueueCapacity(queueCapacity);</span>
+<span class="nc" id="L87">        executor.setThreadNamePrefix(&quot;dash-stats-&quot;);</span>
+<span class="nc" id="L88">        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());</span>
+<span class="nc" id="L89">        executor.setWaitForTasksToCompleteOnShutdown(true);</span>
+<span class="nc" id="L90">        executor.setAwaitTerminationSeconds(30);</span>
+<span class="nc" id="L91">        executor.initialize();</span>
+<span class="nc" id="L92">        log.info(&quot;Dashboard stats executor: core={}, max={}, queue={}&quot;, corePoolSize, maxPoolSize, queueCapacity);</span>
+<span class="nc" id="L93">        return executor;</span>
+    }
+
+    @Bean
+    public AsyncConfigurer asyncConfigurer(
+            @Qualifier(&quot;applicationTaskExecutor&quot;) Executor applicationTaskExecutor) {
+<span class="nc" id="L99">        return new AsyncConfigurer() {</span>
+            @Override
+            public Executor getAsyncExecutor() {
+<span class="nc" id="L102">                return applicationTaskExecutor;</span>
+            }
+
+            @Override
+            public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+<span class="nc" id="L107">                return (ex, method, params) -&gt;</span>
+<span class="nc" id="L108">                        log.error(&quot;Async execution error in method: {}, params: {}&quot;, method.getName(), params, ex);</span>
+            }
+        };
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

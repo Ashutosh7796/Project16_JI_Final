@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeliveryTracking.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.entity</a> &gt; <span class="el_source">DeliveryTracking.java</span></div><h1>DeliveryTracking.java</h1><pre class="source lang-java linenums">package com.spring.jwt.entity;
+
+import com.spring.jwt.Enums.DeliveryStatus;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+<span class="nc bnc" id="L9" title="All 134 branches missed.">@Data</span>
+@Entity
+@Table(name = &quot;delivery_tracking&quot;,
+        indexes = {
+                @Index(name = &quot;idx_tracking_order&quot;, columnList = &quot;order_id&quot;),
+                @Index(name = &quot;idx_tracking_status&quot;, columnList = &quot;status&quot;)
+        }
+)
+<span class="nc" id="L17">@AllArgsConstructor</span>
+<span class="nc" id="L18">@NoArgsConstructor</span>
+public class DeliveryTracking {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+<span class="nc" id="L23">    private Long id; // ✅ standard naming</span>
+
+    // 🔗 Proper relation (BEST PRACTICE)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = &quot;order_id&quot;, nullable = false, unique = true)
+<span class="nc" id="L28">    private ProductBuyConfirmed order;</span>
+
+    // 📦 Courier Details
+    @Column(unique = true)
+<span class="nc" id="L32">    private String trackingNumber;</span>
+
+<span class="nc" id="L34">    private String courierName;</span>
+
+    // 🚚 Current Status
+    @Enumerated(EnumType.STRING)
+<span class="nc" id="L38">    private DeliveryStatus status;</span>
+
+<span class="nc" id="L40">    private String currentLocation;</span>
+
+    // 📅 Timeline Fields
+<span class="nc" id="L43">    private LocalDateTime shippedDate;</span>
+<span class="nc" id="L44">    private LocalDateTime outForDeliveryDate;</span>
+<span class="nc" id="L45">    private LocalDateTime deliveredDate;</span>
+
+    // ⏳ ETA (Very Important 🔥)
+<span class="nc" id="L48">    private LocalDateTime estimatedDeliveryDate;</span>
+
+<span class="nc" id="L50">    private LocalDateTime createdAt = LocalDateTime.now();</span>
+
+    // 👤 Delivery Info
+<span class="nc" id="L53">    private String deliveryAddress;</span>
+<span class="nc" id="L54">    private String customerName;</span>
+<span class="nc" id="L55">    private String contactNumber;</span>
+
+    // 🔥 Extra Flags (Production Use)
+<span class="nc" id="L58">    private Boolean isDelayed = false;</span>
+<span class="nc" id="L59">    private Boolean isReturned = false;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

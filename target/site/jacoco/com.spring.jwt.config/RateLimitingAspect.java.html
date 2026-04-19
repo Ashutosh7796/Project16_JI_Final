@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RateLimitingAspect.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">RateLimitingAspect.java</span></div><h1>RateLimitingAspect.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import com.spring.jwt.exception.BaseException;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.HttpServletRequest;
+
+@Aspect
+@Component
+<span class="nc" id="L21">@Slf4j</span>
+<span class="nc" id="L22">@RequiredArgsConstructor</span>
+public class RateLimitingAspect {
+
+    private final RateLimiter authenticationRateLimiter;
+    private final RateLimiter apiRateLimiter;
+
+    @Value(&quot;${app.rate-limiting.enabled:true}&quot;)
+    private boolean rateLimitingEnabled;
+
+    @Around(&quot;execution(* com.spring.jwt.config.filter.JwtUsernamePasswordAuthenticationFilter.attemptAuthentication(..))&quot;)
+    public Object limitAuthentication(ProceedingJoinPoint joinPoint) throws Throwable {
+<span class="nc bnc" id="L33" title="All 2 branches missed.">        if (!rateLimitingEnabled) {</span>
+<span class="nc" id="L34">            return joinPoint.proceed();</span>
+        }
+
+<span class="nc" id="L37">        String clientIp = getClientIp();</span>
+<span class="nc" id="L38">        String key = &quot;auth:&quot; + clientIp;</span>
+<span class="nc" id="L39">        log.debug(&quot;Rate limiting authentication request from IP: {}&quot;, clientIp);</span>
+
+        try {
+<span class="nc" id="L42">            return authenticationRateLimiter.executeCheckedSupplier(() -&gt; {</span>
+                try {
+<span class="nc" id="L44">                    return joinPoint.proceed();</span>
+<span class="nc" id="L45">                } catch (Throwable throwable) {</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">                    if (throwable instanceof RuntimeException) {</span>
+<span class="nc" id="L47">                        throw (RuntimeException) throwable;</span>
+                    }
+<span class="nc" id="L49">                    throw new RuntimeException(throwable);</span>
+                }
+            });
+<span class="nc" id="L52">        } catch (RequestNotPermitted e) {</span>
+<span class="nc" id="L53">            log.warn(&quot;Rate limit exceeded for authentication request from IP: {}&quot;, clientIp);</span>
+<span class="nc" id="L54">            throw new BaseException(String.valueOf(HttpStatus.TOO_MANY_REQUESTS.value()), </span>
+                    &quot;Too many authentication attempts. Please try again later.&quot;);
+        }
+    }
+
+    @Around(&quot;execution(* com.spring.jwt.service.PasswordResetService.initiatePasswordReset(..)) || &quot; +
+            &quot;execution(* com.spring.jwt.service.PasswordResetService.resetPassword(..))&quot;)
+    public Object limitSensitiveOperations(ProceedingJoinPoint joinPoint) throws Throwable {
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        if (!rateLimitingEnabled) {</span>
+<span class="nc" id="L63">            return joinPoint.proceed();</span>
+        }
+
+<span class="nc" id="L66">        String clientIp = getClientIp();</span>
+<span class="nc" id="L67">        log.debug(&quot;Rate limiting sensitive operation from IP: {}&quot;, clientIp);</span>
+
+        try {
+<span class="nc" id="L70">            return authenticationRateLimiter.executeCheckedSupplier(() -&gt; {</span>
+                try {
+<span class="nc" id="L72">                    return joinPoint.proceed();</span>
+<span class="nc" id="L73">                } catch (Throwable throwable) {</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                    if (throwable instanceof RuntimeException) {</span>
+<span class="nc" id="L75">                        throw (RuntimeException) throwable;</span>
+                    }
+<span class="nc" id="L77">                    throw new RuntimeException(throwable);</span>
+                }
+            });
+<span class="nc" id="L80">        } catch (RequestNotPermitted e) {</span>
+<span class="nc" id="L81">            log.warn(&quot;Rate limit exceeded for sensitive operation from IP: {}&quot;, clientIp);</span>
+<span class="nc" id="L82">            throw new BaseException(String.valueOf(HttpStatus.TOO_MANY_REQUESTS.value()), </span>
+                    &quot;Too many requests. Please try again later.&quot;);
+        }
+    }
+
+    @Around(&quot;execution(* com.spring.jwt.controller.*.*(..)) &amp;&amp; &quot; +
+            &quot;!execution(* com.spring.jwt.controller.*.handleForgotPassword(..)) &amp;&amp; &quot; +
+            &quot;!execution(* com.spring.jwt.controller.*.updatePassword(..))&quot;)
+    public Object limitApiRequests(ProceedingJoinPoint joinPoint) throws Throwable {
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (!rateLimitingEnabled) {</span>
+<span class="nc" id="L92">            return joinPoint.proceed();</span>
+        }
+
+<span class="nc" id="L95">        String clientIp = getClientIp();</span>
+<span class="nc" id="L96">        log.debug(&quot;Rate limiting API request from IP: {}&quot;, clientIp);</span>
+
+        try {
+<span class="nc" id="L99">            return apiRateLimiter.executeCheckedSupplier(() -&gt; {</span>
+                try {
+<span class="nc" id="L101">                    return joinPoint.proceed();</span>
+<span class="nc" id="L102">                } catch (Throwable throwable) {</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">                    if (throwable instanceof RuntimeException) {</span>
+<span class="nc" id="L104">                        throw (RuntimeException) throwable;</span>
+                    }
+<span class="nc" id="L106">                    throw new RuntimeException(throwable);</span>
+                }
+            });
+<span class="nc" id="L109">        } catch (RequestNotPermitted e) {</span>
+<span class="nc" id="L110">            log.warn(&quot;Rate limit exceeded for API request from IP: {}&quot;, clientIp);</span>
+<span class="nc" id="L111">            throw new BaseException(String.valueOf(HttpStatus.TOO_MANY_REQUESTS.value()), </span>
+                    &quot;Too many requests. Please try again later.&quot;);
+        }
+    }
+
+    private String getClientIp() {
+<span class="nc" id="L117">        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())</span>
+<span class="nc" id="L118">                .getRequest();</span>
+        
+<span class="nc" id="L120">        String xForwardedFor = request.getHeader(&quot;X-Forwarded-For&quot;);</span>
+<span class="nc bnc" id="L121" title="All 4 branches missed.">        if (xForwardedFor != null &amp;&amp; !xForwardedFor.isEmpty()) {</span>
+<span class="nc" id="L122">            return xForwardedFor.split(&quot;,&quot;)[0].trim();</span>
+        }
+        
+<span class="nc" id="L125">        return request.getRemoteAddr();</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

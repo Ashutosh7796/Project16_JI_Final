@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerPaymentServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.FarmerPayment</a> &gt; <span class="el_source">FarmerPaymentServiceImpl.java</span></div><h1>FarmerPaymentServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.FarmerPayment;
+
+import com.spring.jwt.Enums.PaymentStatus;
+import com.spring.jwt.Payment.*;
+import com.spring.jwt.EmployeeFarmerSurvey.EmployeeFarmerSurveyRepository;
+import com.spring.jwt.EmployeeFarmerSurvey.SurveyIdResolver;
+import com.spring.jwt.entity.EmployeeFarmerSurvey;
+import com.spring.jwt.entity.FarmerPayment;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.security.UserDetailsCustom;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L36">@RequiredArgsConstructor</span>
+<span class="nc" id="L37">@Slf4j</span>
+public class FarmerPaymentServiceImpl implements FarmerPaymentService {
+
+    private static final int MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS = 8;
+
+    private final FarmerPaymentRepository farmerPaymentRepo;
+    private final EmployeeFarmerSurveyRepository surveyRepo;
+    private final SurveyIdResolver surveyIdResolver;
+    private final UserRepository userRepo;
+    private final CcAvenuePaymentService ccAvenuePaymentService;
+    private final CcAvenueConfig ccAvenueConfig;
+    private final PaymentAuditService auditService;
+
+    @Value(&quot;${farmer.registration.fee:500.00}&quot;)
+    private BigDecimal registrationFee;
+
+    @Value(&quot;${payment.fraud.max-attempts-per-survey:5}&quot;)
+    private int maxAttemptsPerSurvey;
+
+    @Value(&quot;${payment.fraud.max-attempts-window-minutes:60}&quot;)
+    private int attemptsWindowMinutes;
+
+    @Value(&quot;${payment.fraud.max-daily-payments-per-user:20}&quot;)
+    private int maxDailyPaymentsPerUser;
+
+    @Override
+    @Transactional
+    public FarmerPaymentResponseDTO initiatePayment(FarmerPaymentInitiateDTO dto, String idempotencyKey,
+                                                     String clientIp, String userAgent) {
+<span class="nc" id="L66">        Long surveyId = surveyIdResolver.resolveToInternalId(dto.getSurveyId());</span>
+<span class="nc" id="L67">        Long currentUserId = getCurrentUserId();</span>
+
+<span class="nc bnc" id="L69" title="All 4 branches missed.">        String resolvedKey = (idempotencyKey == null || idempotencyKey.isBlank())</span>
+<span class="nc" id="L70">                ? generateIdempotencyKey(surveyId, currentUserId)</span>
+<span class="nc" id="L71">                : idempotencyKey;</span>
+<span class="nc" id="L72">        final String sanitizedKey = PaymentInputSanitizer.sanitizeOrderId(resolvedKey);</span>
+
+        // Idempotency check
+<span class="nc" id="L75">        Optional&lt;FarmerPayment&gt; existing = farmerPaymentRepo.findByIdempotencyKey(sanitizedKey);</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        if (existing.isPresent()) {</span>
+<span class="nc" id="L77">            FarmerPayment existingPayment = existing.get();</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">            if (!existingPayment.getSurvey().getSurveyId().equals(surveyId)) {</span>
+<span class="nc" id="L79">                throw PaymentException.idempotencySurveyMismatch();</span>
+            }
+<span class="nc bnc" id="L81" title="All 4 branches missed.">            if (!isCurrentUserAdmin() &amp;&amp; !existingPayment.getUser().getUserId().equals(currentUserId)) {</span>
+<span class="nc" id="L82">                throw new AccessDeniedException(&quot;Idempotency key belongs to a different user&quot;);</span>
+            }
+<span class="nc bnc" id="L84" title="All 2 branches missed.">            if (PaymentStatus.SUCCESS.equals(existingPayment.getPaymentStatus())) {</span>
+<span class="nc" id="L85">                log.info(&quot;Idempotent return: payment {} already succeeded for survey {}&quot;,</span>
+<span class="nc" id="L86">                        existingPayment.getPaymentId(), surveyId);</span>
+<span class="nc" id="L87">                return mapToResponseDTO(existingPayment, null);</span>
+            }
+<span class="nc bnc" id="L89" title="All 2 branches missed.">            if (PaymentStatus.PENDING.equals(existingPayment.getPaymentStatus())) {</span>
+<span class="nc" id="L90">                log.info(&quot;Idempotent return: payment {} still pending for survey {}&quot;,</span>
+<span class="nc" id="L91">                        existingPayment.getPaymentId(), surveyId);</span>
+<span class="nc" id="L92">                String paymentForm = regeneratePaymentForm(existingPayment);</span>
+<span class="nc" id="L93">                return mapToResponseDTO(existingPayment, paymentForm);</span>
+            }
+        }
+
+        // Serialize initiations per survey (prevents duplicate SUCCESS under concurrent requests)
+<span class="nc" id="L98">        EmployeeFarmerSurvey survey = surveyRepo.findByIdForUpdate(surveyId)</span>
+<span class="nc" id="L99">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+<span class="nc bnc" id="L100" title="All 4 branches missed.">        if (!isCurrentUserAdmin() &amp;&amp; !survey.getUser().getUserId().equals(currentUserId)) {</span>
+<span class="nc" id="L101">            throw new AccessDeniedException(&quot;You are not allowed to initiate payment for this survey&quot;);</span>
+        }
+
+        // Check if already paid
+<span class="nc" id="L105">        Optional&lt;FarmerPayment&gt; successfulPayment =</span>
+<span class="nc" id="L106">                farmerPaymentRepo.findBySurvey_SurveyIdAndPaymentStatus(surveyId, PaymentStatus.SUCCESS);</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        if (successfulPayment.isPresent()) {</span>
+<span class="nc" id="L108">            throw PaymentException.duplicatePayment(&quot;Survey &quot; + surveyId + &quot; already paid&quot;);</span>
+        }
+
+        // Fraud checks
+<span class="nc" id="L112">        performFraudChecks(surveyId, currentUserId, clientIp);</span>
+
+<span class="nc" id="L114">        User user = userRepo.findById(currentUserId)</span>
+<span class="nc" id="L115">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;User not found&quot;));</span>
+
+<span class="nc" id="L117">        BigDecimal amount = PaymentInputSanitizer.sanitizeAmount(registrationFee, new BigDecimal(&quot;50000.00&quot;));</span>
+
+<span class="nc" id="L119">        int attemptCount = (int) farmerPaymentRepo.countRecentBySurvey(surveyId,</span>
+<span class="nc" id="L120">                LocalDateTime.now().minusMinutes(attemptsWindowMinutes)) + 1;</span>
+
+<span class="nc" id="L122">        String ccavenueOrderId = &quot;FARM-&quot; + surveyId + &quot;-&quot; + System.currentTimeMillis();</span>
+
+<span class="nc" id="L124">        FarmerPayment payment = FarmerPayment.builder()</span>
+<span class="nc" id="L125">                .survey(survey)</span>
+<span class="nc" id="L126">                .user(user)</span>
+<span class="nc" id="L127">                .amount(amount)</span>
+<span class="nc" id="L128">                .paymentStatus(PaymentStatus.PENDING)</span>
+<span class="nc" id="L129">                .ccavenueOrderId(ccavenueOrderId)</span>
+<span class="nc" id="L130">                .idempotencyKey(sanitizedKey)</span>
+<span class="nc" id="L131">                .initiatorIp(clientIp)</span>
+<span class="nc" id="L132">                .userAgent(truncate(userAgent, 500))</span>
+<span class="nc" id="L133">                .attemptCount(attemptCount)</span>
+<span class="nc" id="L134">                .build();</span>
+
+<span class="nc" id="L136">        farmerPaymentRepo.save(payment);</span>
+
+<span class="nc" id="L138">        auditService.logEvent(&quot;FARMER&quot;, payment.getPaymentId(), ccavenueOrderId,</span>
+                &quot;INITIATED&quot;, null, &quot;PENDING&quot;, currentUserId, clientIp,
+                &quot;surveyId=&quot; + surveyId + &quot;, amount=&quot; + amount + &quot;, attempt=&quot; + attemptCount);
+
+<span class="nc" id="L142">        String redirectUrl = buildFarmerCallbackUrl(ccAvenueConfig.getRedirectUrl(), &quot;/api/payment/farmer/response&quot;);</span>
+<span class="nc" id="L143">        String cancelUrl = buildFarmerCallbackUrl(ccAvenueConfig.getCancelUrl(), &quot;/api/payment/farmer/cancel&quot;);</span>
+
+<span class="nc" id="L145">        CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()</span>
+<span class="nc" id="L146">                .orderId(ccavenueOrderId)</span>
+<span class="nc" id="L147">                .amount(amount)</span>
+<span class="nc" id="L148">                .redirectUrl(redirectUrl)</span>
+<span class="nc" id="L149">                .cancelUrl(cancelUrl)</span>
+<span class="nc" id="L150">                .billingName(PaymentInputSanitizer.sanitizeName(survey.getFarmerName()))</span>
+<span class="nc" id="L151">                .billingAddress(PaymentInputSanitizer.sanitizeAddress(</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">                        survey.getAddress() != null ? survey.getAddress() : survey.getVillage()))</span>
+<span class="nc" id="L153">                .billingTel(PaymentInputSanitizer.sanitizePhone(survey.getFarmerMobile()))</span>
+<span class="nc" id="L154">                .build();</span>
+
+<span class="nc" id="L156">        String paymentForm = ccAvenuePaymentService.generatePaymentForm(paymentRequest);</span>
+
+<span class="nc" id="L158">        auditService.logEvent(&quot;FARMER&quot;, payment.getPaymentId(), ccavenueOrderId,</span>
+                &quot;FORM_GENERATED&quot;, &quot;PENDING&quot;, &quot;PENDING&quot;, currentUserId, clientIp, null);
+
+<span class="nc" id="L161">        log.info(&quot;Farmer payment initiated: paymentId={}, surveyId={}, orderId={}, amount={}&quot;,</span>
+<span class="nc" id="L162">                payment.getPaymentId(), surveyId, ccavenueOrderId, amount);</span>
+
+<span class="nc" id="L164">        return mapToResponseDTO(payment, paymentForm);</span>
+    }
+
+    @Override
+    @Transactional
+    public FarmerPaymentResponseDTO handleCallback(Map&lt;String, String&gt; ccAvenueParams, String clientIp) {
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        for (int attempt = 1; attempt &lt;= MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS; attempt++) {</span>
+            try {
+<span class="nc" id="L172">                return handleCallbackBody(ccAvenueParams, clientIp);</span>
+<span class="nc" id="L173">            } catch (ObjectOptimisticLockingFailureException e) {</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">                if (attempt &gt;= MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS) {</span>
+<span class="nc" id="L175">                    log.error(&quot;Farmer callback optimistic-lock retries exhausted (order_id hint: {})&quot;,</span>
+<span class="nc bnc" id="L176" title="All 2 branches missed.">                            ccAvenueParams != null ? ccAvenueParams.get(&quot;order_id&quot;) : null);</span>
+<span class="nc" id="L177">                    throw e;</span>
+                }
+<span class="nc" id="L179">                log.warn(&quot;Farmer callback optimistic lock conflict; retry {}/{}&quot;,</span>
+<span class="nc" id="L180">                        attempt, MAX_FARMER_CALLBACK_OPT_LOCK_ATTEMPTS);</span>
+            }
+        }
+<span class="nc" id="L183">        throw new IllegalStateException(&quot;Unreachable farmer callback retry loop&quot;);</span>
+    }
+
+    private FarmerPaymentResponseDTO handleCallbackBody(Map&lt;String, String&gt; ccAvenueParams, String clientIp) {
+<span class="nc" id="L187">        String orderId = ccAvenueParams.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L188">        String orderStatus = ccAvenueParams.get(&quot;order_status&quot;);</span>
+<span class="nc" id="L189">        String trackingId = ccAvenueParams.get(&quot;tracking_id&quot;);</span>
+<span class="nc" id="L190">        String bankRefNo = ccAvenueParams.get(&quot;bank_ref_no&quot;);</span>
+<span class="nc" id="L191">        String paymentMode = ccAvenueParams.get(&quot;payment_mode&quot;);</span>
+<span class="nc" id="L192">        String statusMessage = ccAvenueParams.get(&quot;status_message&quot;);</span>
+<span class="nc" id="L193">        String callbackAmount = ccAvenueParams.get(&quot;amount&quot;);</span>
+
+<span class="nc bnc" id="L195" title="All 4 branches missed.">        if (orderId == null || orderId.isBlank()) {</span>
+<span class="nc" id="L196">            throw PaymentException.invalidCallback(&quot;Missing order_id&quot;);</span>
+        }
+
+<span class="nc" id="L199">        final String sanitizedOrderId = PaymentInputSanitizer.sanitizeOrderId(orderId);</span>
+
+        FarmerPayment payment;
+        try {
+<span class="nc" id="L203">            payment = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)</span>
+<span class="nc" id="L204">                    .orElseThrow(() -&gt; PaymentException.paymentNotFound(sanitizedOrderId));</span>
+<span class="nc" id="L205">        } catch (PaymentException e) {</span>
+<span class="nc" id="L206">            auditService.logFraudEvent(&quot;FARMER&quot;, null, sanitizedOrderId, null, clientIp,</span>
+                    &quot;Callback for unknown order&quot;);
+<span class="nc" id="L208">            throw e;</span>
+<span class="nc" id="L209">        }</span>
+
+<span class="nc bnc" id="L211" title="All 2 branches missed.">        if (PaymentStatus.SUCCESS.equals(payment.getPaymentStatus())) {</span>
+<span class="nc" id="L212">            log.warn(&quot;Duplicate callback for already-succeeded payment: {}&quot;, sanitizedOrderId);</span>
+<span class="nc" id="L213">            auditService.logEvent(&quot;FARMER&quot;, payment.getPaymentId(), sanitizedOrderId,</span>
+                    &quot;DUPLICATE_CALLBACK&quot;, &quot;SUCCESS&quot;, &quot;SUCCESS&quot;, null, clientIp, null);
+<span class="nc" id="L215">            return mapToResponseDTO(payment, null);</span>
+        }
+
+<span class="nc" id="L218">        boolean amountMismatchDetected = false;</span>
+
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        if (callbackAmount != null) {</span>
+            try {
+<span class="nc" id="L222">                BigDecimal returnedAmount = new BigDecimal(callbackAmount);</span>
+<span class="nc bnc" id="L223" title="All 2 branches missed.">                if (payment.getAmount().compareTo(returnedAmount) != 0) {</span>
+<span class="nc" id="L224">                    amountMismatchDetected = true;</span>
+<span class="nc" id="L225">                    auditService.logFraudEvent(&quot;FARMER&quot;, payment.getPaymentId(), sanitizedOrderId,</span>
+<span class="nc" id="L226">                            payment.getUser().getUserId(), clientIp,</span>
+<span class="nc" id="L227">                            &quot;Amount mismatch: expected=&quot; + payment.getAmount() + &quot;, received=&quot; + returnedAmount);</span>
+<span class="nc" id="L228">                    log.error(&quot;FRAUD: Amount mismatch for order {}: expected={}, received={}&quot;,</span>
+<span class="nc" id="L229">                            sanitizedOrderId, payment.getAmount(), returnedAmount);</span>
+                }
+<span class="nc" id="L231">            } catch (NumberFormatException e) {</span>
+<span class="nc" id="L232">                log.warn(&quot;Could not parse callback amount: {}&quot;, callbackAmount);</span>
+<span class="nc" id="L233">            }</span>
+        }
+
+<span class="nc" id="L236">        String oldStatus = payment.getPaymentStatus().name();</span>
+
+<span class="nc bnc" id="L238" title="All 4 branches missed.">        if (&quot;Success&quot;.equalsIgnoreCase(orderStatus) &amp;&amp; !amountMismatchDetected) {</span>
+<span class="nc" id="L239">            Long surveyId = payment.getSurvey().getSurveyId();</span>
+<span class="nc" id="L240">            surveyRepo.findByIdForUpdate(surveyId)</span>
+<span class="nc" id="L241">                    .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+
+<span class="nc" id="L243">            FarmerPayment locked = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)</span>
+<span class="nc" id="L244">                    .orElseThrow(() -&gt; PaymentException.paymentNotFound(sanitizedOrderId));</span>
+
+<span class="nc bnc" id="L246" title="All 2 branches missed.">            if (PaymentStatus.SUCCESS.equals(locked.getPaymentStatus())) {</span>
+<span class="nc" id="L247">                log.warn(&quot;Duplicate callback after survey lock for order {}&quot;, sanitizedOrderId);</span>
+<span class="nc" id="L248">                auditService.logEvent(&quot;FARMER&quot;, locked.getPaymentId(), sanitizedOrderId,</span>
+                        &quot;DUPLICATE_CALLBACK&quot;, &quot;SUCCESS&quot;, &quot;SUCCESS&quot;, null, clientIp, null);
+<span class="nc" id="L250">                return mapToResponseDTO(locked, null);</span>
+            }
+
+<span class="nc" id="L253">            Optional&lt;FarmerPayment&gt; otherSuccess =</span>
+<span class="nc" id="L254">                    farmerPaymentRepo.findBySurvey_SurveyIdAndPaymentStatus(surveyId, PaymentStatus.SUCCESS);</span>
+<span class="nc bnc" id="L255" title="All 4 branches missed.">            if (otherSuccess.isPresent() &amp;&amp; !otherSuccess.get().getPaymentId().equals(locked.getPaymentId())) {</span>
+<span class="nc" id="L256">                locked.setPaymentStatus(PaymentStatus.FAILED);</span>
+<span class="nc" id="L257">                locked.setTrackingId(trackingId);</span>
+<span class="nc" id="L258">                locked.setBankRefNo(bankRefNo);</span>
+<span class="nc" id="L259">                locked.setCcavenuePaymentMode(paymentMode);</span>
+<span class="nc" id="L260">                locked.setStatusMessage(truncate(</span>
+<span class="nc" id="L261">                        &quot;Survey already has a successful payment (order &quot; + otherSuccess.get().getCcavenueOrderId() + &quot;)&quot;,</span>
+                        500));
+<span class="nc" id="L263">                farmerPaymentRepo.save(locked);</span>
+<span class="nc" id="L264">                auditService.logEvent(&quot;FARMER&quot;, locked.getPaymentId(), sanitizedOrderId,</span>
+                        &quot;VERIFIED_FAILED&quot;, oldStatus, &quot;FAILED&quot;, null, clientIp,
+                        &quot;blocked_duplicate_survey_success&quot;);
+<span class="nc" id="L267">                log.warn(&quot;Farmer payment {} failed: another successful payment exists for survey {}&quot;,</span>
+                        sanitizedOrderId, surveyId);
+<span class="nc" id="L269">                return mapToResponseDTO(locked, null);</span>
+            }
+
+<span class="nc" id="L272">            locked.setPaymentStatus(PaymentStatus.SUCCESS);</span>
+<span class="nc" id="L273">            locked.setTrackingId(trackingId);</span>
+<span class="nc" id="L274">            locked.setBankRefNo(bankRefNo);</span>
+<span class="nc" id="L275">            locked.setCcavenuePaymentMode(paymentMode);</span>
+<span class="nc" id="L276">            locked.setStatusMessage(truncate(statusMessage, 500));</span>
+<span class="nc" id="L277">            farmerPaymentRepo.save(locked);</span>
+
+<span class="nc" id="L279">            auditService.logEvent(&quot;FARMER&quot;, locked.getPaymentId(), sanitizedOrderId,</span>
+<span class="nc" id="L280">                    &quot;VERIFIED_SUCCESS&quot;, oldStatus, locked.getPaymentStatus().name(), null, clientIp,</span>
+                    &quot;tracking_id=&quot; + trackingId + &quot;, bank_ref_no=&quot; + bankRefNo);
+<span class="nc" id="L282">            log.info(&quot;Farmer payment callback processed: paymentId={}, orderId={}, status={}&quot;,</span>
+<span class="nc" id="L283">                    locked.getPaymentId(), sanitizedOrderId, locked.getPaymentStatus());</span>
+<span class="nc" id="L284">            return mapToResponseDTO(locked, null);</span>
+        }
+
+<span class="nc" id="L287">        payment.setPaymentStatus(PaymentStatus.FAILED);</span>
+<span class="nc" id="L288">        payment.setTrackingId(trackingId);</span>
+<span class="nc" id="L289">        payment.setBankRefNo(bankRefNo);</span>
+<span class="nc" id="L290">        payment.setCcavenuePaymentMode(paymentMode);</span>
+<span class="nc" id="L291">        payment.setStatusMessage(truncate(statusMessage, 500));</span>
+<span class="nc" id="L292">        farmerPaymentRepo.save(payment);</span>
+
+<span class="nc" id="L294">        auditService.logEvent(&quot;FARMER&quot;, payment.getPaymentId(), sanitizedOrderId,</span>
+<span class="nc" id="L295">                &quot;VERIFIED_FAILED&quot;, oldStatus, payment.getPaymentStatus().name(), null, clientIp,</span>
+                &quot;tracking_id=&quot; + trackingId + &quot;, bank_ref_no=&quot; + bankRefNo);
+<span class="nc" id="L297">        log.info(&quot;Farmer payment callback processed: paymentId={}, orderId={}, status={}&quot;,</span>
+<span class="nc" id="L298">                payment.getPaymentId(), sanitizedOrderId, payment.getPaymentStatus());</span>
+<span class="nc" id="L299">        return mapToResponseDTO(payment, null);</span>
+    }
+
+    @Override
+    @Transactional
+    public FarmerPaymentResponseDTO getPaymentById(Long paymentId) {
+<span class="nc" id="L305">        FarmerPayment payment = farmerPaymentRepo.findById(paymentId)</span>
+<span class="nc" id="L306">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Payment not found with ID: &quot; + paymentId));</span>
+<span class="nc" id="L307">        validatePaymentAccess(payment);</span>
+<span class="nc" id="L308">        return mapToResponseDTO(payment, null);</span>
+    }
+
+    @Override
+    @Transactional
+    public Page&lt;FarmerPaymentResponseDTO&gt; getPaymentsBySurveyId(Long surveyId, Pageable pageable) {
+<span class="nc" id="L314">        EmployeeFarmerSurvey survey = surveyRepo.findById(surveyId)</span>
+<span class="nc" id="L315">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+<span class="nc bnc" id="L316" title="All 4 branches missed.">        if (!isCurrentUserAdmin() &amp;&amp; !survey.getUser().getUserId().equals(getCurrentUserId())) {</span>
+<span class="nc" id="L317">            throw new AccessDeniedException(&quot;You are not allowed to access payments for this survey&quot;);</span>
+        }
+<span class="nc" id="L319">        return farmerPaymentRepo.findBySurvey_SurveyIdOrderByCreatedAtDesc(surveyId, pageable)</span>
+<span class="nc" id="L320">                .map(p -&gt; mapToResponseDTO(p, null));</span>
+    }
+
+    @Override
+    @Transactional
+    public Page&lt;FarmerPaymentResponseDTO&gt; getPaymentsByUserId(Long userId, Pageable pageable) {
+<span class="nc bnc" id="L326" title="All 4 branches missed.">        if (!isCurrentUserAdmin() &amp;&amp; !userId.equals(getCurrentUserId())) {</span>
+<span class="nc" id="L327">            throw new AccessDeniedException(&quot;You are not allowed to access payments for this user&quot;);</span>
+        }
+<span class="nc" id="L329">        return farmerPaymentRepo.findByUser_UserIdOrderByCreatedAtDesc(userId, pageable)</span>
+<span class="nc" id="L330">                .map(p -&gt; mapToResponseDTO(p, null));</span>
+    }
+
+    private void performFraudChecks(Long surveyId, Long userId, String clientIp) {
+<span class="nc" id="L334">        LocalDateTime windowStart = LocalDateTime.now().minusMinutes(attemptsWindowMinutes);</span>
+<span class="nc" id="L335">        long recentAttempts = farmerPaymentRepo.countRecentBySurvey(surveyId, windowStart);</span>
+<span class="nc bnc" id="L336" title="All 2 branches missed.">        if (recentAttempts &gt;= maxAttemptsPerSurvey) {</span>
+<span class="nc" id="L337">            auditService.logFraudEvent(&quot;FARMER&quot;, null, null, userId, clientIp,</span>
+                    &quot;Exceeded max attempts (&quot; + maxAttemptsPerSurvey + &quot;) for survey &quot; + surveyId);
+<span class="nc" id="L339">            throw PaymentException.rateLimitExceeded();</span>
+        }
+
+<span class="nc" id="L342">        LocalDateTime dayStart = LocalDateTime.now().minusHours(24);</span>
+<span class="nc" id="L343">        long dailyPayments = farmerPaymentRepo.countRecentByUser(userId, dayStart);</span>
+<span class="nc bnc" id="L344" title="All 2 branches missed.">        if (dailyPayments &gt;= maxDailyPaymentsPerUser) {</span>
+<span class="nc" id="L345">            auditService.logFraudEvent(&quot;FARMER&quot;, null, null, userId, clientIp,</span>
+                    &quot;Exceeded daily limit (&quot; + maxDailyPaymentsPerUser + &quot;) for user &quot; + userId);
+<span class="nc" id="L347">            throw PaymentException.rateLimitExceeded();</span>
+        }
+<span class="nc" id="L349">    }</span>
+    @Override
+    @Transactional
+    public FarmerPaymentResponseDTO getPaymentByOrderId(String orderId) {
+<span class="nc" id="L353">        String sanitizedOrderId = PaymentInputSanitizer.sanitizeOrderId(orderId);</span>
+<span class="nc" id="L354">        FarmerPayment payment = farmerPaymentRepo.findByCcavenueOrderId(sanitizedOrderId)</span>
+<span class="nc" id="L355">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Payment not found with order ID: &quot; + sanitizedOrderId));</span>
+<span class="nc" id="L356">        validatePaymentAccess(payment);</span>
+<span class="nc" id="L357">        return mapToResponseDTO(payment, null);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map&lt;String, FarmerPaymentResponseDTO&gt; getSuccessfulPaymentsBySurveyIds(List&lt;String&gt; surveyIds) {
+<span class="nc bnc" id="L363" title="All 4 branches missed.">        if (surveyIds == null || surveyIds.isEmpty()) {</span>
+<span class="nc" id="L364">            return Map.of();</span>
+        }
+
+<span class="nc" id="L367">        Long currentUserId = getCurrentUserId();</span>
+<span class="nc" id="L368">        boolean admin = isCurrentUserAdmin();</span>
+
+<span class="nc" id="L370">        Map&lt;String, Long&gt; requestedToInternalSurveyId = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L371" title="All 2 branches missed.">        for (String rawSurveyId : surveyIds) {</span>
+<span class="nc bnc" id="L372" title="All 2 branches missed.">            String surveyId = String.valueOf(rawSurveyId == null ? &quot;&quot; : rawSurveyId).trim();</span>
+<span class="nc bnc" id="L373" title="All 4 branches missed.">            if (surveyId.isEmpty() || requestedToInternalSurveyId.containsKey(surveyId)) {</span>
+<span class="nc" id="L374">                continue;</span>
+            }
+            try {
+<span class="nc" id="L377">                Long internalSurveyId = surveyIdResolver.resolveToInternalId(surveyId);</span>
+<span class="nc" id="L378">                requestedToInternalSurveyId.put(surveyId, internalSurveyId);</span>
+<span class="nc" id="L379">            } catch (RuntimeException ex) {</span>
+<span class="nc" id="L380">                log.debug(&quot;Skipping unresolved survey ID in bulk status lookup: {}&quot;, surveyId);</span>
+<span class="nc" id="L381">            }</span>
+<span class="nc" id="L382">        }</span>
+
+<span class="nc bnc" id="L384" title="All 2 branches missed.">        if (requestedToInternalSurveyId.isEmpty()) {</span>
+<span class="nc" id="L385">            return Map.of();</span>
+        }
+
+<span class="nc" id="L388">        Set&lt;Long&gt; internalSurveyIds = requestedToInternalSurveyId.values().stream().collect(Collectors.toSet());</span>
+<span class="nc" id="L389">        List&lt;FarmerPayment&gt; successfulPayments = farmerPaymentRepo</span>
+<span class="nc" id="L390">                .findBySurvey_SurveyIdInAndPaymentStatusOrderByCreatedAtDesc(internalSurveyIds, PaymentStatus.SUCCESS);</span>
+
+<span class="nc" id="L392">        Map&lt;Long, FarmerPayment&gt; latestSuccessfulBySurvey = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L393" title="All 2 branches missed.">        for (FarmerPayment payment : successfulPayments) {</span>
+<span class="nc" id="L394">            Long internalSurveyId = payment.getSurvey().getSurveyId();</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">            if (latestSuccessfulBySurvey.containsKey(internalSurveyId)) {</span>
+<span class="nc" id="L396">                continue;</span>
+            }
+<span class="nc bnc" id="L398" title="All 4 branches missed.">            if (admin || payment.getUser().getUserId().equals(currentUserId)) {</span>
+<span class="nc" id="L399">                latestSuccessfulBySurvey.put(internalSurveyId, payment);</span>
+            }
+<span class="nc" id="L401">        }</span>
+
+<span class="nc" id="L403">        Map&lt;String, FarmerPaymentResponseDTO&gt; result = new LinkedHashMap&lt;&gt;();</span>
+<span class="nc" id="L404">        requestedToInternalSurveyId.forEach((requestedSurveyId, internalSurveyId) -&gt; {</span>
+<span class="nc" id="L405">            FarmerPayment payment = latestSuccessfulBySurvey.get(internalSurveyId);</span>
+<span class="nc bnc" id="L406" title="All 2 branches missed.">            if (payment != null) {</span>
+<span class="nc" id="L407">                result.put(requestedSurveyId, mapToResponseDTO(payment, null));</span>
+            }
+<span class="nc" id="L409">        });</span>
+
+<span class="nc" id="L411">        return result;</span>
+    }
+
+    private String regeneratePaymentForm(FarmerPayment payment) {
+<span class="nc" id="L415">        String redirectUrl = buildFarmerCallbackUrl(ccAvenueConfig.getRedirectUrl(), &quot;/api/payment/farmer/response&quot;);</span>
+<span class="nc" id="L416">        String cancelUrl = buildFarmerCallbackUrl(ccAvenueConfig.getCancelUrl(), &quot;/api/payment/farmer/cancel&quot;);</span>
+
+<span class="nc" id="L418">        CcAvenuePaymentRequest request = CcAvenuePaymentRequest.builder()</span>
+<span class="nc" id="L419">                .orderId(payment.getCcavenueOrderId())</span>
+<span class="nc" id="L420">                .amount(payment.getAmount())</span>
+<span class="nc" id="L421">                .redirectUrl(redirectUrl)</span>
+<span class="nc" id="L422">                .cancelUrl(cancelUrl)</span>
+<span class="nc" id="L423">                .billingName(PaymentInputSanitizer.sanitizeName(payment.getSurvey().getFarmerName()))</span>
+<span class="nc" id="L424">                .billingTel(PaymentInputSanitizer.sanitizePhone(payment.getSurvey().getFarmerMobile()))</span>
+<span class="nc" id="L425">                .build();</span>
+
+<span class="nc" id="L427">        return ccAvenuePaymentService.generatePaymentForm(request);</span>
+    }
+
+    private String buildFarmerCallbackUrl(String baseUrl, String farmerPath) {
+<span class="nc bnc" id="L431" title="All 2 branches missed.">        if (baseUrl == null) return null;</span>
+        // Extract the base domain (everything before /api/)
+<span class="nc" id="L433">        int apiIdx = baseUrl.indexOf(&quot;/api/&quot;);</span>
+<span class="nc bnc" id="L434" title="All 2 branches missed.">        if (apiIdx &gt; 0) {</span>
+<span class="nc" id="L435">            return baseUrl.substring(0, apiIdx) + farmerPath;</span>
+        }
+<span class="nc" id="L437">        return baseUrl;</span>
+    }
+
+    private String generateIdempotencyKey(Long surveyId, Long userId) {
+<span class="nc" id="L441">        return &quot;FARM-&quot; + surveyId + &quot;-&quot; + userId + &quot;-&quot; + UUID.randomUUID().toString().substring(0, 8);</span>
+    }
+
+    private Long getCurrentUserId() {
+<span class="nc" id="L445">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L446" title="All 4 branches missed.">        if (auth != null &amp;&amp; auth.getPrincipal() instanceof UserDetailsCustom userDetails) {</span>
+<span class="nc" id="L447">            return userDetails.getUserId();</span>
+        }
+<span class="nc" id="L449">        throw new AccessDeniedException(&quot;Authenticated user is required&quot;);</span>
+    }
+
+    private boolean isCurrentUserAdmin() {
+<span class="nc" id="L453">        Authentication auth = SecurityContextHolder.getContext().getAuthentication();</span>
+<span class="nc bnc" id="L454" title="All 2 branches missed.">        if (auth == null) {</span>
+<span class="nc" id="L455">            return false;</span>
+        }
+<span class="nc" id="L457">        return auth.getAuthorities().stream()</span>
+<span class="nc" id="L458">                .anyMatch(a -&gt; &quot;ROLE_ADMIN&quot;.equals(a.getAuthority()));</span>
+    }
+
+    private void validatePaymentAccess(FarmerPayment payment) {
+<span class="nc" id="L462">        Long currentUserId = getCurrentUserId();</span>
+<span class="nc bnc" id="L463" title="All 4 branches missed.">        if (!isCurrentUserAdmin() &amp;&amp; !payment.getUser().getUserId().equals(currentUserId)) {</span>
+<span class="nc" id="L464">            throw new AccessDeniedException(&quot;You are not allowed to access this payment&quot;);</span>
+        }
+<span class="nc" id="L466">    }</span>
+
+    private FarmerPaymentResponseDTO mapToResponseDTO(FarmerPayment payment, String paymentFormHtml) {
+<span class="nc bnc" id="L469" title="All 4 branches missed.">        if (payment.getPaymentPublicId() == null || payment.getSurvey().getSurveyPublicId() == null) {</span>
+<span class="nc bnc" id="L470" title="All 2 branches missed.">            if (payment.getPaymentPublicId() == null) {</span>
+<span class="nc" id="L471">                payment.setPaymentPublicId(&quot;pay_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;));</span>
+            }
+<span class="nc bnc" id="L473" title="All 2 branches missed.">            if (payment.getSurvey().getSurveyPublicId() == null) {</span>
+<span class="nc" id="L474">                payment.getSurvey().setSurveyPublicId(&quot;sur_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;));</span>
+            }
+<span class="nc" id="L476">            farmerPaymentRepo.save(payment);</span>
+        }
+
+<span class="nc" id="L479">        return FarmerPaymentResponseDTO.builder()</span>
+<span class="nc" id="L480">                .paymentId(payment.getPaymentPublicId())</span>
+<span class="nc" id="L481">                .surveyId(payment.getSurvey().getSurveyPublicId())</span>
+<span class="nc" id="L482">                .farmerName(payment.getSurvey().getFarmerName())</span>
+<span class="nc" id="L483">                .userId(payment.getUser().getUserId())</span>
+<span class="nc" id="L484">                .amount(payment.getAmount())</span>
+<span class="nc" id="L485">                .paymentStatus(payment.getPaymentStatus().name())</span>
+<span class="nc" id="L486">                .ccavenueOrderId(payment.getCcavenueOrderId())</span>
+<span class="nc" id="L487">                .trackingId(payment.getTrackingId())</span>
+<span class="nc" id="L488">                .bankRefNo(payment.getBankRefNo())</span>
+<span class="nc" id="L489">                .ccavenuePaymentMode(payment.getCcavenuePaymentMode())</span>
+<span class="nc" id="L490">                .statusMessage(payment.getStatusMessage())</span>
+<span class="nc" id="L491">                .attemptCount(payment.getAttemptCount())</span>
+<span class="nc" id="L492">                .createdAt(payment.getCreatedAt())</span>
+<span class="nc" id="L493">                .updatedAt(payment.getUpdatedAt())</span>
+<span class="nc" id="L494">                .paymentFormHtml(paymentFormHtml)</span>
+<span class="nc" id="L495">                .build();</span>
+    }
+
+    private String truncate(String value, int maxLength) {
+<span class="nc bnc" id="L499" title="All 2 branches missed.">        if (value == null) return null;</span>
+<span class="nc bnc" id="L500" title="All 2 branches missed.">        return value.length() &gt; maxLength ? value.substring(0, maxLength) : value;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

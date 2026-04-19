@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SurveyIdResolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeFarmerSurvey</a> &gt; <span class="el_source">SurveyIdResolver.java</span></div><h1>SurveyIdResolver.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeFarmerSurvey;
+
+import com.spring.jwt.exception.ResourceNotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="nc" id="L8">@RequiredArgsConstructor</span>
+public class SurveyIdResolver {
+
+    private final EmployeeFarmerSurveyRepository surveyRepository;
+
+    public Long resolveToInternalId(String surveyIdOrPublicId) {
+<span class="nc bnc" id="L14" title="All 4 branches missed.">        if (surveyIdOrPublicId == null || surveyIdOrPublicId.isBlank()) {</span>
+<span class="nc" id="L15">            throw new IllegalArgumentException(&quot;Survey ID must not be empty&quot;);</span>
+        }
+
+<span class="nc" id="L18">        String resolvedInput = surveyIdOrPublicId.trim();</span>
+
+        // 1) Preferred public id format
+<span class="nc bnc" id="L21" title="All 2 branches missed.">        if (resolvedInput.startsWith(&quot;sur_&quot;)) {</span>
+<span class="nc" id="L22">            return surveyRepository.findBySurveyPublicId(resolvedInput)</span>
+<span class="nc" id="L23">                    .map(s -&gt; s.getSurveyId())</span>
+<span class="nc" id="L24">                    .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                            &quot;Survey not found with ID: &quot; + resolvedInput));
+        }
+
+        // 2) Backward compatibility for form numbers (e.g. 2026040001)
+        // Try form number lookup first to avoid treating it as internal PK.
+<span class="nc" id="L30">        return surveyRepository.findByFormNumber(resolvedInput)</span>
+<span class="nc" id="L31">                .map(s -&gt; s.getSurveyId())</span>
+<span class="nc" id="L32">                .orElseGet(() -&gt; resolveAsNumericId(resolvedInput));</span>
+    }
+
+    private Long resolveAsNumericId(String surveyId) {
+        try {
+<span class="nc" id="L37">            Long internalId = Long.parseLong(surveyId);</span>
+<span class="nc" id="L38">            return surveyRepository.findById(internalId)</span>
+<span class="nc" id="L39">                    .map(s -&gt; s.getSurveyId())</span>
+<span class="nc" id="L40">                    .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+<span class="nc" id="L41">        } catch (NumberFormatException ex) {</span>
+<span class="nc" id="L42">            throw new IllegalArgumentException(&quot;Invalid survey ID format: &quot; + surveyId);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

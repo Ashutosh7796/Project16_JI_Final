@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SslConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">SslConfig.java</span></div><h1>SslConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.server.Ssl;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.io.File;
+
+/**
+ * Custom SSL Configuration that ensures the keystore exists
+ */
+@Configuration
+<span class="nc" id="L18">public class SslConfig {</span>
+
+<span class="nc" id="L20">    private static final Logger logger = LoggerFactory.getLogger(SslConfig.class);</span>
+
+    @Value(&quot;${server.ssl.enabled:false}&quot;)
+    private boolean sslEnabled;
+
+    @Value(&quot;${server.ssl.key-store:classpath:keystore.p12}&quot;)
+    private String keyStore;
+
+    @Value(&quot;${server.ssl.key-store-password:yourpassword}&quot;)
+    private String keyStorePassword;
+
+    @Value(&quot;${server.ssl.key-store-type:PKCS12}&quot;)
+    private String keyStoreType;
+
+    @Value(&quot;${server.ssl.key-alias:youralias}&quot;)
+    private String keyAlias;
+
+    /**
+     * Creates a web server factory customizer that verifies the keystore
+     */
+    @Bean
+    public WebServerFactoryCustomizer&lt;ConfigurableServletWebServerFactory&gt; sslCustomizer() {
+<span class="nc" id="L42">        return factory -&gt; {</span>
+<span class="nc" id="L43">            logger.info(&quot;SSL is disabled by default configuration&quot;);</span>
+<span class="nc" id="L44">            factory.setSsl(null);</span>
+<span class="nc" id="L45">        };</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

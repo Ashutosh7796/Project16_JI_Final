@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtTokenAuthenticationFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config.filter</a> &gt; <span class="el_source">JwtTokenAuthenticationFilter.java</span></div><h1>JwtTokenAuthenticationFilter.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config.filter;
+
+import com.spring.jwt.jwt.ActiveSessionService;
+import com.spring.jwt.jwt.JwtConfig;
+import com.spring.jwt.jwt.JwtService;
+import com.spring.jwt.service.security.UserDetailsServiceCustom;
+import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.HelperUtils;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.security.SignatureException;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.util.StringUtils;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Optional;
+
+<span class="nc" id="L30">@Slf4j</span>
+public class JwtTokenAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtConfig jwtConfig;
+    private final JwtService jwtService;
+    private final UserDetailsServiceCustom userDetailsService;
+    private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
+
+    private static final String ACCESS_TOKEN_COOKIE_NAME = &quot;access_token&quot;;
+
+    public JwtTokenAuthenticationFilter(JwtConfig jwtConfig,
+                                          JwtService jwtService,
+                                          UserDetailsServiceCustom userDetailsService,
+                                          ActiveSessionService activeSessionService,
+<span class="nc" id="L45">                                          boolean jwtDiagnosticLogging) {</span>
+<span class="nc" id="L46">        this.jwtConfig = jwtConfig;</span>
+<span class="nc" id="L47">        this.jwtService = jwtService;</span>
+<span class="nc" id="L48">        this.userDetailsService = userDetailsService;</span>
+<span class="nc" id="L49">        this.activeSessionService = activeSessionService;</span>
+<span class="nc" id="L50">        this.jwtDiagnosticLogging = jwtDiagnosticLogging;</span>
+<span class="nc" id="L51">    }</span>
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
+
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (&quot;OPTIONS&quot;.equalsIgnoreCase(request.getMethod())) {</span>
+<span class="nc" id="L60">            filterChain.doFilter(request, response);</span>
+<span class="nc" id="L61">            return;</span>
+        }
+
+<span class="nc" id="L64">        String token = getJwtFromRequest(request);</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+            // No credentials: leave context anonymous (permitAll routes still work).
+<span class="nc" id="L67">            filterChain.doFilter(request, response);</span>
+<span class="nc" id="L68">            return;</span>
+        }
+
+<span class="nc bnc" id="L71" title="All 2 branches missed.">        if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L72">            String authHeader = request.getHeader(jwtConfig.getHeader());</span>
+<span class="nc" id="L73">            log.info(&quot;[jwt-diag] access_token_present method={} servletPath={} requestURI={} authHeaderLen={} hasAccessCookie={}&quot;,</span>
+<span class="nc" id="L74">                    request.getMethod(),</span>
+<span class="nc" id="L75">                    request.getServletPath(),</span>
+<span class="nc" id="L76">                    safeUriWithoutQuery(request),</span>
+<span class="nc bnc" id="L77" title="All 2 branches missed.">                    authHeader != null ? authHeader.length() : 0,</span>
+<span class="nc" id="L78">                    hasAccessTokenCookie(request));</span>
+        }
+
+        try {
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            if (!jwtService.isValidToken(token)) {</span>
+<span class="nc" id="L83">                String reason = getSpecificInvalidReason(token, request);</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                if (isOptionalJwtPublicAuthPath(request)) {</span>
+<span class="nc" id="L85">                    log.warn(&quot;[jwt-opt-out] ignoring invalid or stale token on public auth endpoint path={} detail={}&quot;,</span>
+<span class="nc" id="L86">                            request.getServletPath(), asciiSafeLog(reason, 220));</span>
+<span class="nc" id="L87">                    SecurityContextHolder.clearContext();</span>
+<span class="nc" id="L88">                    filterChain.doFilter(request, response);</span>
+<span class="nc" id="L89">                    return;</span>
+                }
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L92">                    jwtService.logInboundTokenDiagnostics(request, token,</span>
+                            &quot;IS_VALID_TOKEN_FALSE; detail=&quot; + reason);
+                }
+<span class="nc" id="L95">                logAuthFailure(request, token, &quot;IS_VALID_TOKEN_FALSE&quot;, reason);</span>
+<span class="nc" id="L96">                handleInvalidToken(response, reason);</span>
+<span class="nc" id="L97">                return;</span>
+            }
+
+<span class="nc" id="L100">            Claims claims = jwtService.extractClaims(token);</span>
+<span class="nc" id="L101">            String username = claims.getSubject();</span>
+<span class="nc" id="L102">            Integer userId = claims.get(&quot;userId&quot;, Integer.class);</span>
+<span class="nc" id="L103">            String tokenId = claims.getId();</span>
+
+<span class="nc bnc" id="L105" title="All 2 branches missed.">            if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L106">                log.info(&quot;[jwt-diag] token_ok subject={} userId={} jtiPrefix={} path={}&quot;,</span>
+<span class="nc" id="L107">                        maskUser(username),</span>
+                        userId,
+<span class="nc" id="L109">                        jtiPrefix(tokenId),</span>
+<span class="nc" id="L110">                        safeUriWithoutQuery(request));</span>
+            }
+
+<span class="nc bnc" id="L113" title="All 2 branches missed.">            if (!activeSessionService.isCurrentAccessToken(username, tokenId)) {</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">                if (isOptionalJwtPublicAuthPath(request)) {</span>
+<span class="nc" id="L115">                    log.warn(&quot;[jwt-opt-out] ignoring non-current access token on public auth endpoint path={} subjectMasked={}&quot;,</span>
+<span class="nc" id="L116">                            request.getServletPath(), maskUser(username));</span>
+<span class="nc" id="L117">                    SecurityContextHolder.clearContext();</span>
+<span class="nc" id="L118">                    filterChain.doFilter(request, response);</span>
+<span class="nc" id="L119">                    return;</span>
+                }
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L122">                    jwtService.logInboundTokenDiagnostics(request, token,</span>
+                            &quot;ACTIVE_SESSION_MISMATCH after isValidToken_true&quot;);
+                }
+<span class="nc" id="L125">                logAuthFailure(request, token, &quot;ACTIVE_SESSION_MISMATCH&quot;,</span>
+<span class="nc" id="L126">                        &quot;access jti not current for subject=&quot; + maskUser(username));</span>
+<span class="nc" id="L127">                handleInvalidToken(response,</span>
+                        &quot;You are logged in on another device. Please logout from the other device to continue&quot;);
+<span class="nc" id="L129">                return;</span>
+            }
+
+<span class="nc" id="L132">            UserDetails userDetails = userDetailsService.loadUserByUsername(username);</span>
+
+<span class="nc" id="L134">            UsernamePasswordAuthenticationToken authentication =</span>
+                    new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+<span class="nc" id="L138">                            userDetails.getAuthorities()</span>
+                    );
+
+<span class="nc" id="L141">            authentication.setDetails(userId);</span>
+<span class="nc" id="L142">            SecurityContextHolder.getContext().setAuthentication(authentication);</span>
+
+<span class="nc" id="L144">            filterChain.doFilter(request, response);</span>
+
+<span class="nc" id="L146">        } catch (ExpiredJwtException ex) {</span>
+<span class="nc" id="L147">            SecurityContextHolder.clearContext();</span>
+<span class="nc" id="L148">            logAuthFailure(request, token, &quot;EXPIRED_JWT_EXCEPTION&quot;, ex.getMessage());</span>
+<span class="nc" id="L149">            handleExpiredToken(response);</span>
+
+<span class="nc" id="L151">        } catch (JwtException ex) {</span>
+<span class="nc" id="L152">            SecurityContextHolder.clearContext();</span>
+<span class="nc" id="L153">            logAuthFailure(request, token, &quot;JWT_EXCEPTION&quot;, ex.getClass().getSimpleName() + &quot;: &quot; + ex.getMessage());</span>
+<span class="nc" id="L154">            handleInvalidToken(response, &quot;Invalid JWT token&quot;);</span>
+
+<span class="nc" id="L156">        } catch (Exception ex) {</span>
+<span class="nc" id="L157">            SecurityContextHolder.clearContext();</span>
+<span class="nc" id="L158">            logAuthFailure(request, token, &quot;UNEXPECTED&quot;, ex.getClass().getSimpleName() + &quot;: &quot; + ex.getMessage());</span>
+<span class="nc" id="L159">            handleAuthenticationException(response, ex);</span>
+<span class="nc" id="L160">        }</span>
+<span class="nc" id="L161">    }</span>
+
+    /**
+     * {@code permitAll} registration endpoints where a browser may still send an old {@code access_token}
+     * cookie (wrong signature after secret rotation, another environment, etc.). JWT must not block the request.
+     * For {@code POST /api/auth/v1/register} with {@code role=MANAGER}, send {@code Authorization: Bearer} so a
+     * valid admin token is still applied when the cookie is ignored.
+     */
+    private static boolean isOptionalJwtPublicAuthPath(HttpServletRequest request) {
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        if (!&quot;POST&quot;.equalsIgnoreCase(request.getMethod())) {</span>
+<span class="nc" id="L171">            return false;</span>
+        }
+<span class="nc" id="L173">        String path = request.getServletPath();</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">        return &quot;/api/auth/v1/register&quot;.equals(path)</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">                || &quot;/api/auth/v1/admin/register&quot;.equals(path);</span>
+    }
+
+    private static String safeUriWithoutQuery(HttpServletRequest request) {
+<span class="nc" id="L179">        String uri = request.getRequestURI();</span>
+<span class="nc bnc" id="L180" title="All 2 branches missed.">        if (uri == null) {</span>
+<span class="nc" id="L181">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L183">        int q = uri.indexOf('?');</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">        return q &gt; 0 ? uri.substring(0, q) : uri;</span>
+    }
+
+    private static boolean hasAccessTokenCookie(HttpServletRequest request) {
+<span class="nc" id="L188">        Cookie[] cookies = request.getCookies();</span>
+<span class="nc bnc" id="L189" title="All 2 branches missed.">        if (cookies == null) {</span>
+<span class="nc" id="L190">            return false;</span>
+        }
+<span class="nc" id="L192">        return Arrays.stream(cookies).anyMatch(c -&gt; ACCESS_TOKEN_COOKIE_NAME.equals(c.getName()));</span>
+    }
+
+    private static int tokenPartCount(String token) {
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+<span class="nc" id="L197">            return 0;</span>
+        }
+<span class="nc" id="L199">        return token.split(&quot;\\.&quot;).length;</span>
+    }
+
+    private static String maskUser(String username) {
+<span class="nc bnc" id="L203" title="All 2 branches missed.">        if (!StringUtils.hasText(username)) {</span>
+<span class="nc" id="L204">            return &quot;(empty)&quot;;</span>
+        }
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        if (username.length() &lt;= 3) {</span>
+<span class="nc" id="L207">            return &quot;***&quot;;</span>
+        }
+<span class="nc" id="L209">        return username.charAt(0) + &quot;***&quot; + username.charAt(username.length() - 1);</span>
+    }
+
+    private static String jtiPrefix(String jti) {
+<span class="nc bnc" id="L213" title="All 2 branches missed.">        if (!StringUtils.hasText(jti)) {</span>
+<span class="nc" id="L214">            return &quot;(none)&quot;;</span>
+        }
+<span class="nc bnc" id="L216" title="All 2 branches missed.">        return jti.length() &lt;= 6 ? jti.substring(0, Math.min(3, jti.length())) + &quot;...&quot; : jti.substring(0, 6) + &quot;...&quot;;</span>
+    }
+
+    private void logAuthFailure(HttpServletRequest request, String token, String stage, String detail) {
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        int len = StringUtils.hasText(token) ? token.length() : 0;</span>
+<span class="nc" id="L221">        int parts = tokenPartCount(token);</span>
+<span class="nc" id="L222">        String xff = request.getHeader(&quot;X-Forwarded-For&quot;);</span>
+<span class="nc bnc" id="L223" title="All 4 branches missed.">        String xffShort = StringUtils.hasText(xff) &amp;&amp; xff.length() &gt; 60 ? xff.substring(0, 60) + &quot;...&quot; : xff;</span>
+<span class="nc" id="L224">        log.warn(&quot;[auth-fail] stage={} method={} servletPath={} uri={} tokenLen={} tokenParts={} hasAccessCookie={} xForwardedFor={} detail={}&quot;,</span>
+                stage,
+<span class="nc" id="L226">                request.getMethod(),</span>
+<span class="nc" id="L227">                request.getServletPath(),</span>
+<span class="nc" id="L228">                safeUriWithoutQuery(request),</span>
+<span class="nc" id="L229">                len,</span>
+<span class="nc" id="L230">                parts,</span>
+<span class="nc" id="L231">                hasAccessTokenCookie(request),</span>
+<span class="nc" id="L232">                asciiSafeLog(xffShort, 80),</span>
+<span class="nc" id="L233">                asciiSafeLog(detail, 300));</span>
+<span class="nc" id="L234">    }</span>
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+
+<span class="nc" id="L238">        String path = request.getServletPath();</span>
+
+        // Do NOT skip /api/auth/** — e.g. POST /api/auth/v1/register needs JWT applied when an admin
+        // registers a MANAGER (permitAll + SecurityContext must reflect Bearer or access_token cookie).
+<span class="nc bnc" id="L242" title="All 2 branches missed.">        return path.equals(&quot;/jwt/login&quot;)</span>
+<span class="nc bnc" id="L243" title="All 2 branches missed.">                || path.equals(jwtConfig.getUrl())</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">                || path.equals(jwtConfig.getRefreshUrl())</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">                || path.startsWith(&quot;/swagger&quot;)</span>
+<span class="nc bnc" id="L246" title="All 2 branches missed.">                || path.startsWith(&quot;/v3/api-docs&quot;);</span>
+    }
+
+    /**
+     * Extract JWT token from header or cookie
+     */
+    private String getJwtFromRequest(HttpServletRequest request) {
+
+<span class="nc" id="L254">        String bearerToken = request.getHeader(jwtConfig.getHeader());</span>
+<span class="nc bnc" id="L255" title="All 2 branches missed.">        if (StringUtils.hasText(bearerToken) &amp;&amp;</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">                bearerToken.startsWith(jwtConfig.getPrefix() + &quot; &quot;)) {</span>
+<span class="nc" id="L257">            return bearerToken.substring((jwtConfig.getPrefix() + &quot; &quot;).length()).trim();</span>
+        }
+
+<span class="nc" id="L260">        Cookie[] cookies = request.getCookies();</span>
+<span class="nc bnc" id="L261" title="All 2 branches missed.">        if (cookies != null) {</span>
+<span class="nc" id="L262">            Optional&lt;Cookie&gt; accessTokenCookie = Arrays.stream(cookies)</span>
+<span class="nc" id="L263">                    .filter(c -&gt; ACCESS_TOKEN_COOKIE_NAME.equals(c.getName()))</span>
+<span class="nc" id="L264">                    .findFirst();</span>
+
+<span class="nc bnc" id="L266" title="All 2 branches missed.">            if (accessTokenCookie.isPresent()) {</span>
+<span class="nc" id="L267">                return accessTokenCookie.get().getValue();</span>
+            }
+        }
+<span class="nc" id="L270">        return null;</span>
+    }
+
+    /**
+     * Detailed invalid token reason
+     */
+    private String getSpecificInvalidReason(String token, HttpServletRequest request) {
+        try {
+<span class="nc" id="L278">            Claims claims = jwtService.extractClaims(token);</span>
+
+<span class="nc" id="L280">            String tokenId = claims.getId();</span>
+<span class="nc bnc" id="L281" title="All 4 branches missed.">            if (tokenId != null &amp;&amp; jwtService.isBlacklisted(token)) {</span>
+<span class="nc" id="L282">                return &quot;Token is revoked. Please login again.&quot;;</span>
+            }
+
+<span class="nc" id="L285">            String tokenDfp = claims.get(&quot;dfp&quot;, String.class);</span>
+<span class="nc" id="L286">            String reqDfp = jwtService.generateDeviceFingerprint(request);</span>
+
+<span class="nc bnc" id="L288" title="All 2 branches missed.">            if (StringUtils.hasText(tokenDfp) &amp;&amp;</span>
+<span class="nc bnc" id="L289" title="All 2 branches missed.">                    StringUtils.hasText(reqDfp) &amp;&amp;</span>
+<span class="nc bnc" id="L290" title="All 2 branches missed.">                    !tokenDfp.equals(reqDfp)) {</span>
+<span class="nc" id="L291">                return &quot;Device mismatch. Please login again.&quot;;</span>
+            }
+
+<span class="nc" id="L294">            return &quot;Session is no longer active. Please login again.&quot;;</span>
+
+<span class="nc" id="L296">        } catch (ExpiredJwtException e) {</span>
+<span class="nc bnc" id="L297" title="All 2 branches missed.">            if (jwtDiagnosticLogging) {</span>
+<span class="nc bnc" id="L298" title="All 2 branches missed.">                log.info(&quot;[jwt-diag] getSpecificInvalidReason: expired exp={}&quot;, e.getClaims() != null ? e.getClaims().getExpiration() : &quot;n/a&quot;);</span>
+            }
+<span class="nc" id="L300">            return &quot;Token has expired. Please login again.&quot;;</span>
+<span class="nc" id="L301">        } catch (SignatureException e) {</span>
+<span class="nc" id="L302">            log.warn(&quot;[jwt-reject] SignatureException in getSpecificInvalidReason - check jwt.secret / JWT_SECRET parity across pods&quot;);</span>
+<span class="nc" id="L303">            return &quot;Invalid token signature. Re-login; if this persists, ensure every server instance uses the same jwt.secret (Base64).&quot;;</span>
+<span class="nc" id="L304">        } catch (JwtException e) {</span>
+<span class="nc" id="L305">            log.warn(&quot;[jwt-reject] JwtException in getSpecificInvalidReason type={} msg={}&quot;,</span>
+<span class="nc" id="L306">                    e.getClass().getSimpleName(), asciiSafeLog(e.getMessage(), 240));</span>
+<span class="nc" id="L307">            return &quot;Malformed or invalid token. Please clear your browser data and login again.&quot;;</span>
+<span class="nc" id="L308">        } catch (Exception e) {</span>
+<span class="nc" id="L309">            log.warn(&quot;[jwt-reject] unexpected in getSpecificInvalidReason type={} msg={}&quot;,</span>
+<span class="nc" id="L310">                    e.getClass().getSimpleName(), asciiSafeLog(e.getMessage(), 240));</span>
+<span class="nc" id="L311">            return &quot;Authentication failed. Please login again.&quot;;</span>
+        }
+    }
+
+    private static String asciiSafeLog(String s, int maxLen) {
+<span class="nc bnc" id="L316" title="All 2 branches missed.">        if (!StringUtils.hasText(s)) {</span>
+<span class="nc" id="L317">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L319">        int n = Math.min(s.length(), maxLen);</span>
+<span class="nc" id="L320">        StringBuilder b = new StringBuilder(n);</span>
+<span class="nc bnc" id="L321" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L322">            char c = s.charAt(i);</span>
+<span class="nc bnc" id="L323" title="All 6 branches missed.">            if (c == '\n' || c == '\r' || c == '\t') {</span>
+<span class="nc" id="L324">                b.append(' ');</span>
+<span class="nc bnc" id="L325" title="All 4 branches missed.">            } else if (c &gt;= 32 &amp;&amp; c &lt;= 126) {</span>
+<span class="nc" id="L326">                b.append(c);</span>
+            } else {
+<span class="nc" id="L328">                b.append('_');</span>
+            }
+        }
+<span class="nc" id="L331">        return b.toString();</span>
+    }
+
+    private void handleInvalidToken(HttpServletResponse response, String message)
+            throws IOException {
+
+<span class="nc" id="L337">        BaseResponseDTO dto = new BaseResponseDTO();</span>
+<span class="nc" id="L338">        dto.setCode(String.valueOf(HttpStatus.UNAUTHORIZED.value()));</span>
+<span class="nc" id="L339">        dto.setMessage(message);</span>
+
+<span class="nc" id="L341">        writeResponse(response, HttpStatus.UNAUTHORIZED, dto);</span>
+<span class="nc" id="L342">    }</span>
+
+    private void handleExpiredToken(HttpServletResponse response)
+            throws IOException {
+
+<span class="nc" id="L347">        BaseResponseDTO dto = new BaseResponseDTO();</span>
+<span class="nc" id="L348">        dto.setCode(String.valueOf(HttpStatus.UNAUTHORIZED.value()));</span>
+<span class="nc" id="L349">        dto.setMessage(&quot;Expired token&quot;);</span>
+
+<span class="nc" id="L351">        writeResponse(response, HttpStatus.UNAUTHORIZED, dto);</span>
+<span class="nc" id="L352">    }</span>
+
+    private void handleAuthenticationException(HttpServletResponse response, Exception e)
+            throws IOException {
+
+<span class="nc" id="L357">        BaseResponseDTO dto = new BaseResponseDTO();</span>
+<span class="nc" id="L358">        dto.setCode(String.valueOf(HttpStatus.UNAUTHORIZED.value()));</span>
+<span class="nc" id="L359">        dto.setMessage(&quot;Authentication failed&quot;);</span>
+
+<span class="nc" id="L361">        writeResponse(response, HttpStatus.UNAUTHORIZED, dto);</span>
+<span class="nc" id="L362">    }</span>
+
+    private void writeResponse(HttpServletResponse response,
+                               HttpStatus status,
+                               BaseResponseDTO dto) throws IOException {
+
+<span class="nc" id="L368">        response.setStatus(status.value());</span>
+<span class="nc" id="L369">        response.setContentType(&quot;application/json; charset=UTF-8&quot;);</span>
+<span class="nc" id="L370">        response.getWriter().write(</span>
+<span class="nc" id="L371">                HelperUtils.JSON_WRITER.writeValueAsString(dto)</span>
+        );
+<span class="nc" id="L373">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

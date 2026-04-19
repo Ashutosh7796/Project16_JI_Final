@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FileValidationServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Document.Service.Impl</a> &gt; <span class="el_source">FileValidationServiceImpl.java</span></div><h1>FileValidationServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Document.Service.Impl;
+
+import com.spring.jwt.Document.Service.FileValidationService;
+import com.spring.jwt.Enums.DocumentType;
+import com.spring.jwt.config.DocumentProperties;
+import com.spring.jwt.exception.InvalidDocumentException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Objects;
+
+/**
+ * Implementation of file validation service
+ * Provides comprehensive file validation with configurable rules
+ */
+@Service
+<span class="nc" id="L19">@Slf4j</span>
+<span class="nc" id="L20">@RequiredArgsConstructor</span>
+public class FileValidationServiceImpl implements FileValidationService
+{
+
+    private final DocumentProperties documentProperties;
+
+    @Override
+    public void validateFile(MultipartFile file)
+    {
+<span class="nc" id="L29">        log.debug(&quot;Validating file: {}&quot;, file.getOriginalFilename());</span>
+
+<span class="nc" id="L31">        validateFileNotNull(file);</span>
+<span class="nc" id="L32">        validateFileNotEmpty(file);</span>
+<span class="nc" id="L33">        validateFileSize(file);</span>
+<span class="nc" id="L34">        validateContentType(file);</span>
+
+<span class="nc" id="L36">        log.debug(&quot;File validation successful for: {}&quot;, file.getOriginalFilename());</span>
+<span class="nc" id="L37">    }</span>
+
+    @Override
+    public void validateFileForDocumentType(MultipartFile file, DocumentType documentType)
+    {
+<span class="nc" id="L42">        validateFile(file);</span>
+<span class="nc" id="L43">        validateDocumentTypeSpecificRules(file, documentType);</span>
+<span class="nc" id="L44">    }</span>
+
+    @Override
+    public boolean isSupportedFileType(String contentType)
+    {
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (contentType == null) {</span>
+<span class="nc" id="L50">            return false;</span>
+        }
+<span class="nc" id="L52">        return documentProperties.isSupportedFileType(contentType);</span>
+    }
+
+    @Override
+    public boolean isFileSizeValid(long fileSize)
+    {
+<span class="nc bnc" id="L58" title="All 4 branches missed.">        return fileSize &gt; 0 &amp;&amp; fileSize &lt;= documentProperties.getFileSize().getMaxFileSizeBytes();</span>
+    }
+
+    @Override
+    public long getMaxFileSizeBytes()
+    {
+<span class="nc" id="L64">        return documentProperties.getFileSize().getMaxFileSizeBytes();</span>
+    }
+
+    private void validateFileNotNull(MultipartFile file)
+    {
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (file == null)</span>
+        {
+<span class="nc" id="L71">            throw new InvalidDocumentException(&quot;File cannot be null&quot;);</span>
+        }
+<span class="nc" id="L73">    }</span>
+
+    private void validateFileNotEmpty(MultipartFile file)
+    {
+<span class="nc bnc" id="L77" title="All 2 branches missed.">        if (file.isEmpty())</span>
+        {
+<span class="nc" id="L79">            throw new InvalidDocumentException(&quot;File cannot be empty&quot;);</span>
+        }
+<span class="nc" id="L81">    }</span>
+
+    private void validateFileSize(MultipartFile file)
+    {
+<span class="nc" id="L85">        long fileSize = file.getSize();</span>
+<span class="nc" id="L86">        long maxSize = documentProperties.getFileSize().getMaxFileSizeBytes();</span>
+
+<span class="nc bnc" id="L88" title="All 2 branches missed.">        if (fileSize &lt;= 0)</span>
+        {
+<span class="nc" id="L90">            throw new InvalidDocumentException(&quot;File size must be greater than 0&quot;);</span>
+        }
+
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        if (fileSize &gt; maxSize)</span>
+        {
+<span class="nc" id="L95">            throw new InvalidDocumentException(</span>
+<span class="nc" id="L96">                    String.format(&quot;File size (%d bytes) exceeds maximum allowed size (%d bytes / %dMB)&quot;,</span>
+<span class="nc" id="L97">                            fileSize, maxSize, documentProperties.getMaxFileSizeMB()));</span>
+        }
+<span class="nc" id="L99">    }</span>
+
+    private void validateContentType(MultipartFile file)
+    {
+<span class="nc" id="L103">        String contentType = file.getContentType();</span>
+
+<span class="nc bnc" id="L105" title="All 4 branches missed.">        if (contentType == null || contentType.trim().isEmpty())</span>
+        {
+<span class="nc" id="L107">            throw new InvalidDocumentException(&quot;File content type cannot be null or empty&quot;);</span>
+        }
+
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        if (!isSupportedFileType(contentType))</span>
+        {
+<span class="nc" id="L112">            throw new InvalidDocumentException(</span>
+<span class="nc" id="L113">                    String.format(&quot;Unsupported file type: %s. Supported types: %s, %s&quot;,</span>
+                            contentType,
+<span class="nc" id="L115">                            String.join(&quot;, &quot;, documentProperties.getSupportedImageTypes()),</span>
+<span class="nc" id="L116">                            String.join(&quot;, &quot;, documentProperties.getSupportedDocumentTypes())));</span>
+        }
+<span class="nc" id="L118">    }</span>
+
+    private void validateDocumentTypeSpecificRules(MultipartFile file, DocumentType documentType)
+    {
+<span class="nc" id="L122">        String contentType = file.getContentType();</span>
+
+<span class="nc bnc" id="L124" title="All 4 branches missed.">        switch (documentType)</span>
+        {
+            case PROFILE_PHOTO:
+<span class="nc" id="L127">                validateProfilePhotoRules(file, contentType);</span>
+<span class="nc" id="L128">                break;</span>
+            case AADHAAR_CARD:
+            case PAN_CARD:
+            case PASSPORT:
+<span class="nc" id="L132">                validateIdentityDocumentRules(file, contentType);</span>
+<span class="nc" id="L133">                break;</span>
+            case RESUME:
+<span class="nc" id="L135">                validateResumeRules(file, contentType);</span>
+<span class="nc" id="L136">                break;</span>
+            default:
+                break;
+        }
+<span class="nc" id="L140">    }</span>
+
+    private void validateProfilePhotoRules(MultipartFile file, String contentType)
+    {
+<span class="nc bnc" id="L144" title="All 2 branches missed.">        if (!documentProperties.isSupportedImageType(contentType))</span>
+        {
+<span class="nc" id="L146">            throw new InvalidDocumentException(&quot;Profile photo must be an image file (JPEG, PNG, WEBP)&quot;);</span>
+        }
+
+<span class="nc" id="L149">        long maxProfilePhotoSize = documentProperties.getImage().getProfilePhotoMaxSizeKb() * 1024;</span>
+<span class="nc" id="L150">        int inputMultiplier = documentProperties.getImage().getProfilePhotoInputMultiplier();</span>
+
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (file.getSize() &gt; maxProfilePhotoSize * inputMultiplier)</span>
+        {
+<span class="nc" id="L154">            throw new InvalidDocumentException(</span>
+<span class="nc" id="L155">                    String.format(&quot;Profile photo is too large. Maximum recommended size before compression: %dMB&quot;,</span>
+<span class="nc" id="L156">                            (maxProfilePhotoSize * inputMultiplier) / (1024 * 1024)));</span>
+        }
+<span class="nc" id="L158">    }</span>
+
+    private void validateIdentityDocumentRules(MultipartFile file, String contentType)
+    {
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (!documentProperties.isSupportedFileType(contentType)) {</span>
+<span class="nc" id="L163">            throw new InvalidDocumentException(&quot;Identity documents must be PDF or image files&quot;);</span>
+        }
+<span class="nc" id="L165">    }</span>
+
+    private void validateResumeRules(MultipartFile file, String contentType)
+    {
+
+<span class="nc bnc" id="L170" title="All 2 branches missed.">        if (!Objects.equals(contentType, &quot;application/pdf&quot;) &amp;&amp;</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">                !documentProperties.isSupportedImageType(contentType)) {</span>
+<span class="nc" id="L172">            throw new InvalidDocumentException(&quot;Resume should be a PDF file or image&quot;);</span>
+        }
+<span class="nc" id="L174">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

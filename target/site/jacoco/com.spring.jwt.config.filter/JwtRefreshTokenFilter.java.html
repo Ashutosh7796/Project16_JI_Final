@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtRefreshTokenFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config.filter</a> &gt; <span class="el_source">JwtRefreshTokenFilter.java</span></div><h1>JwtRefreshTokenFilter.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config.filter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spring.jwt.dto.RefreshTokenRequest;
+import com.spring.jwt.jwt.JwtConfig;
+import com.spring.jwt.jwt.JwtService;
+import com.spring.jwt.jwt.ActiveSessionService;
+import com.spring.jwt.service.security.UserDetailsCustom;
+import com.spring.jwt.service.security.UserDetailsServiceCustom;
+import com.spring.jwt.utils.BaseResponseDTO;
+import com.spring.jwt.utils.HelperUtils;
+import io.jsonwebtoken.Claims;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
+<span class="nc" id="L33">@Slf4j</span>
+public class JwtRefreshTokenFilter extends AbstractAuthenticationProcessingFilter implements Ordered {
+
+    private final JwtService jwtService;
+    private final ObjectMapper objectMapper;
+    private final UserDetailsServiceCustom userDetailsService;
+    private final JwtConfig jwtConfig;
+    private final ActiveSessionService activeSessionService;
+    private final boolean jwtDiagnosticLogging;
+
+    private static final String REFRESH_TOKEN_COOKIE_NAME = &quot;refresh_token&quot;;
+    private static final String CLAIM_KEY_TOKEN_TYPE = &quot;token_type&quot;;
+    private static final String TOKEN_TYPE_ACCESS = &quot;access&quot;;
+    private static final String TOKEN_TYPE_REFRESH = &quot;refresh&quot;;
+
+    public JwtRefreshTokenFilter(AuthenticationManager manager,
+                                JwtConfig jwtConfig,
+                                 JwtService jwtService,
+                                 UserDetailsServiceCustom userDetailsService,
+                                 ActiveSessionService activeSessionService,
+                                 boolean jwtDiagnosticLogging) {
+<span class="nc" id="L54">        super(new AntPathRequestMatcher(jwtConfig.getRefreshUrl(), &quot;POST&quot;));</span>
+<span class="nc" id="L55">        setAuthenticationManager(manager);</span>
+<span class="nc" id="L56">        this.objectMapper = new ObjectMapper();</span>
+<span class="nc" id="L57">        this.jwtService = jwtService;</span>
+<span class="nc" id="L58">        this.userDetailsService = userDetailsService;</span>
+<span class="nc" id="L59">        this.jwtConfig = jwtConfig;</span>
+<span class="nc" id="L60">        this.activeSessionService = activeSessionService;</span>
+<span class="nc" id="L61">        this.jwtDiagnosticLogging = jwtDiagnosticLogging;</span>
+<span class="nc" id="L62">    }</span>
+
+    @Override
+    public int getOrder() {
+<span class="nc" id="L66">        return Ordered.LOWEST_PRECEDENCE - 125;</span>
+    }
+
+    @Override
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
+            throws AuthenticationException, IOException, ServletException {
+<span class="nc" id="L72">        log.debug(&quot;Start refresh token authentication&quot;);</span>
+
+<span class="nc" id="L74">        String refreshToken = null;</span>
+        
+        try {
+<span class="nc" id="L77">            refreshToken = getRefreshTokenFromCookie(request);</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">            if (refreshToken != null) {</span>
+<span class="nc" id="L79">                log.debug(&quot;Found refresh token in cookie&quot;);</span>
+            }
+
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            if (refreshToken == null) {</span>
+                try {
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                    if (request.getContentLength() &gt; 0) {</span>
+<span class="nc" id="L85">                        RefreshTokenRequest refreshRequest = objectMapper.readValue(request.getInputStream(), RefreshTokenRequest.class);</span>
+<span class="nc" id="L86">                        refreshToken = refreshRequest.getRefreshToken();</span>
+<span class="nc" id="L87">                        log.debug(&quot;Found refresh token in request body&quot;);</span>
+                    }
+<span class="nc" id="L89">                } catch (Exception e) {</span>
+<span class="nc" id="L90">                    log.debug(&quot;Failed to parse request body: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L91">                }</span>
+            }
+
+<span class="nc bnc" id="L94" title="All 2 branches missed.">            if (refreshToken == null) {</span>
+<span class="nc" id="L95">                String authHeader = request.getHeader(&quot;Authorization&quot;);</span>
+<span class="nc bnc" id="L96" title="All 4 branches missed.">                if (authHeader != null &amp;&amp; authHeader.startsWith(&quot;Bearer &quot;)) {</span>
+<span class="nc" id="L97">                    refreshToken = authHeader.substring(7);</span>
+<span class="nc" id="L98">                    log.debug(&quot;Found refresh token in Authorization header&quot;);</span>
+                }
+            }
+
+<span class="nc bnc" id="L102" title="All 2 branches missed.">            if (refreshToken == null) {</span>
+<span class="nc" id="L103">                log.debug(&quot;No refresh token found in cookie, body, or Authorization header&quot;);</span>
+<span class="nc" id="L104">                throw new BadCredentialsException(&quot;No refresh token provided&quot;);</span>
+            }
+
+<span class="nc" id="L107">            log.debug(&quot;Validating refresh token...&quot;);</span>
+
+            try {
+<span class="nc" id="L110">                Claims claims = jwtService.extractClaims(refreshToken);</span>
+<span class="nc" id="L111">                String tokenType = claims.get(CLAIM_KEY_TOKEN_TYPE, String.class);</span>
+                
+<span class="nc bnc" id="L113" title="All 2 branches missed.">                if (TOKEN_TYPE_ACCESS.equals(tokenType)) {</span>
+<span class="nc" id="L114">                    log.warn(&quot;Attempting to use an access token for refresh&quot;);</span>
+<span class="nc" id="L115">                    Cookie invalidCookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, &quot;&quot;);</span>
+<span class="nc" id="L116">                    invalidCookie.setMaxAge(0);</span>
+<span class="nc" id="L117">                    invalidCookie.setPath(&quot;/&quot;);</span>
+<span class="nc" id="L118">                    response.addCookie(invalidCookie);</span>
+<span class="nc" id="L119">                    throw new BadCredentialsException(&quot;Access token used for refresh. Please use a refresh token.&quot;);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">                } else if (!TOKEN_TYPE_REFRESH.equals(tokenType)) {</span>
+<span class="nc" id="L121">                    log.warn(&quot;Invalid token type - not a refresh token&quot;);</span>
+<span class="nc" id="L122">                    throw new BadCredentialsException(&quot;Invalid token type - not a refresh token&quot;);</span>
+                }
+<span class="nc" id="L124">            } catch (BadCredentialsException e) {</span>
+<span class="nc" id="L125">                throw e;</span>
+<span class="nc" id="L126">            } catch (Exception e) {</span>
+<span class="nc" id="L127">                log.error(&quot;Error validating token type: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L128">                throw new BadCredentialsException(&quot;Invalid token format or structure&quot;);</span>
+<span class="nc" id="L129">            }</span>
+
+<span class="nc" id="L131">            String deviceFingerprint = jwtService.generateDeviceFingerprint(request);</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            if (!jwtService.isValidToken(refreshToken, deviceFingerprint)) {</span>
+<span class="nc" id="L133">                log.warn(&quot;Expired or invalid refresh token&quot;);</span>
+<span class="nc" id="L134">                throw new BadCredentialsException(&quot;Expired or invalid refresh token&quot;);</span>
+            }
+
+<span class="nc" id="L137">            Claims claims = jwtService.extractClaims(refreshToken);</span>
+<span class="nc" id="L138">            String username = claims.getSubject();</span>
+<span class="nc" id="L139">            log.debug(&quot;Refresh token is valid for user: {}&quot;, username);</span>
+
+<span class="nc" id="L141">            RefreshTokenAuthentication auth = new RefreshTokenAuthentication(username, refreshToken);</span>
+<span class="nc" id="L142">            auth.setAuthenticated(true);</span>
+            
+<span class="nc" id="L144">            return auth;</span>
+<span class="nc" id="L145">        } catch (Exception e) {</span>
+<span class="nc" id="L146">            log.error(&quot;Error processing refresh token: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L147">            throw new BadCredentialsException(e.getMessage());</span>
+        }
+    }
+    
+    /**
+     * Get refresh token from cookie
+     */
+    private String getRefreshTokenFromCookie(HttpServletRequest request) {
+<span class="nc" id="L155">        Cookie[] cookies = request.getCookies();</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">        if (cookies != null) {</span>
+<span class="nc" id="L157">            Optional&lt;Cookie&gt; refreshTokenCookie = Arrays.stream(cookies)</span>
+<span class="nc" id="L158">                .filter(cookie -&gt; REFRESH_TOKEN_COOKIE_NAME.equals(cookie.getName()))</span>
+<span class="nc" id="L159">                .findFirst();</span>
+            
+<span class="nc bnc" id="L161" title="All 2 branches missed.">            if (refreshTokenCookie.isPresent()) {</span>
+<span class="nc" id="L162">                log.debug(&quot;Found refresh token in cookie&quot;);</span>
+<span class="nc" id="L163">                String tokenValue = refreshTokenCookie.get().getValue();</span>
+
+                try {
+<span class="nc bnc" id="L166" title="All 2 branches missed.">                    if (!jwtService.isRefreshToken(tokenValue)) {</span>
+<span class="nc" id="L167">                        log.warn(&quot;Cookie named 'refresh_token' contains an access token, not a refresh token&quot;);</span>
+                    }
+<span class="nc" id="L169">                } catch (Exception e) {</span>
+<span class="nc" id="L170">                    log.warn(&quot;Error checking token type from cookie: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L171">                }</span>
+                
+<span class="nc" id="L173">                return tokenValue;</span>
+            }
+        }
+<span class="nc" id="L176">        return null;</span>
+    }
+
+    @Override
+    protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain,
+                                           Authentication authResult) throws IOException, ServletException {
+        try {
+<span class="nc" id="L183">            log.debug(&quot;Processing successful refresh token authentication&quot;);</span>
+<span class="nc" id="L184">            String username = authResult.getName();</span>
+<span class="nc" id="L185">            String refreshToken = ((RefreshTokenAuthentication) authResult).getRefreshToken();</span>
+
+<span class="nc" id="L187">            jwtService.blacklistToken(refreshToken);</span>
+<span class="nc" id="L188">            log.debug(&quot;Blacklisted used refresh token&quot;);</span>
+
+<span class="nc" id="L190">            UserDetailsCustom userDetails = (UserDetailsCustom) userDetailsService.loadUserByUsername(username);</span>
+
+<span class="nc" id="L192">            String deviceFingerprint = jwtService.generateDeviceFingerprint(request);</span>
+
+<span class="nc" id="L194">            String newAccessToken = jwtService.generateToken(userDetails, deviceFingerprint);</span>
+<span class="nc" id="L195">            String newRefreshToken = jwtService.generateRefreshToken(userDetails, deviceFingerprint);</span>
+
+<span class="nc" id="L197">            String accessJti = jwtService.extractTokenId(newAccessToken);</span>
+<span class="nc" id="L198">            String refreshJti = jwtService.extractTokenId(newRefreshToken);</span>
+<span class="nc" id="L199">            activeSessionService.replaceActiveSession(username, accessJti, refreshJti,</span>
+<span class="nc" id="L200">                    jwtService.extractClaims(newAccessToken).getExpiration().toInstant(),</span>
+<span class="nc" id="L201">                    jwtService.extractClaims(newRefreshToken).getExpiration().toInstant());</span>
+
+<span class="nc bnc" id="L203" title="All 2 branches missed.">            if (jwtDiagnosticLogging) {</span>
+<span class="nc" id="L204">                jwtService.logIssuedPairDiagnostics(&quot;refresh&quot;, username, newAccessToken, newRefreshToken);</span>
+            }
+
+<span class="nc" id="L207">            Cookie refreshTokenCookie = createRefreshTokenCookie(newRefreshToken);</span>
+<span class="nc" id="L208">            response.addCookie(refreshTokenCookie);</span>
+
+<span class="nc" id="L210">            Cookie accessTokenCookie = new Cookie(&quot;access_token&quot;, newAccessToken);</span>
+<span class="nc" id="L211">            accessTokenCookie.setHttpOnly(false);</span>
+<span class="nc" id="L212">            accessTokenCookie.setSecure(true);</span>
+<span class="nc" id="L213">            accessTokenCookie.setPath(&quot;/&quot;);</span>
+<span class="nc" id="L214">            accessTokenCookie.setMaxAge((int) (jwtConfig.getExpiration() / 1000));</span>
+<span class="nc" id="L215">            response.addCookie(accessTokenCookie);</span>
+
+<span class="nc" id="L217">            Map&lt;String, Object&gt; tokens = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L218">            tokens.put(&quot;accessToken&quot;, newAccessToken);</span>
+<span class="nc" id="L219">            tokens.put(&quot;tokenType&quot;, &quot;Bearer&quot;);</span>
+<span class="nc" id="L220">            tokens.put(&quot;expiresIn&quot;, jwtConfig.getExpiration());</span>
+            
+<span class="nc" id="L222">            String json = HelperUtils.JSON_WRITER.writeValueAsString(tokens);</span>
+<span class="nc" id="L223">            response.setContentType(&quot;application/json; charset=UTF-8&quot;);</span>
+<span class="nc" id="L224">            response.getWriter().write(json);</span>
+<span class="nc" id="L225">            log.debug(&quot;End successful refresh token authentication&quot;);</span>
+<span class="nc" id="L226">        } catch (Exception ex) {</span>
+<span class="nc" id="L227">            log.error(&quot;Error during token refresh: {}&quot;, ex.getMessage());</span>
+<span class="nc" id="L228">            unsuccessfulAuthentication(request, response, new BadCredentialsException(ex.getMessage()));</span>
+<span class="nc" id="L229">        }</span>
+<span class="nc" id="L230">    }</span>
+    
+    /**
+     * Create a secure HttpOnly cookie for the refresh token
+     */
+    private Cookie createRefreshTokenCookie(String refreshToken) {
+<span class="nc" id="L236">        Cookie cookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken);</span>
+<span class="nc" id="L237">        cookie.setHttpOnly(true);</span>
+<span class="nc" id="L238">        cookie.setSecure(true);</span>
+<span class="nc" id="L239">        cookie.setPath(&quot;/&quot;);</span>
+
+<span class="nc" id="L241">        cookie.setMaxAge(jwtConfig.getRefreshExpiration());</span>
+
+<span class="nc" id="L243">        cookie.setAttribute(&quot;SameSite&quot;, &quot;Strict&quot;);</span>
+        
+<span class="nc" id="L245">        return cookie;</span>
+    }
+
+    @Override
+    protected void unsuccessfulAuthentication(HttpServletRequest request, HttpServletResponse response, 
+                                             AuthenticationException failed) throws IOException, ServletException {
+
+<span class="nc" id="L252">        Cookie invalidCookie = new Cookie(REFRESH_TOKEN_COOKIE_NAME, &quot;&quot;);</span>
+<span class="nc" id="L253">        invalidCookie.setMaxAge(0);</span>
+<span class="nc" id="L254">        invalidCookie.setPath(jwtConfig.getRefreshUrl());</span>
+<span class="nc" id="L255">        response.addCookie(invalidCookie);</span>
+        
+<span class="nc" id="L257">        BaseResponseDTO responseDTO = new BaseResponseDTO();</span>
+<span class="nc" id="L258">        responseDTO.setCode(String.valueOf(HttpStatus.UNAUTHORIZED.value()));</span>
+<span class="nc" id="L259">        responseDTO.setMessage(failed.getMessage());</span>
+
+<span class="nc" id="L261">        String json = HelperUtils.JSON_WRITER.writeValueAsString(responseDTO);</span>
+
+<span class="nc" id="L263">        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);</span>
+<span class="nc" id="L264">        response.setContentType(&quot;application/json; charset=UTF-8&quot;);</span>
+<span class="nc" id="L265">        response.getWriter().write(json);</span>
+<span class="nc" id="L266">    }</span>
+
+    public static class RefreshTokenAuthentication implements Authentication {
+        private final String username;
+        private final String refreshToken;
+<span class="nc" id="L271">        private boolean authenticated = false;</span>
+        
+<span class="nc" id="L273">        public RefreshTokenAuthentication(String username, String refreshToken) {</span>
+<span class="nc" id="L274">            this.username = username;</span>
+<span class="nc" id="L275">            this.refreshToken = refreshToken;</span>
+<span class="nc" id="L276">        }</span>
+        
+        @Override
+        public Object getCredentials() {
+<span class="nc" id="L280">            return refreshToken;</span>
+        }
+        
+        @Override
+        public Object getPrincipal() {
+<span class="nc" id="L285">            return username;</span>
+        }
+        
+        @Override
+        public boolean isAuthenticated() {
+<span class="nc" id="L290">            return authenticated;</span>
+        }
+        
+        @Override
+        public void setAuthenticated(boolean isAuthenticated) {
+<span class="nc" id="L295">            this.authenticated = isAuthenticated;</span>
+<span class="nc" id="L296">        }</span>
+        
+        @Override
+        public String getName() {
+<span class="nc" id="L300">            return username;</span>
+        }
+        
+        public String getRefreshToken() {
+<span class="nc" id="L304">            return refreshToken;</span>
+        }
+        
+        @Override
+        public Object getDetails() {
+<span class="nc" id="L309">            return null;</span>
+        }
+        
+        @Override
+        public java.util.Collection&lt;? extends org.springframework.security.core.GrantedAuthority&gt; getAuthorities() {
+<span class="nc" id="L314">            return java.util.Collections.emptyList();</span>
+        }
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

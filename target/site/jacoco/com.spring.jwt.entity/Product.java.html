@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Product.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.entity</a> &gt; <span class="el_source">Product.java</span></div><h1>Product.java</h1><pre class="source lang-java linenums">package com.spring.jwt.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+@Getter
+<span class="nc" id="L10">@Setter</span>
+<span class="nc" id="L11">@ToString(exclude = &quot;sections&quot;)</span>
+<span class="nc bnc" id="L12" title="All 14 branches missed.">@EqualsAndHashCode(onlyExplicitlyIncluded = true)</span>
+@Entity
+@Table(
+        name = &quot;products&quot;,
+        indexes = {
+                @Index(name = &quot;idx_products_name&quot;, columnList = &quot;productName&quot;),
+                @Index(name = &quot;idx_products_type&quot;, columnList = &quot;productType&quot;),
+                @Index(name = &quot;idx_products_active&quot;, columnList = &quot;active&quot;)
+        }
+)
+<span class="nc" id="L22">@AllArgsConstructor</span>
+<span class="nc" id="L23">@NoArgsConstructor</span>
+public class Product {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
+<span class="nc" id="L29">    private Long productId;</span>
+
+<span class="nc" id="L31">    private String productName;</span>
+
+    @Enumerated(EnumType.STRING)
+<span class="nc" id="L34">    private ProductType productType;</span>
+
+    @Enumerated(EnumType.STRING)
+<span class="nc" id="L37">    private Category category;</span>
+
+<span class="nc" id="L39">    private Double price;</span>
+<span class="nc" id="L40">    private Double offers;</span>
+<span class="nc" id="L41">    private Boolean active = true;</span>
+
+    /**
+     * Sellable units on hand. {@code null} means unlimited inventory (no reservation / stock checks).
+     */
+    @Column(name = &quot;stock_on_hand&quot;)
+<span class="nc" id="L47">    private Integer stockOnHand;</span>
+
+<span class="nc" id="L49">    @Column(name = &quot;stock_reserved&quot;, nullable = false)</span>
+<span class="nc" id="L50">    private Integer stockReserved = 0;</span>
+
+<span class="nc" id="L52">    private LocalDateTime createdAt = LocalDateTime.now();</span>
+
+<span class="nc" id="L54">    @OneToMany(</span>
+            mappedBy = &quot;product&quot;,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
+    )
+<span class="nc" id="L60">    private Set&lt;ProductSection&gt; sections = new LinkedHashSet&lt;&gt;();</span>
+
+<span class="nc" id="L62">    @OneToMany(</span>
+            mappedBy = &quot;product&quot;,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
+    )
+<span class="nc" id="L68">    private Set&lt;ProductImage&gt; images = new LinkedHashSet&lt;&gt;();</span>
+
+<span class="nc" id="L70">    public enum ProductType {</span>
+<span class="nc" id="L71">        SEED, FERTILIZER</span>
+    }
+<span class="nc" id="L73">    public enum Category {</span>
+<span class="nc" id="L74">        RABI, KHARIP, SUMMER, ALL</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

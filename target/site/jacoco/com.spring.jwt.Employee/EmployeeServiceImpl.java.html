@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Employee</a> &gt; <span class="el_source">EmployeeServiceImpl.java</span></div><h1>EmployeeServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Employee;
+
+import com.spring.jwt.dto.EmployeeByRoleResponse;
+import com.spring.jwt.dto.PagedResponse;
+import com.spring.jwt.entity.Employee;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.BaseException;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import com.spring.jwt.repository.RoleRepository;
+import com.spring.jwt.repository.UserRepository;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L24">@RequiredArgsConstructor</span>
+public class EmployeeServiceImpl implements EmployeeService {
+
+    private final EmployeeRepository employeeRepository;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+
+    @Override
+    public EmployeeResponseDTO getEmployeeById(Long employeeId) {
+
+<span class="nc" id="L34">        Employee employee = employeeRepository.findById(employeeId)</span>
+<span class="nc" id="L35">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L36">                        new ResourceNotFoundException(</span>
+                                &quot;Employee not found with ID: &quot; + employeeId));
+
+<span class="nc" id="L39">        return mapToDto(employee);</span>
+    }
+
+    @Override
+    public EmployeeResponseDTO getEmployeeByUserId(Long userId) {
+
+<span class="nc" id="L45">        Employee employee = employeeRepository.findByUser_UserId(userId)</span>
+<span class="nc" id="L46">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L47">                        new ResourceNotFoundException(</span>
+                                &quot;Employee not found for User ID: &quot; + userId));
+
+<span class="nc" id="L50">        return mapToDto(employee);</span>
+    }
+
+    @Override
+    public Page&lt;EmployeeResponseDTO&gt; getAllEmployees(int page, int size) {
+
+<span class="nc" id="L56">        Pageable pageable = PageRequest.of(page, size, Sort.by(&quot;employeeId&quot;).descending());</span>
+
+<span class="nc" id="L58">        Page&lt;Employee&gt; employeePage = employeeRepository.findAll(pageable);</span>
+
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        if (employeePage.isEmpty()) {</span>
+<span class="nc" id="L61">            throw new ResourceNotFoundException(&quot;No employees found&quot;);</span>
+        }
+
+<span class="nc" id="L64">        return employeePage.map(this::mapToResponse);</span>
+    }
+
+
+    @Override
+    @Transactional
+    public EmployeeResponseDTO updateAccountLockStatus(Long employeeId, Boolean accountLocked) {
+
+        try {
+<span class="nc bnc" id="L73" title="All 2 branches missed.">            if (accountLocked == null) {</span>
+<span class="nc" id="L74">                throw new BaseException(&quot;400&quot;, &quot;accountLocked value must not be null&quot;);</span>
+            }
+
+<span class="nc" id="L77">            Employee employee = employeeRepository.findById(employeeId)</span>
+<span class="nc" id="L78">                    .orElseThrow(() -&gt;</span>
+<span class="nc" id="L79">                            new BaseException(&quot;404&quot;, &quot;Employee not found with id: &quot; + employeeId));</span>
+
+<span class="nc" id="L81">            User user = employee.getUser();</span>
+
+            // 🔐 Update only account lock status
+<span class="nc" id="L84">            user.setAccountLocked(accountLocked);</span>
+
+<span class="nc" id="L86">            employeeRepository.save(employee); // cascades to User</span>
+
+<span class="nc" id="L88">            return mapToResponse(employee);</span>
+
+<span class="nc" id="L90">        } catch (BaseException e) {</span>
+<span class="nc" id="L91">            throw e;</span>
+<span class="nc" id="L92">        } catch (Exception e) {</span>
+<span class="nc" id="L93">            throw new BaseException(&quot;500&quot;, &quot;Failed to update account lock status&quot;);</span>
+        }
+    }
+
+
+
+    private EmployeeResponseDTO mapToDto(Employee employee) {
+
+<span class="nc" id="L101">        User user = employee.getUser();</span>
+
+<span class="nc" id="L103">        EmployeeResponseDTO dto = new EmployeeResponseDTO();</span>
+
+<span class="nc" id="L105">        dto.setEmployeeId(employee.getEmployeeId());</span>
+<span class="nc" id="L106">        dto.setEmployeeCode(employee.getEmployeeCode());</span>
+<span class="nc" id="L107">        dto.setCompanyName(employee.getCompanyName());</span>
+<span class="nc" id="L108">        dto.setAddress(employee.getAddress());</span>
+<span class="nc" id="L109">        dto.setPermanentAddress(employee.getPermanentAddress());</span>
+<span class="nc" id="L110">        dto.setCity(employee.getCity());</span>
+<span class="nc" id="L111">        dto.setDistrict(employee.getDistrict());</span>
+<span class="nc" id="L112">        dto.setState(employee.getState());</span>
+<span class="nc" id="L113">        dto.setAccountNumber(employee.getAccountNumber());</span>
+<span class="nc" id="L114">        dto.setIfscCode(employee.getIfscCode());</span>
+<span class="nc" id="L115">        dto.setPfNumber(employee.getPfNumber());</span>
+<span class="nc" id="L116">        dto.setInsuranceNumber(employee.getInsuranceNumber());</span>
+<span class="nc" id="L117">        dto.setPanNumber(employee.getPanNumber());</span>
+<span class="nc" id="L118">        dto.setVehicleNumber(employee.getVehicleNumber());</span>
+<span class="nc" id="L119">        dto.setDescription(employee.getDescription());</span>
+
+<span class="nc" id="L121">        dto.setUserId(user.getUserId());</span>
+<span class="nc" id="L122">        dto.setUserEmail(user.getEmail());</span>
+<span class="nc" id="L123">        dto.setUserMobile(user.getMobileNumber());</span>
+
+<span class="nc" id="L125">        return dto;</span>
+    }
+    @Override
+    public EmployeeResponseDTO patchEmployeeByUserId(Long userId, EmployeeUpdateRequestDTO dto) {
+
+        try {
+<span class="nc" id="L131">            Employee employee = employeeRepository.findByUser_UserId(userId)</span>
+<span class="nc" id="L132">                    .orElseThrow(() -&gt;</span>
+<span class="nc" id="L133">                            new BaseException(&quot;404&quot;, &quot;Employee not found for userId: &quot; + userId));</span>
+
+<span class="nc" id="L135">            User user = employee.getUser();</span>
+
+            // ---------- PATCH USER ----------
+<span class="nc bnc" id="L138" title="All 4 branches missed.">            if (dto.getEmail() != null &amp;&amp; !dto.getEmail().isBlank()) {</span>
+<span class="nc" id="L139">                user.setEmail(dto.getEmail());</span>
+            }
+
+<span class="nc bnc" id="L142" title="All 4 branches missed.">            if (dto.getPhone() != null &amp;&amp; !dto.getPhone().isBlank()) {</span>
+                try {
+<span class="nc" id="L144">                    user.setMobileNumber(Long.parseLong(dto.getPhone()));</span>
+<span class="nc" id="L145">                } catch (NumberFormatException ex) {</span>
+<span class="nc" id="L146">                    throw new BaseException(&quot;400&quot;, &quot;Invalid phone number format&quot;);</span>
+<span class="nc" id="L147">                }</span>
+            }
+
+            // ---------- PATCH EMPLOYEE ----------
+<span class="nc bnc" id="L151" title="All 2 branches missed.">            if (dto.getCompanyName() != null)</span>
+<span class="nc" id="L152">                employee.setCompanyName(dto.getCompanyName());</span>
+
+<span class="nc bnc" id="L154" title="All 2 branches missed.">            if (dto.getAddress() != null)</span>
+<span class="nc" id="L155">                employee.setAddress(dto.getAddress());</span>
+
+<span class="nc bnc" id="L157" title="All 2 branches missed.">            if (dto.getPermanentAddress() != null)</span>
+<span class="nc" id="L158">                employee.setPermanentAddress(dto.getPermanentAddress());</span>
+
+<span class="nc bnc" id="L160" title="All 2 branches missed.">            if (dto.getCity() != null)</span>
+<span class="nc" id="L161">                employee.setCity(dto.getCity());</span>
+
+<span class="nc bnc" id="L163" title="All 2 branches missed.">            if (dto.getDistrict() != null)</span>
+<span class="nc" id="L164">                employee.setDistrict(dto.getDistrict());</span>
+
+<span class="nc bnc" id="L166" title="All 2 branches missed.">            if (dto.getState() != null)</span>
+<span class="nc" id="L167">                employee.setState(dto.getState());</span>
+
+<span class="nc bnc" id="L169" title="All 2 branches missed.">            if (dto.getAccountNumber() != null)</span>
+<span class="nc" id="L170">                employee.setAccountNumber(dto.getAccountNumber());</span>
+
+<span class="nc bnc" id="L172" title="All 2 branches missed.">            if (dto.getIfscCode() != null)</span>
+<span class="nc" id="L173">                employee.setIfscCode(dto.getIfscCode());</span>
+
+<span class="nc bnc" id="L175" title="All 2 branches missed.">            if (dto.getPfNumber() != null)</span>
+<span class="nc" id="L176">                employee.setPfNumber(dto.getPfNumber());</span>
+
+<span class="nc bnc" id="L178" title="All 2 branches missed.">            if (dto.getInsuranceNumber() != null)</span>
+<span class="nc" id="L179">                employee.setInsuranceNumber(dto.getInsuranceNumber());</span>
+
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            if (dto.getPanNumber() != null)</span>
+<span class="nc" id="L182">                employee.setPanNumber(dto.getPanNumber());</span>
+
+<span class="nc bnc" id="L184" title="All 2 branches missed.">            if (dto.getVehicleNumber() != null)</span>
+<span class="nc" id="L185">                employee.setVehicleNumber(dto.getVehicleNumber());</span>
+
+<span class="nc bnc" id="L187" title="All 2 branches missed.">            if (dto.getDescription() != null)</span>
+<span class="nc" id="L188">                employee.setDescription(dto.getDescription());</span>
+
+<span class="nc" id="L190">            employeeRepository.save(employee);</span>
+
+<span class="nc" id="L192">            return mapToResponse(employee);</span>
+
+<span class="nc" id="L194">        } catch (BaseException e) {</span>
+<span class="nc" id="L195">            throw e;</span>
+<span class="nc" id="L196">        } catch (Exception e) {</span>
+<span class="nc" id="L197">            throw new BaseException(&quot;500&quot;, &quot;Failed to update employee details&quot;);</span>
+        }
+    }
+
+    @Override
+    @Transactional
+    public EmployeeResponseDTO updateAccountLockStatusByUserId(Long userId, Boolean accountLocked) {
+
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        if (accountLocked == null) {</span>
+<span class="nc" id="L206">            throw new BaseException(&quot;400&quot;, &quot;accountLocked value must not be null&quot;);</span>
+        }
+
+<span class="nc" id="L209">        Employee employee = employeeRepository.findByUser_UserId(userId)</span>
+<span class="nc" id="L210">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L211">                        new BaseException(&quot;404&quot;, &quot;Employee not found for userId: &quot; + userId));</span>
+
+<span class="nc" id="L213">        employee.getUser().setAccountLocked(accountLocked);</span>
+
+<span class="nc" id="L215">        employeeRepository.save(employee);</span>
+
+<span class="nc" id="L217">        return mapToResponse(employee);</span>
+    }
+
+
+    @Override
+    public Page&lt;UserListResponseDTO&gt; getUsers(String role, int page, int size) {
+
+<span class="nc" id="L224">        Pageable pageable = PageRequest.of(page, size, Sort.by(&quot;userId&quot;).descending());</span>
+
+        Page&lt;User&gt; usersPage;
+
+<span class="nc bnc" id="L228" title="All 2 branches missed.">        if (StringUtils.hasText(role)) {</span>
+<span class="nc" id="L229">            String finalRole = role.toUpperCase();</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">            if (&quot;ADMIN&quot;.equals(finalRole)) {</span>
+                // Administrators are never listed via this endpoint
+<span class="nc" id="L232">                usersPage = Page.empty(pageable);</span>
+            } else {
+<span class="nc" id="L234">                usersPage = userRepository.findAllByRoleNameExcludingAdminHolders(finalRole, pageable);</span>
+            }
+<span class="nc" id="L236">        } else {</span>
+<span class="nc" id="L237">            usersPage = userRepository.findAllEmployees(pageable);</span>
+        }
+
+<span class="nc" id="L240">        return usersPage.map(user -&gt;</span>
+<span class="nc" id="L241">                new UserListResponseDTO(</span>
+<span class="nc" id="L242">                        user.getUserId(),</span>
+<span class="nc" id="L243">                        buildFullName(user),</span>
+<span class="nc" id="L244">                        user.getEmail(),</span>
+<span class="nc" id="L245">                        user.getMobileNumber(),</span>
+<span class="nc" id="L246">                        user.getAccountLocked(),</span>
+<span class="nc" id="L247">                        buildEmployeeCode(user)</span>
+                )
+        );
+    }
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public PagedResponse&lt;EmployeeByRoleResponse&gt; getSurveyors(int page, int size) {
+<span class="nc" id="L254">        return fetchByRole(&quot;SURVEYOR&quot;, page, size);</span>
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public PagedResponse&lt;EmployeeByRoleResponse&gt; getLabTechnicians(int page, int size) {
+<span class="nc" id="L260">        return fetchByRole(&quot;LAB_TECHNICIAN&quot;, page, size);</span>
+    }
+
+    private PagedResponse&lt;EmployeeByRoleResponse&gt; fetchByRole(String role, int page, int size) {
+<span class="nc" id="L264">        Pageable pageable = PageRequest.of(page, size, Sort.by(&quot;createdAt&quot;).descending());</span>
+<span class="nc" id="L265">        Page&lt;User&gt; userPage = userRepository.findAllByRoleNameExcludingAdminHolders(role, pageable);</span>
+
+<span class="nc" id="L267">        List&lt;EmployeeByRoleResponse&gt; content = userPage.getContent()</span>
+<span class="nc" id="L268">                .stream()</span>
+<span class="nc" id="L269">                .map(this::toResponse)</span>
+<span class="nc" id="L270">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L272">        return PagedResponse.&lt;EmployeeByRoleResponse&gt;builder()</span>
+<span class="nc" id="L273">                .content(content)</span>
+<span class="nc" id="L274">                .page(userPage.getNumber())</span>
+<span class="nc" id="L275">                .size(userPage.getSize())</span>
+<span class="nc" id="L276">                .totalElements(userPage.getTotalElements())</span>
+<span class="nc" id="L277">                .totalPages(userPage.getTotalPages())</span>
+<span class="nc" id="L278">                .last(userPage.isLast())</span>
+<span class="nc" id="L279">                .build();</span>
+    }
+
+    private String buildFullName(User user) {
+<span class="nc bnc" id="L283" title="All 2 branches missed.">        return (user.getFirstName() == null ? &quot;&quot; : user.getFirstName()) +</span>
+                &quot; &quot; +
+<span class="nc bnc" id="L285" title="All 2 branches missed.">                (user.getLastName() == null ? &quot;&quot; : user.getLastName());</span>
+    }
+    private String buildEmployeeCode(User user) {
+<span class="nc" id="L288">        return (&quot;EMP&quot;+user.getUserId());</span>
+    }
+
+    private EmployeeResponseDTO mapToResponse(Employee employee) {
+
+<span class="nc" id="L293">        EmployeeResponseDTO dto = new EmployeeResponseDTO();</span>
+<span class="nc" id="L294">        User user = employee.getUser();</span>
+
+        // ---------- IDS ----------
+<span class="nc" id="L297">        dto.setEmployeeId(employee.getEmployeeId());</span>
+<span class="nc" id="L298">        dto.setUserId(user.getUserId());</span>
+
+        // ---------- USER ----------
+
+
+        // ---------- EMPLOYEE ----------
+<span class="nc" id="L304">        dto.setEmployeeCode(employee.getEmployeeCode());</span>
+<span class="nc" id="L305">        dto.setCompanyName(employee.getCompanyName());</span>
+<span class="nc" id="L306">        dto.setAddress(employee.getAddress());</span>
+<span class="nc" id="L307">        dto.setPermanentAddress(employee.getPermanentAddress());</span>
+<span class="nc" id="L308">        dto.setCity(employee.getCity());</span>
+<span class="nc" id="L309">        dto.setDistrict(employee.getDistrict());</span>
+<span class="nc" id="L310">        dto.setState(employee.getState());</span>
+<span class="nc" id="L311">        dto.setAccountNumber(employee.getAccountNumber());</span>
+<span class="nc" id="L312">        dto.setIfscCode(employee.getIfscCode());</span>
+<span class="nc" id="L313">        dto.setPfNumber(employee.getPfNumber());</span>
+<span class="nc" id="L314">        dto.setInsuranceNumber(employee.getInsuranceNumber());</span>
+<span class="nc" id="L315">        dto.setPanNumber(employee.getPanNumber());</span>
+<span class="nc" id="L316">        dto.setVehicleNumber(employee.getVehicleNumber());</span>
+<span class="nc" id="L317">        dto.setDescription(employee.getDescription());</span>
+
+<span class="nc" id="L319">        return dto;</span>
+    }
+
+    private EmployeeByRoleResponse toResponse(User user) {
+<span class="nc" id="L323">        Employee emp = user.getEmployee();</span>
+
+<span class="nc" id="L325">        return EmployeeByRoleResponse.builder()</span>
+<span class="nc" id="L326">                .userId(user.getUserId())</span>
+<span class="nc bnc" id="L327" title="All 2 branches missed.">                .employeeCode(emp != null ? emp.getEmployeeCode() : null)</span>
+<span class="nc" id="L328">                .firstName(user.getFirstName())</span>
+<span class="nc" id="L329">                .lastName(user.getLastName())</span>
+<span class="nc" id="L330">                .email(user.getEmail())</span>
+<span class="nc" id="L331">                .mobileNumber(user.getMobileNumber())</span>
+<span class="nc" id="L332">                .build();</span>
+    }
+
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

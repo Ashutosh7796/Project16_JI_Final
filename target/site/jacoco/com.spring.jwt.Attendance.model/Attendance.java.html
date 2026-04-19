@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Attendance.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Attendance.model</a> &gt; <span class="el_source">Attendance.java</span></div><h1>Attendance.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Attendance.model;
+
+import com.spring.jwt.Attendance.model.embedded.Location;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
+/**
+ * Attendance Entity
+ * Represents employee attendance records with location tracking
+ */
+@Entity
+@Table(name = &quot;attendance&quot;, indexes = {
+    @Index(name = &quot;idx_user_date&quot;, columnList = &quot;user_id, date&quot;, unique = true),
+    @Index(name = &quot;idx_date&quot;, columnList = &quot;date&quot;),
+    @Index(name = &quot;idx_user_id&quot;, columnList = &quot;user_id&quot;)
+})
+<span class="nc bnc" id="L26" title="All 118 branches missed.">@Data</span>
+<span class="nc" id="L27">@NoArgsConstructor</span>
+<span class="nc" id="L28">@AllArgsConstructor</span>
+<span class="nc" id="L29">@Builder</span>
+public class Attendance {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = &quot;attendance_id&quot;)
+<span class="nc" id="L35">    private Long attendanceId;</span>
+
+    @Column(name = &quot;user_id&quot;, nullable = false)
+<span class="nc" id="L38">    private Long userId;</span>
+
+    @Column(name = &quot;date&quot;, nullable = false)
+<span class="nc" id="L41">    private LocalDate date;</span>
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = &quot;attendance_status&quot;, nullable = false, length = 20)
+<span class="nc" id="L45">    private AttendanceStatus attendanceStatus;</span>
+
+    @Column(name = &quot;check_in_time&quot;)
+<span class="nc" id="L48">    private LocalTime checkInTime;</span>
+
+    @Column(name = &quot;check_out_time&quot;)
+<span class="nc" id="L51">    private LocalTime checkOutTime;</span>
+
+    @Embedded
+    @AttributeOverrides({
+        @AttributeOverride(name = &quot;latitude&quot;, column = @Column(name = &quot;check_in_latitude&quot;)),
+        @AttributeOverride(name = &quot;longitude&quot;, column = @Column(name = &quot;check_in_longitude&quot;)),
+        @AttributeOverride(name = &quot;address&quot;, column = @Column(name = &quot;check_in_address&quot;, length = 500))
+    })
+<span class="nc" id="L59">    private Location checkInLocation;</span>
+
+    @Embedded
+    @AttributeOverrides({
+        @AttributeOverride(name = &quot;latitude&quot;, column = @Column(name = &quot;check_out_latitude&quot;)),
+        @AttributeOverride(name = &quot;longitude&quot;, column = @Column(name = &quot;check_out_longitude&quot;)),
+        @AttributeOverride(name = &quot;address&quot;, column = @Column(name = &quot;check_out_address&quot;, length = 500))
+    })
+<span class="nc" id="L67">    private Location checkOutLocation;</span>
+
+    @Column(name = &quot;remarks&quot;, length = 500)
+<span class="nc" id="L70">    private String remarks;</span>
+
+    @Column(name = &quot;total_hours&quot;)
+<span class="nc" id="L73">    private Double totalHours;</span>
+
+    @CreationTimestamp
+    @Column(name = &quot;created_at&quot;, nullable = false, updatable = false)
+<span class="nc" id="L77">    private LocalDateTime createdAt;</span>
+
+    @UpdateTimestamp
+    @Column(name = &quot;updated_at&quot;)
+<span class="nc" id="L81">    private LocalDateTime updatedAt;</span>
+
+    @Column(name = &quot;created_by&quot;)
+<span class="nc" id="L84">    private Long createdBy;</span>
+
+    @Column(name = &quot;updated_by&quot;)
+<span class="nc" id="L87">    private Long updatedBy;</span>
+
+    /**
+     * Calculate total working hours between check-in and check-out
+     */
+    public void calculateTotalHours() {
+<span class="nc bnc" id="L93" title="All 4 branches missed.">        if (checkInTime != null &amp;&amp; checkOutTime != null) {</span>
+<span class="nc" id="L94">            long minutes = java.time.Duration.between(checkInTime, checkOutTime).toMinutes();</span>
+<span class="nc" id="L95">            this.totalHours = minutes / 60.0;</span>
+        }
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * Check if employee has checked in
+     */
+    public boolean isCheckedIn() {
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        return checkInTime != null;</span>
+    }
+
+    /**
+     * Check if employee has checked out
+     */
+    public boolean isCheckedOut() {
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        return checkOutTime != null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

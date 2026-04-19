@@ -4,6 +4,8 @@ import com.spring.jwt.FarmerPayment.FarmerPaymentResponseDTO;
 import com.spring.jwt.FarmerPayment.FarmerPaymentService;
 import com.spring.jwt.ProductBuyPending.PaymentVerifyDto;
 import com.spring.jwt.ProductBuyPending.ProductBuyService;
+import com.spring.jwt.checkout.CheckoutMerchantOrderIds;
+import com.spring.jwt.checkout.CheckoutService;
 import com.spring.jwt.entity.PaymentCallbackQueue;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ public class PaymentCallbackProcessingService {
     private final CcAvenueConfig ccAvenueConfig;
     private final ProductBuyService productBuyService;
     private final FarmerPaymentService farmerPaymentService;
+    private final CheckoutService checkoutService;
     private final PaymentAuditService auditService;
 
     /**
@@ -103,6 +106,8 @@ public class PaymentCallbackProcessingService {
             case "PRODUCT_CANCEL" -> processProductCancel(item);
             case "FARMER_RESPONSE" -> processFarmerResponse(item);
             case "FARMER_CANCEL" -> processFarmerCancel(item);
+            case "CHECKOUT_RESPONSE" -> processCheckoutResponse(item);
+            case "CHECKOUT_CANCEL" -> processCheckoutCancel(item);
             default -> throw new IllegalArgumentException("Unknown callback type: " + callbackType);
         }
     }
@@ -179,6 +184,68 @@ public class PaymentCallbackProcessingService {
         auditService.logEvent("FARMER", null, params.get("order_id"),
                 "CALLBACK_PROCESSED", "PENDING", result.getPaymentStatus(), null, item.getClientIp(),
                 "paymentId=" + result.getPaymentId());
+    }
+
+    private void processCheckoutResponse(PaymentCallbackQueue item) {
+        Map<String, String> params = decryptAndParse(item.getEncResp());
+        if (params == null) {
+            throw new IllegalArgumentException("Invalid encrypted checkout callback payload");
+        }
+        String orderId = params.get("order_id");
+        item.setOrderId(orderId);
+        checkoutService.handleCcAvenueDecryptedCallback(params, item.getEncResp(), item.getClientIp());
+        auditService.logEvent("CHECKOUT", null, orderId,
+                "CALLBACK_PROCESSED", null, params.get("order_status"), null, item.getClientIp(),
+                "tracking_id=" + params.get("tracking_id"));
+        item.setResultStatus(normalizeCheckoutQueueResult(params.get("order_status")));
+    }
+
+    private void processCheckoutCancel(PaymentCallbackQueue item) {
+        if (item.getEncResp() != null && !item.getEncResp().isBlank()) {
+            // Normal cancel with data — decrypt and process as failure
+            Map<String, String> params = decryptAndParse(item.getEncResp());
+            if (params == null) {
+                throw new IllegalArgumentException("Invalid encrypted checkout cancel payload");
+            }
+            params.putIfAbsent("order_status", "Aborted");
+            String orderId = params.get("order_id");
+            item.setOrderId(orderId);
+            checkoutService.handleCcAvenueDecryptedCallback(params, item.getEncResp(), item.getClientIp());
+            auditService.logEvent("CHECKOUT", null, orderId,
+                    "CANCELLED", null, "FAILED", null, item.getClientIp(), null);
+            item.setResultStatus("CANCELLED");
+            return;
+        }
+
+        // No encResp — CCAvenue sent the user back without any data.
+        // This is the 10002 (Merchant Authentication Failed) case.
+        // We must still fail the order so it doesn't stay stuck in PAYMENT_PENDING.
+        log.warn("Checkout cancel callback with NO encResp — synthesizing failure for latest pending order");
+        auditService.logEvent("CHECKOUT", null, null,
+                "CANCELLED_NO_DATA", null, "FAILED", null, item.getClientIp(),
+                "No encResp from gateway — merchant auth may have failed");
+
+        // Synthesize a minimal failure callback so handleCcAvenueDecryptedCallback can process it
+        // We look up the latest PAYMENT_PENDING order and fail it directly.
+        try {
+            checkoutService.failLatestPendingOrderOnGatewayCancel(item.getClientIp());
+        } catch (Exception ex) {
+            log.warn("failLatestPendingOrderOnGatewayCancel error: {}", ex.getMessage());
+        }
+        item.setResultStatus("CANCELLED");
+    }
+
+    private static String normalizeCheckoutQueueResult(String orderStatus) {
+        if (orderStatus == null) {
+            return "UNKNOWN";
+        }
+        if ("Success".equalsIgnoreCase(orderStatus)) {
+            return "SUCCESS";
+        }
+        if (orderStatus.toLowerCase().contains("pending") || orderStatus.toLowerCase().contains("initiated")) {
+            return "PENDING";
+        }
+        return "FAILED";
     }
 
     private void processFarmerCancel(PaymentCallbackQueue item) {

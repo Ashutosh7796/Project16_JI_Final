@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Utf8JwtClaimsSerializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.jwt.impl</a> &gt; <span class="el_source">Utf8JwtClaimsSerializer.java</span></div><h1>Utf8JwtClaimsSerializer.java</h1><pre class="source lang-java linenums">package com.spring.jwt.jwt.impl;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.json.JsonWriteFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.io.SerializationException;
+import io.jsonwebtoken.io.Serializer;
+
+import java.util.Map;
+
+/**
+ * Serializes JWT claim maps to UTF-8 JSON bytes for JJWT, using an isolated {@link ObjectMapper}
+ * (not Spring's primary bean) with standard UTF-8 encoding (no character escaping).
+ */
+public final class Utf8JwtClaimsSerializer implements Serializer&lt;Map&lt;String, ?&gt;&gt; {
+
+<span class="nc" id="L17">    public static final Utf8JwtClaimsSerializer INSTANCE = new Utf8JwtClaimsSerializer();</span>
+
+    private static final ObjectMapper MAPPER;
+
+    static {
+        // Create a fresh ObjectMapper with NO special encoding/escaping
+<span class="nc" id="L23">        MAPPER = new ObjectMapper();</span>
+        // Explicitly disable ESCAPE_NON_ASCII to prevent corruption
+<span class="nc" id="L25">        MAPPER.getFactory().configure(JsonWriteFeature.ESCAPE_NON_ASCII.mappedFeature(), false);</span>
+<span class="nc" id="L26">    }</span>
+
+    private Utf8JwtClaimsSerializer() {
+    }
+
+    static ObjectMapper mapper() {
+<span class="nc" id="L32">        return MAPPER;</span>
+    }
+
+    @Override
+    public byte[] serialize(Map&lt;String, ?&gt; claims) throws SerializationException {
+        try {
+<span class="nc" id="L38">            byte[] result = MAPPER.writeValueAsBytes(claims);</span>
+            // Verify the serialized JSON does not contain escaped unicode sequences
+<span class="nc" id="L40">            String json = new String(result, java.nio.charset.StandardCharsets.UTF_8);</span>
+<span class="nc bnc" id="L41" title="All 2 branches missed.">            if (json.contains(&quot;\\u&quot;)) {</span>
+<span class="nc" id="L42">                throw new SerializationException(&quot;JWT claims contain escaped Unicode sequences - this indicates a serialization bug&quot;);</span>
+            }
+<span class="nc" id="L44">            return result;</span>
+<span class="nc" id="L45">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L46">            throw new SerializationException(&quot;Failed to serialize JWT claims to UTF-8 JSON&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

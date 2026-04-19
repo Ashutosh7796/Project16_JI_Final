@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LeaveRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Attendance.model</a> &gt; <span class="el_source">LeaveRequest.java</span></div><h1>LeaveRequest.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Attendance.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+
+/**
+ * Leave Request Entity
+ */
+@Entity
+@Table(name = &quot;leave_requests&quot;, indexes = {
+    @Index(name = &quot;idx_leave_user&quot;, columnList = &quot;user_id&quot;),
+    @Index(name = &quot;idx_leave_status&quot;, columnList = &quot;status&quot;),
+    @Index(name = &quot;idx_leave_dates&quot;, columnList = &quot;start_date, end_date&quot;)
+})
+<span class="nc bnc" id="L23" title="All 110 branches missed.">@Data</span>
+<span class="nc" id="L24">@NoArgsConstructor</span>
+<span class="nc" id="L25">@AllArgsConstructor</span>
+<span class="nc bnc" id="L26" title="All 2 branches missed.">@Builder</span>
+public class LeaveRequest {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = &quot;leave_request_id&quot;)
+<span class="nc" id="L32">    private Long leaveRequestId;</span>
+
+    @Column(name = &quot;user_id&quot;, nullable = false)
+<span class="nc" id="L35">    private Long userId;</span>
+
+    @Column(name = &quot;employee_name&quot;, nullable = false)
+<span class="nc" id="L38">    private String employeeName;</span>
+
+    @Column(name = &quot;leave_type&quot;, nullable = false, length = 50)
+<span class="nc" id="L41">    private String leaveType;</span>
+
+    @Column(name = &quot;start_date&quot;, nullable = false)
+<span class="nc" id="L44">    private LocalDate startDate;</span>
+
+    @Column(name = &quot;end_date&quot;, nullable = false)
+<span class="nc" id="L47">    private LocalDate endDate;</span>
+
+    @Column(name = &quot;total_days&quot;, nullable = false)
+<span class="nc" id="L50">    private Integer totalDays;</span>
+
+    @Column(name = &quot;reason&quot;, nullable = false, length = 500)
+<span class="nc" id="L53">    private String reason;</span>
+
+    @Column(name = &quot;status&quot;, nullable = false, length = 20)
+    @Builder.Default
+<span class="nc" id="L57">    private String status = &quot;PENDING&quot;; // PENDING, APPROVED, REJECTED</span>
+
+    @Column(name = &quot;rejection_reason&quot;, length = 500)
+<span class="nc" id="L60">    private String rejectionReason;</span>
+
+    @CreationTimestamp
+    @Column(name = &quot;requested_at&quot;, nullable = false, updatable = false)
+<span class="nc" id="L64">    private LocalDateTime requestedAt;</span>
+
+    @Column(name = &quot;responded_at&quot;)
+<span class="nc" id="L67">    private LocalDateTime respondedAt;</span>
+
+    @Column(name = &quot;responded_by&quot;)
+<span class="nc" id="L70">    private Long respondedBy;</span>
+
+    /**
+     * Calculate total days between start and end date
+     */
+    @PrePersist
+    @PreUpdate
+    public void calculateTotalDays() {
+<span class="nc bnc" id="L78" title="All 4 branches missed.">        if (startDate != null &amp;&amp; endDate != null) {</span>
+<span class="nc" id="L79">            this.totalDays = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;</span>
+        }
+<span class="nc" id="L81">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

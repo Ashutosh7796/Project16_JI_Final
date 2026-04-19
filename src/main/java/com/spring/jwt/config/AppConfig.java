@@ -218,12 +218,24 @@ public class AppConfig {
                 .requestMatchers("/api/v1/emp-documents").permitAll()
                 .requestMatchers("/api/v1/farmer-payment/**").authenticated()
                 .requestMatchers("/api/customer/orders/**").authenticated()
+                // Checkout abandon-beacon: unauthenticated (validated by abandonToken)
+                .requestMatchers(HttpMethod.POST, "/api/v2/checkout/orders/abandon-beacon").permitAll()
+                .requestMatchers("/api/v2/checkout/**").authenticated()
+                .requestMatchers("/api/v2/user/**").authenticated()
+
+                // Payment flow engine: webhook + abandon are unauthenticated (signature / abandonSecret).
+                .requestMatchers(HttpMethod.POST, "/api/v1/payment-engine/webhook").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/payment-engine/abandon").permitAll()
+                .requestMatchers("/api/v1/payment-engine/create").authenticated()
+                .requestMatchers("/api/v1/payment-engine/initiate").authenticated()
+                .requestMatchers("/api/v1/payment-engine/status/**").authenticated()
 
                 // Catch-all for remaining /api/v1/** endpoints
                 .requestMatchers("/api/v1/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/payment/queue/status").permitAll()
                 .requestMatchers("/api/payment/queue/**").hasRole("ADMIN")
                 .requestMatchers("/api/payment/product/**").permitAll()
+                .requestMatchers("/api/payment/checkout/**").permitAll()
                 .requestMatchers("/api/payment/farmer/**").permitAll()
 
 

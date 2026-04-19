@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProductPhotoServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.ProductPhoto</a> &gt; <span class="el_source">ProductPhotoServiceImpl.java</span></div><h1>ProductPhotoServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.ProductPhoto;
+
+import com.spring.jwt.Enums.ImageType;
+import com.spring.jwt.Product.ProductRepository;
+import com.spring.jwt.entity.Product;
+import com.spring.jwt.entity.ProductImage;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+
+@Service
+<span class="nc" id="L19">@RequiredArgsConstructor</span>
+<span class="nc" id="L20">@Slf4j</span>
+public class ProductPhotoServiceImpl implements ProductPhotoService {
+
+    private final ProductPhotoRepository productPhotoRepository;
+    private final ProductRepository productRepository;
+
+    @Override
+    @Transactional
+    public ProductPhotoResponseUploadDTO uploadProductPhoto(
+            Long productId, ImageType photoType, MultipartFile file) {
+<span class="nc" id="L30">        validateProductId(productId);</span>
+<span class="nc" id="L31">        validateImage(file);</span>
+
+<span class="nc" id="L33">        Product product = productRepository.findById(productId)</span>
+<span class="nc" id="L34">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Product not found with ID: &quot; + productId));
+        try {
+<span class="nc" id="L37">            long start = System.currentTimeMillis();</span>
+
+<span class="nc" id="L39">            ProductImage image = productPhotoRepository</span>
+<span class="nc" id="L40">                    .findByProduct_ProductIdAndImageType(productId, photoType)</span>
+<span class="nc" id="L41">                    .orElseGet(ProductImage::new);</span>
+
+<span class="nc" id="L43">            applyFileToImage(image, product, photoType, file);</span>
+<span class="nc" id="L44">            ProductImage saved = productPhotoRepository.save(image);</span>
+
+<span class="nc" id="L46">            log.info(&quot;Photo upserted: productId={}, type={}, size={}KB, in {}ms&quot;,</span>
+<span class="nc" id="L47">                    productId, photoType, file.getSize() / 1024,</span>
+<span class="nc" id="L48">                    System.currentTimeMillis() - start);</span>
+<span class="nc" id="L49">            return mapToResponseUpload(saved);</span>
+<span class="nc" id="L50">        } catch (ResourceNotFoundException e) {</span>
+<span class="nc" id="L51">            throw e;</span>
+<span class="nc" id="L52">        } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L53">            throw e;</span>
+<span class="nc" id="L54">        } catch (Exception e) {</span>
+<span class="nc" id="L55">            log.error(&quot;Failed to upload photo for product {}: {}&quot;, productId, e.getMessage(), e);</span>
+<span class="nc" id="L56">            throw new RuntimeException(&quot;Failed to upload product photo: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    public ProductPhotoResponseDTO getPhotoById(Long imageId) {
+<span class="nc" id="L62">        ProductImage image = productPhotoRepository.findById(imageId)</span>
+<span class="nc" id="L63">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Product photo not found with ID: &quot; + imageId));
+<span class="nc" id="L65">        return mapToResponse(image);</span>
+    }
+
+    @Override
+    public ProductPhotoResponseDTO getPhotoByProductId(Long productId) {
+<span class="nc" id="L70">        ProductImage image = productPhotoRepository</span>
+<span class="nc" id="L71">                .findByProduct_ProductId(productId)</span>
+<span class="nc" id="L72">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;No photo found for product ID: &quot; + productId));
+<span class="nc" id="L74">        return mapToResponse(image);</span>
+    }
+
+    @Override
+    public List&lt;ProductPhotoResponseDTO&gt; getAllPhotosByProductId(Long productId) {
+<span class="nc" id="L79">        return productPhotoRepository.findAllByProduct_ProductId(productId)</span>
+<span class="nc" id="L80">                .stream()</span>
+<span class="nc" id="L81">                .map(this::mapToResponse)</span>
+<span class="nc" id="L82">                .toList();</span>
+    }
+
+    @Override
+    public ProductPhotoResponseDTO getPhotoByProductIdAndType(Long productId, ImageType imageType) {
+<span class="nc" id="L87">        ProductImage image = productPhotoRepository</span>
+<span class="nc" id="L88">                .findByProduct_ProductIdAndImageType(productId, imageType)</span>
+<span class="nc" id="L89">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;No &quot; + imageType + &quot; photo found for product ID: &quot; + productId));
+<span class="nc" id="L91">        return mapToResponse(image);</span>
+    }
+
+    @Override
+    @Transactional
+    public ProductPhotoResponseDTO updateProductImage(Long imageId, MultipartFile file) {
+<span class="nc" id="L97">        validateImage(file);</span>
+<span class="nc" id="L98">        ProductImage image = productPhotoRepository.findById(imageId)</span>
+<span class="nc" id="L99">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Product photo not found with ID: &quot; + imageId));
+        try {
+<span class="nc" id="L102">            applyFileToImage(image, image.getProduct(), image.getImageType(), file);</span>
+<span class="nc" id="L103">            return mapToResponse(productPhotoRepository.save(image));</span>
+<span class="nc" id="L104">        } catch (ResourceNotFoundException e) {</span>
+<span class="nc" id="L105">            throw e;</span>
+<span class="nc" id="L106">        } catch (Exception e) {</span>
+<span class="nc" id="L107">            log.error(&quot;Failed to update photo {}: {}&quot;, imageId, e.getMessage(), e);</span>
+<span class="nc" id="L108">            throw new RuntimeException(&quot;Failed to update product photo: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    @Transactional
+    public ProductPhotoResponseDTO updateProductImageByProductId(
+            Long productId, MultipartFile file, ImageType photoType) {
+<span class="nc" id="L116">        validateProductId(productId);</span>
+<span class="nc" id="L117">        validateImage(file);</span>
+
+<span class="nc" id="L119">        Product product = productRepository.findById(productId)</span>
+<span class="nc" id="L120">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Product not found with ID: &quot; + productId));
+        try {
+<span class="nc" id="L123">            ProductImage image = productPhotoRepository</span>
+<span class="nc" id="L124">                    .findByProduct_ProductIdAndImageType(productId, photoType)</span>
+<span class="nc" id="L125">                    .orElseGet(ProductImage::new);</span>
+
+<span class="nc" id="L127">            applyFileToImage(image, product, photoType, file);</span>
+<span class="nc" id="L128">            return mapToResponse(productPhotoRepository.save(image));</span>
+<span class="nc" id="L129">        } catch (ResourceNotFoundException e) {</span>
+<span class="nc" id="L130">            throw e;</span>
+<span class="nc" id="L131">        } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L132">            throw e;</span>
+<span class="nc" id="L133">        } catch (Exception e) {</span>
+<span class="nc" id="L134">            log.error(&quot;Failed to update photo for productId={}, type={}: {}&quot;,</span>
+<span class="nc" id="L135">                    productId, photoType, e.getMessage(), e);</span>
+<span class="nc" id="L136">            throw new RuntimeException(&quot;Failed to update product photo: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    // ── Delete operations ─────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void deletePhotoByImageId(Long productId, Long imageId) {
+<span class="nc" id="L145">        validateProductId(productId);</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">        if (imageId == null) throw new IllegalArgumentException(&quot;Image ID must not be null&quot;);</span>
+
+<span class="nc" id="L148">        ProductImage image = productPhotoRepository.findById(imageId)</span>
+<span class="nc" id="L149">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Photo not found with ID: &quot; + imageId));
+
+        // Ownership check — ensure this photo actually belongs to the given product
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (!image.getProduct().getProductId().equals(productId)) {</span>
+<span class="nc" id="L154">            throw new IllegalArgumentException(</span>
+                    &quot;Photo &quot; + imageId + &quot; does not belong to product &quot; + productId);
+        }
+
+<span class="nc" id="L158">        productPhotoRepository.delete(image);</span>
+<span class="nc" id="L159">        log.info(&quot;Deleted photo: imageId={}, productId={}, type={}&quot;, imageId, productId, image.getImageType());</span>
+<span class="nc" id="L160">    }</span>
+
+    @Override
+    @Transactional
+    public void deleteAllPhotosForProduct(Long productId) {
+<span class="nc" id="L165">        validateProductId(productId);</span>
+
+        // Verify product exists first
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (!productRepository.existsById(productId)) {</span>
+<span class="nc" id="L169">            throw new ResourceNotFoundException(&quot;Product not found with ID: &quot; + productId);</span>
+        }
+
+<span class="nc" id="L172">        List&lt;ProductImage&gt; photos = productPhotoRepository.findAllByProduct_ProductId(productId);</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">        if (photos.isEmpty()) {</span>
+<span class="nc" id="L174">            throw new ResourceNotFoundException(&quot;No photos found for product ID: &quot; + productId);</span>
+        }
+
+<span class="nc" id="L177">        productPhotoRepository.deleteAll(photos);</span>
+<span class="nc" id="L178">        log.info(&quot;Deleted all {} photos for productId={}&quot;, photos.size(), productId);</span>
+<span class="nc" id="L179">    }</span>
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private void applyFileToImage(ProductImage image, Product product,
+                                   ImageType photoType, MultipartFile file) {
+        try {
+<span class="nc" id="L186">            image.setProduct(product);</span>
+<span class="nc" id="L187">            image.setImageType(photoType);</span>
+<span class="nc" id="L188">            image.setImageData(file.getBytes());          // raw bytes — no Base64 bloat</span>
+<span class="nc" id="L189">            image.setContentType(file.getContentType());</span>
+<span class="nc" id="L190">            image.setFileName(file.getOriginalFilename());</span>
+<span class="nc" id="L191">            image.setUploadedAt(LocalDateTime.now());</span>
+<span class="nc" id="L192">        } catch (Exception e) {</span>
+<span class="nc" id="L193">            throw new IllegalArgumentException(&quot;Failed to read image file: &quot; + e.getMessage(), e);</span>
+<span class="nc" id="L194">        }</span>
+<span class="nc" id="L195">    }</span>
+
+    private void validateProductId(Long productId) {
+<span class="nc bnc" id="L198" title="All 2 branches missed.">        if (productId == null) {</span>
+<span class="nc" id="L199">            throw new IllegalArgumentException(&quot;Product ID must not be null&quot;);</span>
+        }
+<span class="nc" id="L201">    }</span>
+
+    private void validateImage(MultipartFile file) {
+<span class="nc bnc" id="L204" title="All 4 branches missed.">        if (file == null || file.isEmpty()) {</span>
+<span class="nc" id="L205">            throw new IllegalArgumentException(&quot;Image file is required and cannot be empty&quot;);</span>
+        }
+<span class="nc bnc" id="L207" title="All 4 branches missed.">        if (file.getContentType() == null || !file.getContentType().startsWith(&quot;image/&quot;)) {</span>
+<span class="nc" id="L208">            throw new IllegalArgumentException(</span>
+<span class="nc" id="L209">                    &quot;Invalid file type '&quot; + file.getContentType() + &quot;'. Only image files are allowed (JPEG, PNG, WEBP, etc.)&quot;);</span>
+        }
+<span class="nc" id="L211">        long maxSize = 10L * 1024 * 1024; // 10MB per image</span>
+<span class="nc bnc" id="L212" title="All 2 branches missed.">        if (file.getSize() &gt; maxSize) {</span>
+<span class="nc" id="L213">            throw new IllegalArgumentException(</span>
+<span class="nc" id="L214">                    &quot;Image size &quot; + (file.getSize() / 1024 / 1024) + &quot;MB exceeds the 10MB limit&quot;);</span>
+        }
+<span class="nc" id="L216">    }</span>
+
+    // ── Mappers ──────────────────────────────────────────────────────────────
+
+    private ProductPhotoResponseDTO mapToResponse(ProductImage entity) {
+<span class="nc" id="L221">        ProductPhotoResponseDTO dto = new ProductPhotoResponseDTO();</span>
+<span class="nc" id="L222">        dto.setImageId(entity.getImageId());</span>
+<span class="nc" id="L223">        dto.setProductId(entity.getProduct().getProductId());</span>
+        // Encode to Base64 only on response — DB stores raw bytes
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        if (entity.getImageData() != null) {</span>
+<span class="nc" id="L226">            dto.setImageData(Base64.getEncoder().encodeToString(entity.getImageData()));</span>
+        }
+<span class="nc" id="L228">        dto.setContentType(entity.getContentType());</span>
+<span class="nc" id="L229">        dto.setFileName(entity.getFileName());</span>
+<span class="nc" id="L230">        dto.setImageType(entity.getImageType());</span>
+<span class="nc" id="L231">        dto.setUploadedAt(entity.getUploadedAt());</span>
+<span class="nc" id="L232">        return dto;</span>
+    }
+
+    private ProductPhotoResponseUploadDTO mapToResponseUpload(ProductImage entity) {
+<span class="nc" id="L236">        ProductPhotoResponseUploadDTO dto = new ProductPhotoResponseUploadDTO();</span>
+<span class="nc" id="L237">        dto.setImageId(entity.getImageId());</span>
+<span class="nc" id="L238">        dto.setProductId(entity.getProduct().getProductId());</span>
+<span class="nc" id="L239">        dto.setImageType(entity.getImageType());</span>
+<span class="nc" id="L240">        dto.setUploadedAt(entity.getUploadedAt());</span>
+<span class="nc" id="L241">        return dto;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

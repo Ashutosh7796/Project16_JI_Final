@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeFarmerSurveyMapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeFarmerSurvey</a> &gt; <span class="el_source">EmployeeFarmerSurveyMapper.java</span></div><h1>EmployeeFarmerSurveyMapper.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeFarmerSurvey;
+
+import com.spring.jwt.entity.EmployeeFarmerSurvey;
+import com.spring.jwt.entity.User;
+import org.springframework.stereotype.Component;
+
+@Component
+<span class="nc" id="L8">public class EmployeeFarmerSurveyMapper {</span>
+
+    public EmployeeFarmerSurvey toEntity(EmployeeFarmerSurveyDTO dto, User user) {
+
+<span class="nc" id="L12">        EmployeeFarmerSurvey survey = new EmployeeFarmerSurvey();</span>
+
+<span class="nc" id="L14">        survey.setFormNumber(dto.getFormNumber());</span>
+<span class="nc" id="L15">        survey.setFarmerName(dto.getFarmerName().trim().toLowerCase());</span>
+<span class="nc" id="L16">        survey.setFarmerMobile(dto.getFarmerMobile());</span>
+<span class="nc" id="L17">        survey.setLandArea(dto.getLandArea());</span>
+<span class="nc" id="L18">        survey.setAddress(dto.getAddress());</span>
+<span class="nc" id="L19">        survey.setTaluka(dto.getTaluka());</span>
+<span class="nc" id="L20">        survey.setDistrict(dto.getDistrict());</span>
+<span class="nc" id="L21">        survey.setFarmInformation(dto.getFarmInformation());</span>
+<span class="nc" id="L22">        survey.setCropDetails(dto.getCropDetails());</span>
+<span class="nc" id="L23">        survey.setLivestockDetails(dto.getLivestockDetails());</span>
+<span class="nc" id="L24">        survey.setProductionEquipment(dto.getProductionEquipment());</span>
+<span class="nc" id="L25">        survey.setSampleCollected(dto.getSampleCollected());</span>
+<span class="nc" id="L26">        survey.setVillage(dto.getVillage());</span>
+<span class="nc" id="L27">        survey.setUser(user);</span>
+
+<span class="nc" id="L29">        return survey;</span>
+    }
+
+    public EmployeeFarmerSurvey toEntityReg(EmployeeFarmerSurveyRegDTO dto, User user) {
+
+<span class="nc" id="L34">        EmployeeFarmerSurvey survey = new EmployeeFarmerSurvey();</span>
+
+<span class="nc" id="L36">        survey.setFarmerName(dto.getFarmerName().trim().toLowerCase());</span>
+<span class="nc" id="L37">        survey.setFarmerMobile(dto.getFarmerMobile());</span>
+<span class="nc" id="L38">        survey.setLandArea(dto.getLandArea());</span>
+<span class="nc" id="L39">        survey.setAddress(dto.getAddress());</span>
+<span class="nc" id="L40">        survey.setTaluka(dto.getTaluka());</span>
+<span class="nc" id="L41">        survey.setDistrict(dto.getDistrict());</span>
+<span class="nc" id="L42">        survey.setFarmInformation(dto.getFarmInformation());</span>
+<span class="nc" id="L43">        survey.setCropDetails(dto.getCropDetails());</span>
+<span class="nc" id="L44">        survey.setLivestockDetails(dto.getLivestockDetails());</span>
+<span class="nc" id="L45">        survey.setProductionEquipment(dto.getProductionEquipment());</span>
+<span class="nc" id="L46">        survey.setSampleCollected(dto.getSampleCollected());</span>
+<span class="nc" id="L47">        survey.setVillage(dto.getVillage());</span>
+<span class="nc" id="L48">        survey.setUser(user);</span>
+
+<span class="nc" id="L50">        return survey;</span>
+    }
+
+    public EmployeeFarmerSurveyDTO toDto(EmployeeFarmerSurvey survey) {
+
+<span class="nc" id="L55">        EmployeeFarmerSurveyDTO dto = new EmployeeFarmerSurveyDTO();</span>
+
+<span class="nc" id="L57">        dto.setSurveyId(survey.getSurveyPublicId());</span>
+<span class="nc" id="L58">        dto.setFormNumber(survey.getFormNumber());</span>
+<span class="nc" id="L59">        dto.setFarmerName(survey.getFarmerName());</span>
+<span class="nc" id="L60">        dto.setFarmerMobile(survey.getFarmerMobile());</span>
+<span class="nc" id="L61">        dto.setLandArea(survey.getLandArea());</span>
+<span class="nc" id="L62">        dto.setAddress(survey.getAddress());</span>
+<span class="nc" id="L63">        dto.setTaluka(survey.getTaluka());</span>
+<span class="nc" id="L64">        dto.setDistrict(survey.getDistrict());</span>
+<span class="nc" id="L65">        dto.setFarmInformation(survey.getFarmInformation());</span>
+<span class="nc" id="L66">        dto.setCropDetails(survey.getCropDetails());</span>
+<span class="nc" id="L67">        dto.setLivestockDetails(survey.getLivestockDetails());</span>
+<span class="nc" id="L68">        dto.setProductionEquipment(survey.getProductionEquipment());</span>
+<span class="nc" id="L69">        dto.setSampleCollected(survey.getSampleCollected());</span>
+<span class="nc" id="L70">        dto.setFormStatus(survey.getFormStatus());</span>
+<span class="nc" id="L71">        dto.setVillage(survey.getVillage());</span>
+<span class="nc" id="L72">        dto.setCreatedAt(survey.getCreatedAt());</span>
+
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        if (survey.getUser() != null) {</span>
+<span class="nc" id="L75">            dto.setUserId(survey.getUser().getUserId());</span>
+        }
+
+<span class="nc" id="L78">        return dto;</span>
+    }
+
+    public void patchEntity(EmployeeFarmerSurvey survey,
+                            EmployeeFarmerSurveyDTO dto,
+                            User user) {
+
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (dto.getFarmerName() != null) {</span>
+<span class="nc" id="L86">            survey.setFarmerName(dto.getFarmerName().trim().toLowerCase());</span>
+        }
+<span class="nc bnc" id="L88" title="All 2 branches missed.">        if (dto.getFarmerMobile() != null) {</span>
+<span class="nc" id="L89">            survey.setFarmerMobile(dto.getFarmerMobile());</span>
+        }
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (dto.getLandArea() != null) {</span>
+<span class="nc" id="L92">            survey.setLandArea(dto.getLandArea());</span>
+        }
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (dto.getAddress() != null) {</span>
+<span class="nc" id="L95">            survey.setAddress(dto.getAddress());</span>
+        }
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        if (dto.getTaluka() != null) {</span>
+<span class="nc" id="L98">            survey.setTaluka(dto.getTaluka());</span>
+        }
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (dto.getDistrict() != null) {</span>
+<span class="nc" id="L101">            survey.setDistrict(dto.getDistrict());</span>
+        }
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (dto.getFarmInformation() != null) {</span>
+<span class="nc" id="L104">            survey.setFarmInformation(dto.getFarmInformation());</span>
+        }
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        if (dto.getCropDetails() != null) {</span>
+<span class="nc" id="L107">            survey.setCropDetails(dto.getCropDetails());</span>
+        }
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        if (dto.getLivestockDetails() != null) {</span>
+<span class="nc" id="L110">            survey.setLivestockDetails(dto.getLivestockDetails());</span>
+        }
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (dto.getProductionEquipment() != null) {</span>
+<span class="nc" id="L113">            survey.setProductionEquipment(dto.getProductionEquipment());</span>
+        }
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (dto.getSampleCollected() != null) {</span>
+<span class="nc" id="L116">            survey.setSampleCollected(dto.getSampleCollected());</span>
+        }
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (dto.getVillage() != null) {</span>
+<span class="nc" id="L119">            survey.setVillage(dto.getVillage());</span>
+        }
+
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        if (user != null) {</span>
+<span class="nc" id="L123">            survey.setUser(user);</span>
+        }
+<span class="nc" id="L125">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

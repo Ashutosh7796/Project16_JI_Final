@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmployeeFarmerSurveyServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.EmployeeFarmerSurvey</a> &gt; <span class="el_source">EmployeeFarmerSurveyServiceImpl.java</span></div><h1>EmployeeFarmerSurveyServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.EmployeeFarmerSurvey;
+
+import com.spring.jwt.Enums.FormStatus;
+import com.spring.jwt.Enums.PhotoType;
+import com.spring.jwt.FarmerLabReport.FarmerLabReportRepository;
+import com.spring.jwt.FarmerSelfieEmployeeFarmerSurvey.FarmerSelfieEmployeeFarmerSurveyRepository;
+import com.spring.jwt.entity.EmployeeFarmerSurvey;
+import com.spring.jwt.entity.FarmerSelfieEmployeeFarmerSurvey;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import com.spring.jwt.exception.UserAlreadyExistException;
+import com.spring.jwt.exception.UserNotFoundExceptions;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.utils.SecurityUtil;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Optional;
+
+
+<span class="nc" id="L27">@Slf4j</span>
+@Service
+<span class="nc" id="L29">@RequiredArgsConstructor</span>
+@Transactional
+public class EmployeeFarmerSurveyServiceImpl implements EmployeeFarmerSurveyService {
+
+    private final EmployeeFarmerSurveyRepository employeeFarmerSurveyRepository;
+    private final UserRepository userRepository;
+    private final EmployeeFarmerSurveyMapper surveyMapper;
+    private final SecurityUtil securityUtil;
+    private final FarmerSelfieEmployeeFarmerSurveyRepository selfieRepository;
+    private final FarmerLabReportRepository farmerLabReportRepository;
+
+    @Override
+    @Transactional
+    public EmployeeFarmerSurveyDTO createSurvey(EmployeeFarmerSurveyRegDTO dto) {
+
+<span class="nc" id="L44">        Long userId = securityUtil.getCurrentUserId();</span>
+<span class="nc" id="L45">        User user = userRepository.findById(userId).orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;User not found with ID: &quot; + userId));</span>
+<span class="nc bnc" id="L46" title="All 2 branches missed.">        if (employeeFarmerSurveyRepository.existsByFarmerMobile(dto.getFarmerMobile())) {</span>
+<span class="nc" id="L47">            throw new UserAlreadyExistException(&quot;Farmer mobile number already exists: &quot; + dto.getFarmerMobile());</span>
+        }
+<span class="nc" id="L49">        String formNumber = generateFormNumber();</span>
+<span class="nc" id="L50">        EmployeeFarmerSurvey survey = surveyMapper.toEntityReg(dto, user);</span>
+<span class="nc" id="L51">        survey.setFormStatus(FormStatus.INACTIVE);</span>
+<span class="nc" id="L52">        survey.setFormNumber(formNumber);</span>
+<span class="nc" id="L53">        survey.setUser(user);</span>
+<span class="nc" id="L54">        EmployeeFarmerSurvey savedSurvey = employeeFarmerSurveyRepository.save(survey);</span>
+<span class="nc" id="L55">        return surveyMapper.toDto(savedSurvey);</span>
+    }
+
+
+
+
+//    @Override
+//    public EmployeeFarmerSurveyDTO getSurveyById(Long surveyId) {
+//
+//        EmployeeFarmerSurvey survey = employeeFarmerSurveyRepository.findById(surveyId).orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));
+//        EmployeeFarmerSurveyDTO dto = surveyMapper.toDto(survey);
+//        FarmerSelfieDTO selfieDTO = new FarmerSelfieDTO();
+//        selfieRepository.findBySurvey_SurveyId(surveyId).ifPresentOrElse(
+//                        selfie -&gt; {
+//                            selfieDTO.setImageUrl(selfie.getImageUrl());
+//                            selfieDTO.setTakenAt(selfie.getTakenAt());
+//                            selfieDTO.setMessage(&quot;Selfie found&quot;);
+//                            },
+//                        () -&gt; {
+//                            selfieDTO.setMessage(&quot;Farmer selfie not uploaded yet&quot;);
+//                        }
+//                );
+//        dto.setFarmerSelfie(selfieDTO);
+//        return dto;
+//    }
+
+    @Override
+    public EmployeeFarmerSurveyDTO getSurveyById(Long surveyId) {
+
+<span class="nc" id="L84">        EmployeeFarmerSurvey survey = employeeFarmerSurveyRepository.findById(surveyId)</span>
+<span class="nc" id="L85">                .orElseThrow(() -&gt;</span>
+<span class="nc" id="L86">                        new ResourceNotFoundException(&quot;Survey not found with ID: &quot; + surveyId));</span>
+
+<span class="nc" id="L88">        EmployeeFarmerSurveyDTO dto = surveyMapper.toDto(survey);</span>
+
+<span class="nc" id="L90">        FarmerSelfieDTO selfieDTO = new FarmerSelfieDTO();</span>
+
+<span class="nc" id="L92">        List&lt;FarmerSelfieEmployeeFarmerSurvey&gt; photos =</span>
+<span class="nc" id="L93">                selfieRepository.findBySurvey_SurveyId(surveyId);</span>
+
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (photos.isEmpty()) {</span>
+<span class="nc" id="L96">            selfieDTO.setMessage(&quot;Farmer selfie and signature not uploaded yet&quot;);</span>
+        } else {
+
+<span class="nc bnc" id="L99" title="All 2 branches missed.">            for (FarmerSelfieEmployeeFarmerSurvey photo : photos) {</span>
+
+<span class="nc bnc" id="L101" title="All 2 branches missed.">                if (photo.getPhotoType() == PhotoType.SELFIE) {</span>
+<span class="nc" id="L102">                    selfieDTO.setImageUrl(photo.getImageUrl());</span>
+<span class="nc" id="L103">                    selfieDTO.setTakenAt(photo.getTakenAt());</span>
+                }
+
+<span class="nc bnc" id="L106" title="All 2 branches missed.">                if (photo.getPhotoType() == PhotoType.SIGNATURE) {</span>
+<span class="nc" id="L107">                    selfieDTO.setImageUrlS(photo.getImageUrl());</span>
+                }
+<span class="nc" id="L109">            }</span>
+
+<span class="nc" id="L111">            selfieDTO.setMessage(&quot;Farmer photos found&quot;);</span>
+        }
+
+<span class="nc" id="L114">        dto.setFarmerSelfie(selfieDTO);</span>
+<span class="nc" id="L115">        return dto;</span>
+    }
+
+
+
+    @Override
+    @Transactional
+    public Page&lt;EmployeeFarmerSurveyDTO&gt; getAllSurveys(Pageable pageable) {
+
+<span class="nc" id="L124">        Page&lt;EmployeeFarmerSurvey&gt; page = employeeFarmerSurveyRepository.findAll(pageable);</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (pageable.getPageNumber() &gt;= page.getTotalPages()</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">                &amp;&amp; page.getTotalPages() &gt; 0) {</span>
+<span class="nc" id="L127">            throw new UserNotFoundExceptions(&quot;Page not found. Requested page: &quot; + pageable.getPageNumber());</span>
+        }
+<span class="nc" id="L129">        return page.map(surveyMapper::toDto);</span>
+    }
+
+
+
+    @Override
+    @Transactional
+    public EmployeeFarmerSurveyDTO updateSurvey(Long surveyId,EmployeeFarmerSurveyDTO dto) {
+<span class="nc" id="L137">        Long loggedInUserId = securityUtil.getCurrentUserId();</span>
+<span class="nc" id="L138">        EmployeeFarmerSurvey existingSurvey = employeeFarmerSurveyRepository.findById(surveyId).orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;Survey not found with ID: &quot; + surveyId));</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        if (!existingSurvey.getUser().getUserId().equals(loggedInUserId)) {</span>
+<span class="nc" id="L140">            throw new UserNotFoundExceptions(&quot;You are not authorized to update this survey&quot;);</span>
+        }
+<span class="nc" id="L142">        User user = null;</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">        if (dto.getUserId() != null) {</span>
+<span class="nc" id="L144">            user = userRepository.findById(dto.getUserId()).orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;User not found with ID: &quot; + dto.getUserId()));</span>
+        }
+<span class="nc" id="L146">        surveyMapper.patchEntity(existingSurvey, dto, user);</span>
+<span class="nc" id="L147">        EmployeeFarmerSurvey updatedSurvey = employeeFarmerSurveyRepository.save(existingSurvey);</span>
+<span class="nc" id="L148">        return surveyMapper.toDto(updatedSurvey);</span>
+    }
+
+    @Override
+    public void deleteSurvey(Long surveyId) {
+
+<span class="nc" id="L154">        EmployeeFarmerSurvey survey = employeeFarmerSurveyRepository.findById(surveyId).orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;Survey not found with ID: &quot; + surveyId));</span>
+<span class="nc" id="L155">        selfieRepository.deleteBySurveyId(surveyId);</span>
+<span class="nc" id="L156">        farmerLabReportRepository.deleteBySurveyId(surveyId);</span>
+<span class="nc" id="L157">        employeeFarmerSurveyRepository.delete(survey);</span>
+<span class="nc" id="L158">        log.info(&quot;Survey deleted successfully with ID: {}&quot;, surveyId);</span>
+<span class="nc" id="L159">    }</span>
+
+    @Override
+    @Transactional
+    public Page&lt;EmployeeFarmerSurveyDTO&gt; getByUserIdSurveys(Long userId, Pageable pageable) {
+<span class="nc bnc" id="L164" title="All 2 branches missed.">        if (!userRepository.existsById(userId)) {</span>
+<span class="nc" id="L165">            throw new UserNotFoundExceptions(&quot;User not found with ID: &quot; + userId);}</span>
+<span class="nc" id="L166">        Page&lt;EmployeeFarmerSurvey&gt; page = employeeFarmerSurveyRepository.findByUser_UserId(userId, pageable);</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        if (pageable.getPageNumber() &gt;= page.getTotalPages()</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">                &amp;&amp; page.getTotalPages() &gt; 0) {</span>
+<span class="nc" id="L169">            throw new UserNotFoundExceptions(&quot;Page not found. Requested page: &quot; + pageable.getPageNumber());</span>
+        }
+<span class="nc" id="L171">        return page.map(surveyMapper::toDto);</span>
+    }
+
+    @Override
+    @Transactional
+    public Page&lt;EmployeeFarmerSurveyDTO&gt; getMySurveys(Pageable pageable) {
+<span class="nc" id="L177">        Long userId = securityUtil.getCurrentUserId();</span>
+<span class="nc bnc" id="L178" title="All 2 branches missed.">        if (!userRepository.existsById(userId)) {</span>
+<span class="nc" id="L179">            throw new UserNotFoundExceptions(&quot;User not found with ID: &quot; + userId);</span>
+        }
+<span class="nc" id="L181">        Page&lt;EmployeeFarmerSurvey&gt; page = employeeFarmerSurveyRepository.findByUser_UserId(userId, pageable);</span>
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        if (pageable.getPageNumber() &gt;= page.getTotalPages()</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">                &amp;&amp; page.getTotalPages() &gt; 0) {</span>
+<span class="nc" id="L184">            throw new UserNotFoundExceptions(</span>
+<span class="nc" id="L185">                    &quot;Page not found. Requested page: &quot; + pageable.getPageNumber()</span>
+            );
+        }
+<span class="nc" id="L188">        return page.map(surveyMapper::toDto);</span>
+    }
+
+    @Override
+    public SurveyStatusCountDTO getAllSurveyStatusCount() {
+
+<span class="nc" id="L194">        long completed =</span>
+<span class="nc" id="L195">                employeeFarmerSurveyRepository.countByFormStatus(FormStatus.ACTIVE);</span>
+
+<span class="nc" id="L197">        long pending =</span>
+<span class="nc" id="L198">                employeeFarmerSurveyRepository.countByFormStatus(FormStatus.INACTIVE);</span>
+
+<span class="nc" id="L200">        return new SurveyStatusCountDTO(pending, completed);</span>
+    }
+
+
+    @Override
+    public SurveyStatusCountDTO getSurveyStatusCountByLoggedInUser() {
+
+<span class="nc" id="L207">        Long userId = securityUtil.getCurrentUserId();</span>
+
+<span class="nc" id="L209">        long completed =</span>
+<span class="nc" id="L210">                employeeFarmerSurveyRepository.countByFormStatusAndUser_UserId(</span>
+                        FormStatus.ACTIVE, userId);
+
+<span class="nc" id="L213">        long pending =</span>
+<span class="nc" id="L214">                employeeFarmerSurveyRepository.countByFormStatusAndUser_UserId(</span>
+                        FormStatus.INACTIVE, userId);
+
+<span class="nc" id="L217">        return new SurveyStatusCountDTO(pending, completed);</span>
+    }
+    @Override
+    public Page&lt;EmployeeFarmerSurveyDTO&gt; getAllSurveysByStatus(
+            FormStatus status, Pageable pageable) {
+
+<span class="nc" id="L223">        Page&lt;EmployeeFarmerSurvey&gt; page =</span>
+<span class="nc" id="L224">                employeeFarmerSurveyRepository.findByFormStatus(status, pageable);</span>
+<span class="nc" id="L225">        return page.map(surveyMapper::toDto);</span>
+    }
+
+    @Override
+    public Page&lt;EmployeeFarmerSurveyDTO&gt; getMySurveysByStatus(
+            FormStatus status, Pageable pageable) {
+
+<span class="nc" id="L232">        Long userId = securityUtil.getCurrentUserId();</span>
+
+<span class="nc" id="L234">        Page&lt;EmployeeFarmerSurvey&gt; page =</span>
+<span class="nc" id="L235">                employeeFarmerSurveyRepository.findByFormStatusAndUser_UserId(</span>
+                        status, userId, pageable);
+<span class="nc" id="L237">        return page.map(surveyMapper::toDto);</span>
+    }
+
+    private String generateFormNumber() {
+
+<span class="nc" id="L242">        String yearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern(&quot;yyyyMM&quot;));</span>
+<span class="nc" id="L243">        Optional&lt;EmployeeFarmerSurvey&gt; lastSurvey = employeeFarmerSurveyRepository.findTopByFormNumberStartingWithOrderByFormNumberDesc(yearMonth);</span>
+<span class="nc" id="L244">        int nextSequence = 1;</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">        if (lastSurvey.isPresent()) {</span>
+<span class="nc" id="L246">            String lastFormNumber = lastSurvey.get().getFormNumber();</span>
+<span class="nc" id="L247">            String lastSeq = lastFormNumber.substring(6);</span>
+<span class="nc" id="L248">            nextSequence = Integer.parseInt(lastSeq) + 1;</span>
+        }
+<span class="nc" id="L250">        return yearMonth + String.format(&quot;%04d&quot;, nextSequence);</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

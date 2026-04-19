@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecurityExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.exception</a> &gt; <span class="el_source">SecurityExceptionHandler.java</span></div><h1>SecurityExceptionHandler.java</h1><pre class="source lang-java linenums">package com.spring.jwt.exception;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spring.jwt.dto.ErrorResponseDTO;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+
+@Component
+<span class="nc" id="L20">@Slf4j</span>
+<span class="nc" id="L21">@RequiredArgsConstructor</span>
+public class SecurityExceptionHandler implements AuthenticationEntryPoint, AccessDeniedHandler
+{
+
+    private final ObjectMapper objectMapper;
+
+    /**
+     * Handle authentication failures (missing or invalid JWT token)
+     * This is called when a user tries to access a secured endpoint without proper authentication
+     */
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                         AuthenticationException authException) throws IOException
+    {
+
+<span class="nc" id="L36">        log.warn(&quot;Authentication failed for request: {} {} - {}&quot;,</span>
+<span class="nc" id="L37">                request.getMethod(), request.getRequestURI(), authException.getMessage());</span>
+
+<span class="nc" id="L39">        ErrorResponseDTO error = createAuthenticationError(request, authException);</span>
+
+<span class="nc" id="L41">        response.setStatus(HttpStatus.UNAUTHORIZED.value());</span>
+<span class="nc" id="L42">        response.setContentType(MediaType.APPLICATION_JSON_VALUE);</span>
+<span class="nc" id="L43">        response.getWriter().write(objectMapper.writeValueAsString(error));</span>
+<span class="nc" id="L44">    }</span>
+
+    /**
+     * Handle authorization failures (valid token but insufficient permissions)
+     * This is called when an authenticated user tries to access a resource they don't have permission for
+     */
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response,
+                       AccessDeniedException accessDeniedException) throws IOException
+    {
+
+<span class="nc" id="L55">        log.warn(&quot;Access denied for request: {} {} - User lacks required permissions&quot;,</span>
+<span class="nc" id="L56">                request.getMethod(), request.getRequestURI());</span>
+
+<span class="nc" id="L58">        ErrorResponseDTO error = createAccessDeniedError(request, accessDeniedException);</span>
+
+<span class="nc" id="L60">        response.setStatus(HttpStatus.FORBIDDEN.value());</span>
+<span class="nc" id="L61">        response.setContentType(MediaType.APPLICATION_JSON_VALUE);</span>
+<span class="nc" id="L62">        response.getWriter().write(objectMapper.writeValueAsString(error));</span>
+<span class="nc" id="L63">    }</span>
+
+    /**
+     * Create detailed authentication error response based on the type of authentication failure
+     */
+    private ErrorResponseDTO createAuthenticationError(HttpServletRequest request, AuthenticationException ex)
+    {
+<span class="nc" id="L70">        String authHeader = request.getHeader(&quot;Authorization&quot;);</span>
+
+<span class="nc bnc" id="L72" title="All 4 branches missed.">        if (authHeader == null || authHeader.trim().isEmpty())</span>
+        {
+<span class="nc" id="L74">            return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L75">                    .status(401)</span>
+<span class="nc" id="L76">                    .errorCode(&quot;MISSING_AUTHORIZATION_HEADER&quot;)</span>
+<span class="nc" id="L77">                    .message(&quot;Authorization header is required&quot;)</span>
+<span class="nc" id="L78">                    .details(&quot;Please include the Authorization header with a valid JWT token&quot;)</span>
+<span class="nc" id="L79">                    .path(request.getRequestURI())</span>
+<span class="nc" id="L80">                    .method(request.getMethod())</span>
+<span class="nc" id="L81">                    .timestamp(java.time.LocalDateTime.now())</span>
+<span class="nc" id="L82">                    .suggestedActions(java.util.List.of(</span>
+                            &quot;Add 'Authorization: Bearer &lt;your-jwt-token&gt;' header to your request&quot;,
+                            &quot;Ensure you have logged in and obtained a valid JWT token&quot;,
+                            &quot;Check that the header name is 'Authorization' (case-sensitive)&quot;
+                    ))
+<span class="nc" id="L87">                    .additionalInfo(java.util.Map.of(</span>
+                            &quot;expectedHeaderFormat&quot;, &quot;Authorization: Bearer &lt;jwt-token&gt;&quot;,
+                            &quot;loginEndpoint&quot;, &quot;/api/v1/auth/login&quot;
+                    ))
+<span class="nc" id="L91">                    .build();</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        } else if (!authHeader.startsWith(&quot;Bearer &quot;))</span>
+        {
+<span class="nc" id="L94">            return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L95">                    .status(401)</span>
+<span class="nc" id="L96">                    .errorCode(&quot;INVALID_AUTHORIZATION_FORMAT&quot;)</span>
+<span class="nc" id="L97">                    .message(&quot;Invalid Authorization header format&quot;)</span>
+<span class="nc" id="L98">                    .details(&quot;Authorization header must use Bearer token format&quot;)</span>
+<span class="nc" id="L99">                    .path(request.getRequestURI())</span>
+<span class="nc" id="L100">                    .method(request.getMethod())</span>
+<span class="nc" id="L101">                    .timestamp(java.time.LocalDateTime.now())</span>
+<span class="nc" id="L102">                    .suggestedActions(java.util.List.of(</span>
+                            &quot;Use format: 'Authorization: Bearer &lt;your-jwt-token&gt;'&quot;,
+                            &quot;Ensure there's a space after 'Bearer'&quot;,
+                            &quot;Remove any extra characters or quotes around the token&quot;
+                    ))
+<span class="nc" id="L107">                    .additionalInfo(java.util.Map.of(</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">                            &quot;currentFormat&quot;, authHeader.length() &gt; 50 ? authHeader.substring(0, 50) + &quot;...&quot; : authHeader,</span>
+                            &quot;expectedFormat&quot;, &quot;Bearer &lt;jwt-token&gt;&quot;
+                    ))
+<span class="nc" id="L111">                    .build();</span>
+        } else
+        {
+<span class="nc" id="L114">            String errorDetails = determineJwtErrorDetails(ex.getMessage());</span>
+
+<span class="nc" id="L116">            return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L117">                    .status(401)</span>
+<span class="nc" id="L118">                    .errorCode(&quot;INVALID_JWT_TOKEN&quot;)</span>
+<span class="nc" id="L119">                    .message(&quot;Invalid or expired JWT token&quot;)</span>
+<span class="nc" id="L120">                    .details(errorDetails)</span>
+<span class="nc" id="L121">                    .path(request.getRequestURI())</span>
+<span class="nc" id="L122">                    .method(request.getMethod())</span>
+<span class="nc" id="L123">                    .timestamp(java.time.LocalDateTime.now())</span>
+<span class="nc" id="L124">                    .suggestedActions(java.util.List.of(</span>
+                            &quot;Login again to get a fresh JWT token&quot;,
+                            &quot;Check if your token has expired&quot;,
+                            &quot;Verify the token is correctly copied without extra spaces&quot;,
+                            &quot;Ensure you're using the token from the latest login&quot;
+                    ))
+<span class="nc" id="L130">                    .additionalInfo(java.util.Map.of(</span>
+<span class="nc" id="L131">                            &quot;tokenLength&quot;, authHeader.length() - 7,</span>
+                            &quot;loginEndpoint&quot;, &quot;/jwt/login&quot;
+                    ))
+<span class="nc" id="L134">                    .build();</span>
+        }
+    }
+
+    /**
+     * Create detailed access denied error response based on the endpoint being accessed
+     */
+    private ErrorResponseDTO createAccessDeniedError(HttpServletRequest request, AccessDeniedException ex)
+    {
+<span class="nc" id="L143">        String path = request.getRequestURI();</span>
+<span class="nc" id="L144">        String method = request.getMethod();</span>
+        String message;
+        String details;
+        java.util.List&lt;String&gt; suggestedActions;
+        
+<span class="nc bnc" id="L149" title="All 2 branches missed.">        if (path.contains(&quot;/user/&quot;)) {</span>
+<span class="nc" id="L150">            message = &quot;Admin role required to access user-specific resources&quot;;</span>
+<span class="nc" id="L151">            details = &quot;You are trying to access another user's data, which requires administrator privileges&quot;;</span>
+<span class="nc" id="L152">            suggestedActions = java.util.List.of(</span>
+                    &quot;Contact your administrator to request admin privileges&quot;,
+                    &quot;Use endpoints that access your own data instead (e.g., /me endpoints)&quot;,
+                    &quot;Verify you are logged in with an admin account&quot;
+            );
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        } else if (path.contains(&quot;/admin&quot;)) {</span>
+<span class="nc" id="L158">            message = &quot;Admin role required to access administrative resources&quot;;</span>
+<span class="nc" id="L159">            details = &quot;This endpoint is restricted to users with administrator privileges&quot;;</span>
+<span class="nc" id="L160">            suggestedActions = java.util.List.of(</span>
+                    &quot;Contact your administrator to request admin privileges&quot;,
+                    &quot;Verify you are logged in with an admin account&quot;,
+                    &quot;Check if there are alternative user-level endpoints available&quot;
+            );
+<span class="nc bnc" id="L165" title="All 4 branches missed.">        } else if (method.equals(&quot;GET&quot;) &amp;&amp; path.contains(&quot;/all&quot;)) {</span>
+<span class="nc" id="L166">            message = &quot;Admin role required to browse all resources&quot;;</span>
+<span class="nc" id="L167">            details = &quot;Browsing all resources is restricted to administrators for privacy and security&quot;;</span>
+<span class="nc" id="L168">            suggestedActions = java.util.List.of(</span>
+                    &quot;Use search or filter endpoints instead&quot;,
+                    &quot;Access only your own resources&quot;,
+                    &quot;Contact your administrator for bulk data access&quot;
+            );
+        } else {
+<span class="nc" id="L174">            message = &quot;Insufficient permissions to access this resource&quot;;</span>
+<span class="nc" id="L175">            details = &quot;You do not have the required role or permissions to perform this action&quot;;</span>
+<span class="nc" id="L176">            suggestedActions = java.util.List.of(</span>
+                    &quot;Verify you are logged in with the correct account&quot;,
+                    &quot;Contact your administrator to request appropriate permissions&quot;,
+                    &quot;Check the API documentation for required roles&quot;
+            );
+        }
+
+<span class="nc" id="L183">        return ErrorResponseDTO.builder()</span>
+<span class="nc" id="L184">                .status(403)</span>
+<span class="nc" id="L185">                .errorCode(&quot;ACCESS_DENIED&quot;)</span>
+<span class="nc" id="L186">                .message(message)</span>
+<span class="nc" id="L187">                .details(details)</span>
+<span class="nc" id="L188">                .path(path)</span>
+<span class="nc" id="L189">                .method(method)</span>
+<span class="nc" id="L190">                .timestamp(java.time.LocalDateTime.now())</span>
+<span class="nc" id="L191">                .suggestedActions(suggestedActions)</span>
+<span class="nc" id="L192">                .additionalInfo(java.util.Map.of(</span>
+<span class="nc" id="L193">                        &quot;requiredRole&quot;, determineRequiredRole(path),</span>
+                        &quot;endpoint&quot;, path,
+                        &quot;httpMethod&quot;, method
+                ))
+<span class="nc" id="L197">                .build();</span>
+    }
+
+    /**
+     * Determine the required role based on the endpoint path
+     */
+    private String determineRequiredRole(String path) {
+<span class="nc bnc" id="L204" title="All 6 branches missed.">        if (path.contains(&quot;/user/&quot;) || path.contains(&quot;/admin&quot;) || path.contains(&quot;/all&quot;)) {</span>
+<span class="nc" id="L205">            return &quot;ADMIN&quot;;</span>
+        }
+<span class="nc" id="L207">        return &quot;USER&quot;;</span>
+    }
+
+    /**
+     * Determine specific JWT error details based on the exception message
+     */
+    private String determineJwtErrorDetails(String exceptionMessage)
+    {
+<span class="nc bnc" id="L215" title="All 2 branches missed.">        if (exceptionMessage == null)</span>
+        {
+<span class="nc" id="L217">            return &quot;The provided JWT token is invalid&quot;;</span>
+        }
+
+<span class="nc" id="L220">        String lowerMessage = exceptionMessage.toLowerCase();</span>
+
+<span class="nc bnc" id="L222" title="All 2 branches missed.">        if (lowerMessage.contains(&quot;expired&quot;))</span>
+        {
+<span class="nc" id="L224">            return &quot;Your JWT token has expired. Please login again to get a new token.&quot;;</span>
+<span class="nc bnc" id="L225" title="All 4 branches missed.">        } else if (lowerMessage.contains(&quot;malformed&quot;) || lowerMessage.contains(&quot;invalid&quot;))</span>
+        {
+<span class="nc" id="L227">            return &quot;The JWT token format is invalid. Please ensure you're using a valid token.&quot;;</span>
+<span class="nc bnc" id="L228" title="All 2 branches missed.">        } else if (lowerMessage.contains(&quot;signature&quot;))</span>
+        {
+<span class="nc" id="L230">            return &quot;JWT token signature verification failed. The token may be tampered with.&quot;;</span>
+<span class="nc bnc" id="L231" title="All 2 branches missed.">        } else if (lowerMessage.contains(&quot;unsupported&quot;))</span>
+        {
+<span class="nc" id="L233">            return &quot;The JWT token format is not supported by this system.&quot;;</span>
+        } else
+        {
+<span class="nc" id="L236">            return &quot;The provided JWT token is invalid or cannot be processed.&quot;;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

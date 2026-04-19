@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ApiResponse.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">ApiResponse.java</span></div><h1>ApiResponse.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+import java.time.LocalDateTime;
+
+/**
+ * Generic API response wrapper for standardized API responses
+ * @param &lt;T&gt; Type of the data payload
+ */
+<span class="nc bnc" id="L18" title="All 60 branches missed.">@Data</span>
+<span class="nc bnc" id="L19" title="All 2 branches missed.">@Builder</span>
+<span class="nc" id="L20">@NoArgsConstructor</span>
+<span class="nc" id="L21">@AllArgsConstructor</span>
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@Schema(
+        name = &quot;ApiResponse&quot;,
+        description = &quot;Standardized API response format&quot;
+)
+public class ApiResponse&lt;T&gt; {
+<span class="nc" id="L28">    private boolean success;</span>
+<span class="nc" id="L29">    private String message;</span>
+<span class="nc" id="L30">    private T data;</span>
+<span class="nc" id="L31">    private HttpStatus status;</span>
+<span class="nc" id="L32">    private int statusCode;</span>
+<span class="nc" id="L33">    private String errorCode;</span>
+<span class="nc" id="L34">    private String errorDetails;</span>
+    
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = &quot;yyyy-MM-dd HH:mm:ss&quot;)
+    @Builder.Default
+    @Schema(description = &quot;Timestamp of the response&quot;)
+<span class="nc" id="L39">    private LocalDateTime timestamp = LocalDateTime.now();</span>
+
+    /**
+     * Constructor for complete ApiResponse
+     */
+    public ApiResponse(boolean success, String message, T data, HttpStatus status, 
+<span class="nc" id="L45">                      String errorCode, String errorDetails) {</span>
+<span class="nc" id="L46">        this.success = success;</span>
+<span class="nc" id="L47">        this.message = message;</span>
+<span class="nc" id="L48">        this.data = data;</span>
+<span class="nc" id="L49">        this.status = status;</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        this.statusCode = status != null ? status.value() : 0;</span>
+<span class="nc" id="L51">        this.errorCode = errorCode;</span>
+<span class="nc" id="L52">        this.errorDetails = errorDetails;</span>
+<span class="nc" id="L53">        this.timestamp = LocalDateTime.now();</span>
+<span class="nc" id="L54">    }</span>
+    
+    /**
+     * Constructor for ApiResponse with status code as integer 
+     */
+<span class="nc" id="L59">    public ApiResponse(int statusCode, String message, T data) {</span>
+<span class="nc bnc" id="L60" title="All 4 branches missed.">        this.success = statusCode &gt;= 200 &amp;&amp; statusCode &lt; 300;</span>
+<span class="nc" id="L61">        this.message = message;</span>
+<span class="nc" id="L62">        this.data = data;</span>
+<span class="nc" id="L63">        this.statusCode = statusCode;</span>
+<span class="nc" id="L64">        this.timestamp = LocalDateTime.now();</span>
+<span class="nc" id="L65">    }</span>
+
+    /**
+     * Create a success response with data
+     * @param message Success message
+     * @param data Response data
+     * @param &lt;T&gt; Type of data
+     * @return ApiResponse object
+     */
+    public static &lt;T&gt; ApiResponse&lt;T&gt; success(String message, T data) {
+<span class="nc" id="L75">        return ApiResponse.&lt;T&gt;builder()</span>
+<span class="nc" id="L76">                .success(true)</span>
+<span class="nc" id="L77">                .message(message)</span>
+<span class="nc" id="L78">                .data(data)</span>
+<span class="nc" id="L79">                .status(HttpStatus.OK)</span>
+<span class="nc" id="L80">                .statusCode(HttpStatus.OK.value())</span>
+<span class="nc" id="L81">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L82">                .build();</span>
+    }
+
+    /**
+     * Create a success response without data
+     * @param message Success message
+     * @param &lt;T&gt; Type of data
+     * @return ApiResponse object
+     */
+    public static &lt;T&gt; ApiResponse&lt;T&gt; success(String message) {
+<span class="nc" id="L92">        return ApiResponse.&lt;T&gt;builder()</span>
+<span class="nc" id="L93">                .success(true)</span>
+<span class="nc" id="L94">                .message(message)</span>
+<span class="nc" id="L95">                .status(HttpStatus.OK)</span>
+<span class="nc" id="L96">                .statusCode(HttpStatus.OK.value())</span>
+<span class="nc" id="L97">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L98">                .build();</span>
+    }
+
+    /**
+     * Create an error response
+     * @param status HTTP status
+     * @param message Error message
+     * @param errorDetails Detailed error information
+     * @param &lt;T&gt; Type of data
+     * @return ApiResponse object
+     */
+    public static &lt;T&gt; ApiResponse&lt;T&gt; error(HttpStatus status, String message, String errorDetails) {
+<span class="nc" id="L110">        return ApiResponse.&lt;T&gt;builder()</span>
+<span class="nc" id="L111">                .success(false)</span>
+<span class="nc" id="L112">                .message(message)</span>
+<span class="nc" id="L113">                .status(status)</span>
+<span class="nc" id="L114">                .statusCode(status.value())</span>
+<span class="nc" id="L115">                .errorDetails(errorDetails)</span>
+<span class="nc" id="L116">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L117">                .build();</span>
+    }
+
+    /**
+     * Create an error response with error code
+     * @param status HTTP status
+     * @param message Error message
+     * @param errorCode Error code
+     * @param errorDetails Detailed error information
+     * @param &lt;T&gt; Type of data
+     * @return ApiResponse object
+     */
+    public static &lt;T&gt; ApiResponse&lt;T&gt; error(HttpStatus status, String message, String errorCode, String errorDetails) {
+<span class="nc" id="L130">        return ApiResponse.&lt;T&gt;builder()</span>
+<span class="nc" id="L131">                .success(false)</span>
+<span class="nc" id="L132">                .message(message)</span>
+<span class="nc" id="L133">                .status(status)</span>
+<span class="nc" id="L134">                .statusCode(status.value())</span>
+<span class="nc" id="L135">                .errorCode(errorCode)</span>
+<span class="nc" id="L136">                .errorDetails(errorDetails)</span>
+<span class="nc" id="L137">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L138">                .build();</span>
+    }
+
+    /**
+     * Create a simple error response
+     * @param message Error message
+     * @param errorDetails Detailed error information
+     * @param &lt;T&gt; Type of data
+     * @return ApiResponse object
+     */
+    public static &lt;T&gt; ApiResponse&lt;T&gt; error(String message, String errorDetails) {
+<span class="nc" id="L149">        return ApiResponse.&lt;T&gt;builder()</span>
+<span class="nc" id="L150">                .success(false)</span>
+<span class="nc" id="L151">                .message(message)</span>
+<span class="nc" id="L152">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="nc" id="L153">                .statusCode(HttpStatus.BAD_REQUEST.value())</span>
+<span class="nc" id="L154">                .errorDetails(errorDetails)</span>
+<span class="nc" id="L155">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L156">                .build();</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

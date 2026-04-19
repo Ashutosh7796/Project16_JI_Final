@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SwaggerConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">SwaggerConfig.java</span></div><h1>SwaggerConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import io.swagger.v3.oas.models.tags.Tag;
+import org.springdoc.core.models.GroupedOpenApi;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Swagger/OpenAPI Configuration
+ * Creates separate API documentation groups for User APIs and Admin APIs
+ */
+@Configuration
+<span class="nc" id="L24">public class SwaggerConfig {</span>
+
+    /**
+     * Main OpenAPI configuration
+     */
+    @Bean
+    public OpenAPI customOpenAPI() {
+<span class="nc" id="L31">        return new OpenAPI()</span>
+<span class="nc" id="L32">                .info(new Info()</span>
+<span class="nc" id="L33">                        .title(&quot;BitFlirt API Documentation&quot;)</span>
+<span class="nc" id="L34">                        .description(&quot;Comprehensive API documentation for BitFlirt matrimonial platform&quot;)</span>
+<span class="nc" id="L35">                        .version(&quot;v1.0.0&quot;)</span>
+<span class="nc" id="L36">                        .contact(new Contact()</span>
+<span class="nc" id="L37">                                .name(&quot;BitFlirt Development Team&quot;)</span>
+<span class="nc" id="L38">                                .email(&quot;dev@bitflirt.com&quot;)</span>
+<span class="nc" id="L39">                                .url(&quot;https://bitflirt.com&quot;))</span>
+<span class="nc" id="L40">                        .license(new License()</span>
+<span class="nc" id="L41">                                .name(&quot;Proprietary&quot;)</span>
+<span class="nc" id="L42">                                .url(&quot;https://bitflirt.com/license&quot;)))</span>
+<span class="nc" id="L43">                .servers(List.of(</span>
+<span class="nc" id="L44">                        new Server().url(&quot;http://localhost:8080&quot;).description(&quot;Development Server&quot;),</span>
+<span class="nc" id="L45">                        new Server().url(&quot;https://api.bitflirt.com&quot;).description(&quot;Production Server&quot;)))</span>
+<span class="nc" id="L46">                .addSecurityItem(new SecurityRequirement().addList(&quot;bearerAuth&quot;))</span>
+<span class="nc" id="L47">                .components(new Components()</span>
+<span class="nc" id="L48">                        .addSecuritySchemes(&quot;bearerAuth&quot;, new SecurityScheme()</span>
+<span class="nc" id="L49">                                .type(SecurityScheme.Type.HTTP)</span>
+<span class="nc" id="L50">                                .scheme(&quot;bearer&quot;)</span>
+<span class="nc" id="L51">                                .bearerFormat(&quot;JWT&quot;)</span>
+<span class="nc" id="L52">                                .description(&quot;JWT token for authentication&quot;)))</span>
+<span class="nc" id="L53">                .tags(Arrays.asList(</span>
+<span class="nc" id="L54">                        new Tag().name(&quot;Authentication&quot;).description(&quot;User authentication and authorization&quot;),</span>
+<span class="nc" id="L55">                        new Tag().name(&quot;User Management&quot;).description(&quot;User registration and profile management&quot;),</span>
+<span class="nc" id="L56">                        new Tag().name(&quot;Profile Management&quot;).description(&quot;User profile operations&quot;),</span>
+<span class="nc" id="L57">                        new Tag().name(&quot;Horoscope Details&quot;).description(&quot;Horoscope and astrological information&quot;),</span>
+<span class="nc" id="L58">                        new Tag().name(&quot;Education &amp; Profession&quot;).description(&quot;Education and professional details&quot;),</span>
+<span class="nc" id="L59">                        new Tag().name(&quot;Family Background&quot;).description(&quot;Family background information&quot;),</span>
+<span class="nc" id="L60">                        new Tag().name(&quot;Partner Preference&quot;).description(&quot;Partner preference settings&quot;),</span>
+<span class="nc" id="L61">                        new Tag().name(&quot;Contact Details&quot;).description(&quot;Contact information management&quot;),</span>
+<span class="nc" id="L62">                        new Tag().name(&quot;Document Management&quot;).description(&quot;Document upload and verification&quot;),</span>
+<span class="nc" id="L63">                        new Tag().name(&quot;Complete Profile&quot;).description(&quot;Complete profile workflow&quot;),</span>
+<span class="nc" id="L64">                        new Tag().name(&quot;User View&quot;).description(&quot;User viewing and matching&quot;),</span>
+<span class="nc" id="L65">                        new Tag().name(&quot;Subscription&quot;).description(&quot;Subscription management&quot;),</span>
+                        
+<span class="nc" id="L67">                        new Tag().name(&quot;Admin User Management&quot;).description(&quot;Administrative user operations&quot;),</span>
+<span class="nc" id="L68">                        new Tag().name(&quot;Admin Profile Management&quot;).description(&quot;Administrative profile operations&quot;),</span>
+<span class="nc" id="L69">                        new Tag().name(&quot;Admin Horoscope Management&quot;).description(&quot;Administrative horoscope operations&quot;),</span>
+<span class="nc" id="L70">                        new Tag().name(&quot;Admin Education Management&quot;).description(&quot;Administrative education operations&quot;),</span>
+<span class="nc" id="L71">                        new Tag().name(&quot;Admin Family Background Management&quot;).description(&quot;Administrative family background operations&quot;),</span>
+<span class="nc" id="L72">                        new Tag().name(&quot;Admin Partner Preference Management&quot;).description(&quot;Administrative partner preference operations&quot;),</span>
+<span class="nc" id="L73">                        new Tag().name(&quot;Admin Contact Details Management&quot;).description(&quot;Administrative contact details operations&quot;),</span>
+<span class="nc" id="L74">                        new Tag().name(&quot;Admin Document Management&quot;).description(&quot;Administrative document operations&quot;),</span>
+<span class="nc" id="L75">                        new Tag().name(&quot;Admin Complete Profile Management&quot;).description(&quot;Administrative complete profile operations&quot;),</span>
+<span class="nc" id="L76">                        new Tag().name(&quot;Admin Registration Workflow&quot;).description(&quot;Administrative registration workflow orchestration&quot;)</span>
+                ));
+    }
+
+    /**
+     * User APIs Group - Regular user-facing APIs
+     */
+    @Bean
+    public GroupedOpenApi userApis() {
+<span class="nc" id="L85">        return GroupedOpenApi.builder()</span>
+<span class="nc" id="L86">                .group(&quot;User APIs&quot;)</span>
+<span class="nc" id="L87">                .displayName(&quot;🧑‍💼 User APIs&quot;)</span>
+<span class="nc" id="L88">                .pathsToMatch(</span>
+                        &quot;/api/auth/**&quot;,
+                        &quot;/api/v1/users/**&quot;,
+                        &quot;/api/v1/profiles/**&quot;,
+                        &quot;/api/v1/horoscope/**&quot;,
+                        &quot;/api/v1/education/**&quot;,
+                        &quot;/api/v1/family-background/**&quot;,
+                        &quot;/api/v1/partner-preference/**&quot;,
+                        &quot;/api/v1/contact-details/**&quot;,
+                        &quot;/api/v1/documents/**&quot;,
+                        &quot;/api/v1/complete-profile/**&quot;,
+                        &quot;/api/v1/user-view/**&quot;,
+                        &quot;/api/v1/subscription/**&quot;,
+                        &quot;/api/public/**&quot;
+                )
+<span class="nc" id="L103">                .pathsToExclude(&quot;/api/v1/admin/**&quot;)</span>
+<span class="nc" id="L104">                .build();</span>
+    }
+
+    /**
+     * Admin APIs Group - Administrative APIs requiring ADMIN role
+     */
+    @Bean
+    public GroupedOpenApi adminApis() {
+<span class="nc" id="L112">        return GroupedOpenApi.builder()</span>
+<span class="nc" id="L113">                .group(&quot;Admin APIs&quot;)</span>
+<span class="nc" id="L114">                .displayName(&quot;🔐 Admin APIs&quot;)</span>
+<span class="nc" id="L115">                .pathsToMatch(&quot;/api/v1/admin/**&quot;)</span>
+<span class="nc" id="L116">                .build();</span>
+    }
+
+    /**
+     * All APIs Group - Complete API documentation (excluding admin APIs)
+     */
+    @Bean
+    public GroupedOpenApi allApis() {
+<span class="nc" id="L124">        return GroupedOpenApi.builder()</span>
+<span class="nc" id="L125">                .group(&quot;All APIs&quot;)</span>
+<span class="nc" id="L126">                .displayName(&quot;📚 All APIs&quot;)</span>
+<span class="nc" id="L127">                .pathsToMatch(&quot;/**&quot;)</span>
+<span class="nc" id="L128">                .pathsToExclude(&quot;/api/v1/admin/**&quot;)</span>
+<span class="nc" id="L129">                .build();</span>
+    }
+
+    /**
+     * Public APIs Group - APIs that don't require authentication
+     */
+    @Bean
+    public GroupedOpenApi publicApis() {
+<span class="nc" id="L137">        return GroupedOpenApi.builder()</span>
+<span class="nc" id="L138">                .group(&quot;Public APIs&quot;)</span>
+<span class="nc" id="L139">                .displayName(&quot;🌐 Public APIs&quot;)</span>
+<span class="nc" id="L140">                .pathsToMatch(</span>
+                        &quot;/api/auth/login&quot;,
+                        &quot;/api/auth/refresh&quot;,
+                        &quot;/api/v1/users/register&quot;,
+                        &quot;/api/v1/users/password/**&quot;,
+                        &quot;/api/public/**&quot;,
+                        &quot;/reset-password&quot;,
+                        &quot;/reset-password-test&quot;
+                )
+<span class="nc" id="L149">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

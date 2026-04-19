@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserUpdateRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">UserUpdateRequest.java</span></div><h1>UserUpdateRequest.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+<span class="nc" id="L11">@Setter</span>
+<span class="nc" id="L12">public class UserUpdateRequest {</span>
+    @Email(message = &quot;Invalid email format&quot;)
+    @Pattern(regexp = &quot;^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$&quot;, message = &quot;Invalid email format&quot;)
+    @Schema(
+            description = &quot;Email of User&quot;, example = &quot;example@example.com&quot;
+    )
+<span class="nc" id="L18">    private String email;</span>
+
+    @Size(max = 255, message = &quot;Address cannot exceed 255 characters&quot;)
+    @Schema(
+            description = &quot;Address of the customer&quot;, example = &quot;A/P Pune Main Street Block no 8&quot;
+    )
+<span class="nc" id="L24">    private String address;</span>
+
+    @Size(min = 2, max = 50, message = &quot;First name must be between 2 and 50 characters&quot;)
+    @Pattern(regexp = &quot;^[a-zA-Z\\s'-]+$&quot;, message = &quot;First name can contain letters, spaces, hyphens and apostrophes&quot;)
+    @Schema(
+            description = &quot;First Name of the customer&quot;, example = &quot;John&quot;
+    )
+<span class="nc" id="L31">    private String firstName;</span>
+    
+    @Size(min = 2, max = 50, message = &quot;Last name must be between 2 and 50 characters&quot;)
+    @Pattern(regexp = &quot;^[a-zA-Z\\s'-]+$&quot;, message = &quot;Last name can contain letters, spaces, hyphens and apostrophes&quot;)
+    @Schema(
+            description = &quot;Last Name of the customer&quot;, example = &quot;Doe&quot;
+    )
+<span class="nc" id="L38">    private String lastName;</span>
+
+    @Pattern(regexp = &quot;^[0-9]{10}$&quot;, message = &quot;Mobile number must be 10 digits&quot;)
+    @Schema(
+            description = &quot;Mobile Number of the customer&quot;, example = &quot;9822222212&quot;
+    )
+<span class="nc" id="L44">    private Long mobileNumber;</span>
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

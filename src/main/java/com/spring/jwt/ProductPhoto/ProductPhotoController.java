@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * REST Controller responsible for handling Product Photo operations.
@@ -129,6 +131,21 @@ public class ProductPhotoController {
             @PathVariable Long productId) {
         List<ProductPhotoResponseDTO> response = productPhotoService.getAllPhotosByProductId(productId);
         return ResponseEntity.ok(new BaseResponseDTO1<>("200", "All photos fetched", response));
+    }
+
+    /**
+     * Batch fetch all photos for many products (single query) — use for catalog grids instead of N × /all calls.
+     */
+    @PostMapping("/batch/all-by-product-ids")
+    public ResponseEntity<BaseResponseDTO1<List<ProductPhotosBatchRow>>> getAllPhotosBatch(
+            @RequestBody List<Long> productIds) {
+        List<Long> safe = productIds == null ? List.of() : productIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(200)
+                .collect(Collectors.toList());
+        List<ProductPhotosBatchRow> response = productPhotoService.getAllPhotosByProductIds(safe);
+        return ResponseEntity.ok(new BaseResponseDTO1<>("200", "Batch photos fetched", response));
     }
 
     /**

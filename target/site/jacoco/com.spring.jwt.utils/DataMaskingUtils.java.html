@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DataMaskingUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">DataMaskingUtils.java</span></div><h1>DataMaskingUtils.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+/**
+ * Utility class for masking sensitive data in logs and responses
+ */
+@Component
+<span class="nc" id="L10">public class DataMaskingUtils {</span>
+
+    /**
+     * Masks an email address, showing only the first character and domain
+     * e.g., j***@example.com
+     */
+    public static String maskEmail(String email) {
+<span class="nc bnc" id="L17" title="All 2 branches missed.">        if (!StringUtils.hasText(email)) {</span>
+<span class="nc" id="L18">            return email;</span>
+        }
+        
+<span class="nc" id="L21">        int atIndex = email.indexOf('@');</span>
+<span class="nc bnc" id="L22" title="All 2 branches missed.">        if (atIndex &lt;= 1) {</span>
+<span class="nc" id="L23">            return email;</span>
+        }
+        
+<span class="nc" id="L26">        String username = email.substring(0, atIndex);</span>
+<span class="nc" id="L27">        String domain = email.substring(atIndex);</span>
+
+<span class="nc" id="L29">        String maskedUsername = username.charAt(0) + </span>
+<span class="nc" id="L30">                &quot;*&quot;.repeat(Math.min(username.length() - 1, 3)) + </span>
+<span class="nc bnc" id="L31" title="All 2 branches missed.">                (username.length() &gt; 4 ? &quot;...&quot; : &quot;&quot;);</span>
+        
+<span class="nc" id="L33">        return maskedUsername + domain;</span>
+    }
+    
+    /**
+     * Masks a mobile number, showing only the last 4 digits
+     * e.g., *******1234
+     */
+    public static String maskPhoneNumber(String phoneNumber) {
+<span class="nc bnc" id="L41" title="All 2 branches missed.">        if (!StringUtils.hasText(phoneNumber)) {</span>
+<span class="nc" id="L42">            return phoneNumber;</span>
+        }
+        
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (phoneNumber.length() &lt;= 4) {</span>
+<span class="nc" id="L46">            return phoneNumber;</span>
+        }
+        
+<span class="nc" id="L49">        return &quot;*&quot;.repeat(phoneNumber.length() - 4) + </span>
+<span class="nc" id="L50">                phoneNumber.substring(phoneNumber.length() - 4);</span>
+    }
+    
+    /**
+     * Masks a mobile number, showing only the last 4 digits
+     */
+    public static String maskPhoneNumber(Long phoneNumber) {
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (phoneNumber == null) {</span>
+<span class="nc" id="L58">            return null;</span>
+        }
+        
+<span class="nc" id="L61">        return maskPhoneNumber(phoneNumber.toString());</span>
+    }
+    
+    /**
+     * Masks an address to show only the street number and city
+     * e.g., 123 *****, City
+     */
+    public static String maskAddress(String address) {
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (!StringUtils.hasText(address)) {</span>
+<span class="nc" id="L70">            return address;</span>
+        }
+
+<span class="nc" id="L73">        String[] parts = address.split(&quot; &quot;);</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        if (parts.length &lt;= 2) {</span>
+<span class="nc" id="L75">            return address;</span>
+        }
+<span class="nc" id="L77">        StringBuilder masked = new StringBuilder(parts[0]);</span>
+<span class="nc" id="L78">        masked.append(&quot; ***** &quot;);</span>
+<span class="nc" id="L79">        masked.append(parts[parts.length - 1]);</span>
+        
+<span class="nc" id="L81">        return masked.toString();</span>
+    }
+    
+    /**
+     * Masks a JWT token, showing only the first 8 characters
+     * e.g., eyJhbGci...
+     */
+    public static String maskToken(String token) {
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+<span class="nc" id="L90">            return token;</span>
+        }
+        
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        if (token.length() &lt;= 12) {</span>
+<span class="nc" id="L94">            return token;</span>
+        }
+        
+<span class="nc" id="L97">        return token.substring(0, 8) + &quot;...&quot;;</span>
+    }
+    
+    /**
+     * Masks a credit card number, showing only the last 4 digits
+     * e.g., **** **** **** 1234
+     */
+    public static String maskCreditCard(String cardNumber) {
+<span class="nc bnc" id="L105" title="All 2 branches missed.">        if (!StringUtils.hasText(cardNumber)) {</span>
+<span class="nc" id="L106">            return cardNumber;</span>
+        }
+
+<span class="nc" id="L109">        String digitsOnly = cardNumber.replaceAll(&quot;\\D&quot;, &quot;&quot;);</span>
+        
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        if (digitsOnly.length() &lt; 4) {</span>
+<span class="nc" id="L112">            return cardNumber;</span>
+        }
+        
+<span class="nc" id="L115">        String lastFourDigits = digitsOnly.substring(digitsOnly.length() - 4);</span>
+<span class="nc" id="L116">        StringBuilder masked = new StringBuilder();</span>
+
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        for (int i = 0; i &lt; digitsOnly.length() - 4; i++) {</span>
+<span class="nc" id="L119">            masked.append(&quot;*&quot;);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">            if ((i + 1) % 4 == 0) {</span>
+<span class="nc" id="L121">                masked.append(&quot; &quot;);</span>
+            }
+        }
+
+<span class="nc bnc" id="L125" title="All 4 branches missed.">        if (masked.length() &gt; 0 &amp;&amp; masked.charAt(masked.length() - 1) != ' ') {</span>
+<span class="nc" id="L126">            masked.append(&quot; &quot;);</span>
+        }
+        
+<span class="nc" id="L129">        masked.append(lastFourDigits);</span>
+<span class="nc" id="L130">        return masked.toString();</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

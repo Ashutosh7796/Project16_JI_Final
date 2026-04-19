@@ -18,6 +18,11 @@ public interface ProductPhotoService {
 
     List<ProductPhotoResponseDTO> getAllPhotosByProductId(Long productId);
 
+    /**
+     * All photos for many products in one DB round-trip (for catalog / list UIs).
+     */
+    List<ProductPhotosBatchRow> getAllPhotosByProductIds(List<Long> productIds);
+
     ProductPhotoResponseDTO getPhotoByProductIdAndType(Long productId, ImageType imageType);
 
     ProductPhotoResponseDTO updateProductImage(Long imageId, MultipartFile file);

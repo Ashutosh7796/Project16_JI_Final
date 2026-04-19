@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OtpUtil.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils.EmailVerificationService</a> &gt; <span class="el_source">OtpUtil.java</span></div><h1>OtpUtil.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils.EmailVerificationService;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.util.Base64;
+
+<span class="nc" id="L9">public class OtpUtil {</span>
+
+    private static final String HASH_ALGORITHM = &quot;SHA-256&quot;;
+
+    public static String generateOtp(int length) {
+<span class="nc" id="L14">        SecureRandom random = new SecureRandom();</span>
+<span class="nc" id="L15">        StringBuilder otp = new StringBuilder();</span>
+<span class="nc bnc" id="L16" title="All 2 branches missed.">        for (int i = 0; i &lt; length; i++) {</span>
+<span class="nc" id="L17">            otp.append(random.nextInt(10));</span>
+        }
+<span class="nc" id="L19">        return otp.toString();</span>
+    }
+
+    public static String generateSalt() {
+<span class="nc" id="L23">        byte[] salt = new byte[16];</span>
+        SecureRandom random;
+        try {
+<span class="nc" id="L26">            random = SecureRandom.getInstanceStrong();</span>
+<span class="nc" id="L27">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L28">            random = new SecureRandom();</span>
+<span class="nc" id="L29">        }</span>
+<span class="nc" id="L30">        random.nextBytes(salt);</span>
+<span class="nc" id="L31">        return Base64.getEncoder().encodeToString(salt);</span>
+    }
+
+    public static String hashOtp(String otp, String salt) {
+        try {
+<span class="nc" id="L36">            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);</span>
+<span class="nc" id="L37">            byte[] hashedBytes = digest.digest((otp + salt).getBytes(StandardCharsets.UTF_8));</span>
+<span class="nc" id="L38">            return Base64.getEncoder().encodeToString(hashedBytes);</span>
+<span class="nc" id="L39">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L40">            throw new RuntimeException(&quot;Hashing algorithm not found: &quot; + HASH_ALGORITHM, e);</span>
+        }
+    }
+
+    public static boolean verifyOtp(String inputOtp, String storedHashedOtp, String salt) {
+<span class="nc" id="L45">        return hashOtp(inputOtp, salt).equals(storedHashedOtp);</span>
+    }
+
+    public static void listAvailableAlgorithms() {
+<span class="nc" id="L49">        System.out.println(&quot;Available MessageDigest algorithms:&quot;);</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        for (java.security.Provider provider : java.security.Security.getProviders()) {</span>
+<span class="nc" id="L51">            provider.getServices().stream()</span>
+<span class="nc" id="L52">                    .filter(service -&gt; &quot;MessageDigest&quot;.equals(service.getType()))</span>
+<span class="nc" id="L53">                    .forEach(service -&gt; System.out.println(service.getAlgorithm()));</span>
+        }
+<span class="nc" id="L55">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

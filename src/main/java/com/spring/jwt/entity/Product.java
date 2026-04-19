@@ -39,6 +39,16 @@ public class Product {
     private Double price;
     private Double offers;
     private Boolean active = true;
+
+    /**
+     * Sellable units on hand. {@code null} means unlimited inventory (no reservation / stock checks).
+     */
+    @Column(name = "stock_on_hand")
+    private Integer stockOnHand;
+
+    @Column(name = "stock_reserved", nullable = false)
+    private Integer stockReserved = 0;
+
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @OneToMany(

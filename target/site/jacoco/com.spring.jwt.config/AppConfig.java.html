@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AppConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">AppConfig.java</span></div><h1>AppConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import com.spring.jwt.config.filter.*;
+import com.spring.jwt.jwt.JwtConfig;
+import com.spring.jwt.jwt.JwtService;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.security.UserDetailsServiceCustom;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.XXssProtectionHeaderWriter;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.filter.ForwardedHeaderFilter;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+
+import com.spring.jwt.exception.SecurityExceptionHandler;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity(
+        securedEnabled = true,
+        jsr250Enabled = true
+)
+<span class="nc" id="L47">@Slf4j</span>
+<span class="nc" id="L48">public class AppConfig {</span>
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    @Lazy
+    private JwtService jwtService;
+
+    @Autowired
+    private JwtConfig jwtConfig;
+
+    @Autowired
+    private CustomAuthenticationProvider customAuthenticationProvider;
+
+    @Autowired
+    private SecurityHeadersFilter securityHeadersFilter;
+
+    @Autowired
+    private XssFilter xssFilter;
+
+    @Autowired
+    private SqlInjectionFilter sqlInjectionFilter;
+
+    @Autowired
+    private RateLimitingFilter rateLimitingFilter;
+
+    @Autowired
+    private com.spring.jwt.jwt.ActiveSessionService activeSessionService;
+
+    @Value(&quot;${app.url.frontend:http://localhost:5173}&quot;)
+    private String frontendUrl;
+
+    @Value(&quot;#{'${app.cors.allowed-origins}'.split(',')}&quot;)
+    private List&lt;String&gt; allowedOrigins;
+
+    @Value(&quot;${app.security.jwt.diagnostic-logging:false}&quot;)
+    private boolean jwtDiagnosticLogging;
+
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder() {
+<span class="nc" id="L89">        return new BCryptPasswordEncoder();</span>
+    }
+
+    @Bean
+    public UserDetailsServiceCustom userDetailsService() {
+<span class="nc" id="L94">        return new UserDetailsServiceCustom(userRepository);</span>
+    }
+
+    @Bean
+    public JwtRefreshTokenFilter jwtRefreshTokenFilter(
+            AuthenticationManager authenticationManager,
+            JwtConfig jwtConfig,
+            JwtService jwtService,
+            UserDetailsServiceCustom userDetailsService,
+            com.spring.jwt.jwt.ActiveSessionService activeSessionService) {
+<span class="nc" id="L104">        return new JwtRefreshTokenFilter(authenticationManager, jwtConfig, jwtService, userDetailsService,</span>
+                activeSessionService, jwtDiagnosticLogging);
+    }
+
+
+    @Bean
+    public ForwardedHeaderFilter forwardedHeaderFilter() {
+<span class="nc" id="L111">        return new ForwardedHeaderFilter();</span>
+    }
+
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                  SecurityExceptionHandler securityExceptionHandler) throws Exception {
+<span class="nc" id="L118">        log.debug(&quot;Configuring security filter chain&quot;);</span>
+<span class="nc" id="L119">        AuthenticationManager authManager = authenticationManager(http);</span>
+<span class="nc" id="L120">        http.csrf(csrf -&gt; csrf</span>
+<span class="nc" id="L121">                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())</span>
+<span class="nc" id="L122">                .ignoringRequestMatchers(</span>
+                        &quot;/api/**&quot;,
+                        &quot;/user/**&quot;,
+                        &quot;/api/users/**&quot;,
+
+<span class="nc" id="L127">                        jwtConfig.getUrl(),</span>
+<span class="nc" id="L128">                        jwtConfig.getRefreshUrl()</span>
+                )
+        );
+
+<span class="nc" id="L132">        http.cors(Customizer.withDefaults());</span>
+
+<span class="nc" id="L134">        http.sessionManagement(session -&gt; session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));</span>
+
+<span class="nc" id="L136">        http.headers(headers -&gt; headers</span>
+<span class="nc" id="L137">                .xssProtection(xss -&gt; xss</span>
+<span class="nc" id="L138">                        .headerValue(XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))</span>
+                // CSP is managed by SecurityHeadersConfig.cspNonceFilter (nonce-based)
+<span class="nc" id="L140">                .frameOptions(frame -&gt; frame.deny())</span>
+<span class="nc" id="L141">                .referrerPolicy(referrer -&gt; referrer</span>
+<span class="nc" id="L142">                        .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))</span>
+<span class="nc" id="L143">                .permissionsPolicy(permissions -&gt; permissions</span>
+<span class="nc" id="L144">                        .policy(&quot;camera=(), microphone=(), geolocation=()&quot;))</span>
+        );
+
+<span class="nc" id="L147">        http.authorizeHttpRequests(authorize -&gt; authorize</span>
+<span class="nc" id="L148">                .requestMatchers(HttpMethod.OPTIONS, &quot;/**&quot;).permitAll()</span>
+
+                // Error endpoint - must be accessible
+<span class="nc" id="L151">                .requestMatchers(&quot;/error&quot;).permitAll()</span>
+
+<span class="nc" id="L153">                .requestMatchers(&quot;/actuator/health&quot;, &quot;/actuator/health/**&quot;).permitAll()</span>
+<span class="nc" id="L154">                .requestMatchers(&quot;/actuator/**&quot;).hasRole(&quot;ADMIN&quot;)</span>
+
+                // Authentication endpoints
+<span class="nc" id="L157">                .requestMatchers(jwtConfig.getUrl()).permitAll()</span>
+<span class="nc" id="L158">                .requestMatchers(jwtConfig.getRefreshUrl()).permitAll()</span>
+<span class="nc" id="L159">                .requestMatchers(&quot;/api/auth/v1/register/**&quot;).permitAll()</span>
+<span class="nc" id="L160">                .requestMatchers(&quot;/api/auth/v1/admin/register/**&quot;).permitAll()</span>
+<span class="nc" id="L161">                .requestMatchers(&quot;/api/v1/users/password/**&quot;).permitAll()</span>
+<span class="nc" id="L162">                .requestMatchers(&quot;/api/users/**&quot;).permitAll()</span>
+
+                // Swagger/OpenAPI endpoints
+<span class="nc" id="L165">                .requestMatchers(</span>
+                        &quot;/v2/api-docs&quot;,
+                        &quot;/v3/api-docs&quot;,
+                        &quot;/v*/a*-docs/**&quot;,
+                        &quot;/swagger-resources&quot;,
+                        &quot;/swagger-resources/**&quot;,
+                        &quot;/configuration/ui&quot;,
+                        &quot;/configuration/security&quot;,
+                        &quot;/swagger-ui/**&quot;,
+                        &quot;/webjars/**&quot;,
+                        &quot;/swagger-ui.html&quot;
+<span class="nc" id="L176">                ).permitAll()</span>
+
+                // Admin dashboard stats — managers may view KPIs (must be before broader /api/v1/admin/**)
+<span class="nc" id="L179">                .requestMatchers(&quot;/api/v1/admin/users/dashboard/stats&quot;).hasAnyRole(&quot;ADMIN&quot;, &quot;MANAGER&quot;)</span>
+                
+                // Admin attendance endpoints - managers can view employee attendance
+<span class="nc" id="L182">                .requestMatchers(&quot;/api/v1/admin/attendance/**&quot;).hasAnyRole(&quot;ADMIN&quot;, &quot;MANAGER&quot;)</span>
+                
+                // Admin users endpoints - managers can view employee details
+<span class="nc" id="L185">                .requestMatchers(&quot;/api/v1/admin/users/employees/**&quot;).hasAnyRole(&quot;ADMIN&quot;, &quot;MANAGER&quot;)</span>
+
+<span class="nc" id="L187">                .requestMatchers(&quot;/api/v1/admin/employees/**&quot;).hasAnyRole(&quot;ADMIN&quot;, &quot;MANAGER&quot;)</span>
+
+                // Other admin endpoints
+<span class="nc" id="L190">                .requestMatchers(&quot;/api/v1/admin/**&quot;).hasRole(&quot;ADMIN&quot;)</span>
+
+                // Attendance endpoints - must come before general /api/v1/** rules
+<span class="nc" id="L193">                .requestMatchers(&quot;/api/v1/attendance/**&quot;).authenticated()</span>
+
+                // Documents endpoints - must come before general /api/v1/** rules
+<span class="nc" id="L196">                .requestMatchers(&quot;/api/v1/documents/uploadByUser&quot;).permitAll()</span>
+<span class="nc" id="L197">                .requestMatchers(&quot;/api/v1/documents/**&quot;).hasAnyRole(&quot;ADMIN&quot;, &quot;MANAGER&quot;)</span>
+
+                // Interests endpoints - must come before general /api/v1/** rules
+<span class="nc" id="L200">                .requestMatchers(&quot;/api/v1/interests/**&quot;).authenticated()</span>
+
+                // Public endpoints
+<span class="nc" id="L203">                .requestMatchers(&quot;/api/public/**&quot;).permitAll()</span>
+<span class="nc" id="L204">                .requestMatchers(&quot;/user/**&quot;).permitAll()</span>
+<span class="nc" id="L205">                .requestMatchers(&quot;/api/v1/survey/**&quot;).permitAll()</span>
+<span class="nc" id="L206">                .requestMatchers(&quot;/api/v1/farmer-selfie/**&quot;).permitAll()</span>
+<span class="nc" id="L207">                .requestMatchers(&quot;/api/v1/farmer-form/**&quot;).permitAll()</span>
+<span class="nc" id="L208">                .requestMatchers(&quot;/api/v1/exam/**&quot;).permitAll()</span>
+<span class="nc" id="L209">                .requestMatchers(&quot;/api/completeProfile/getProfile/**&quot;).permitAll()</span>
+<span class="nc" id="L210">                .requestMatchers(&quot;/api/v1/complete-profile/public/**&quot;).permitAll()</span>
+<span class="nc" id="L211">                .requestMatchers(&quot;/api/v1/employeeFarmerSurveys/**&quot;).permitAll()</span>
+<span class="nc" id="L212">                .requestMatchers(&quot;/api/v1/farmer_selfie_Survey/**&quot;).permitAll()</span>
+<span class="nc" id="L213">                .requestMatchers(&quot;/api/v1/lab_report/**&quot;).permitAll()</span>
+<span class="nc" id="L214">                .requestMatchers(&quot;/api/v1/products/**&quot;).permitAll()</span>
+<span class="nc" id="L215">                .requestMatchers(&quot;/api/v1/company-weekly-off/**&quot;).permitAll()</span>
+<span class="nc" id="L216">                .requestMatchers(&quot;/api/v1/product-photo/**&quot;).permitAll()</span>
+<span class="nc" id="L217">                .requestMatchers(&quot;/api/v1/employees/**&quot;).permitAll()</span>
+<span class="nc" id="L218">                .requestMatchers(&quot;/api/v1/emp-documents&quot;).permitAll()</span>
+<span class="nc" id="L219">                .requestMatchers(&quot;/api/v1/farmer-payment/**&quot;).authenticated()</span>
+<span class="nc" id="L220">                .requestMatchers(&quot;/api/customer/orders/**&quot;).authenticated()</span>
+<span class="nc" id="L221">                .requestMatchers(&quot;/api/v2/checkout/**&quot;).authenticated()</span>
+
+                // Catch-all for remaining /api/v1/** endpoints
+<span class="nc" id="L224">                .requestMatchers(&quot;/api/v1/**&quot;).permitAll()</span>
+<span class="nc" id="L225">                .requestMatchers(HttpMethod.GET, &quot;/api/payment/queue/status&quot;).permitAll()</span>
+<span class="nc" id="L226">                .requestMatchers(&quot;/api/payment/queue/**&quot;).hasRole(&quot;ADMIN&quot;)</span>
+<span class="nc" id="L227">                .requestMatchers(&quot;/api/payment/product/**&quot;).permitAll()</span>
+<span class="nc" id="L228">                .requestMatchers(&quot;/api/payment/checkout/**&quot;).permitAll()</span>
+<span class="nc" id="L229">                .requestMatchers(&quot;/api/payment/farmer/**&quot;).permitAll()</span>
+
+
+<span class="nc" id="L232">                .anyRequest().authenticated());</span>
+
+<span class="nc" id="L234">        http.exceptionHandling(ex -&gt; ex</span>
+<span class="nc" id="L235">                .authenticationEntryPoint(securityExceptionHandler)</span>
+<span class="nc" id="L236">                .accessDeniedHandler(securityExceptionHandler));</span>
+
+<span class="nc" id="L238">        log.debug(&quot;Configuring security filters&quot;);</span>
+<span class="nc" id="L239">        JwtTokenAuthenticationFilter jwtTokenFilter =</span>
+                new JwtTokenAuthenticationFilter(
+                        jwtConfig,
+                        jwtService,
+<span class="nc" id="L243">                        userDetailsService(),</span>
+                        activeSessionService,
+                        jwtDiagnosticLogging
+                );
+
+<span class="nc" id="L248">        JwtUsernamePasswordAuthenticationFilter loginFilter =</span>
+                new JwtUsernamePasswordAuthenticationFilter(
+                        authManager,
+                        jwtConfig,
+                        jwtService,
+                        userRepository,
+                        activeSessionService,
+                        jwtDiagnosticLogging
+                );
+
+<span class="nc" id="L258">        JwtRefreshTokenFilter refreshTokenFilter =</span>
+                new JwtRefreshTokenFilter(
+                        authManager,
+                        jwtConfig,
+                        jwtService,
+<span class="nc" id="L263">                        userDetailsService(),</span>
+                        activeSessionService,
+                        jwtDiagnosticLogging
+                );
+
+<span class="nc" id="L268">        http.addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);</span>
+<span class="nc" id="L269">        http.addFilterAt(loginFilter, UsernamePasswordAuthenticationFilter.class);</span>
+<span class="nc" id="L270">        http.addFilterAfter(refreshTokenFilter, JwtUsernamePasswordAuthenticationFilter.class);</span>
+
+<span class="nc" id="L272">        http.addFilterBefore(rateLimitingFilter, JwtTokenAuthenticationFilter.class);</span>
+<span class="nc" id="L273">        http.addFilterBefore(xssFilter, JwtTokenAuthenticationFilter.class);</span>
+<span class="nc" id="L274">        http.addFilterBefore(sqlInjectionFilter, JwtTokenAuthenticationFilter.class);</span>
+<span class="nc" id="L275">        http.addFilterBefore(securityHeadersFilter, JwtTokenAuthenticationFilter.class);</span>
+<span class="nc" id="L276">        log.debug(&quot;Security configuration completed&quot;);</span>
+<span class="nc" id="L277">        return http.build();</span>
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+<span class="nc" id="L282">        log.info(&quot;CORS configured - Allowed Origins: {}&quot;, allowedOrigins);</span>
+
+<span class="nc" id="L284">        CorsConfiguration config = new CorsConfiguration();</span>
+<span class="nc" id="L285">        config.setAllowedOrigins(allowedOrigins);</span>
+<span class="nc" id="L286">        config.setAllowedHeaders(Arrays.asList(&quot;*&quot;));</span>
+<span class="nc" id="L287">        config.setAllowedMethods(Arrays.asList(&quot;GET&quot;, &quot;POST&quot;, &quot;PUT&quot;, &quot;DELETE&quot;, &quot;OPTIONS&quot;, &quot;PATCH&quot;));</span>
+<span class="nc" id="L288">        config.setAllowCredentials(true);</span>
+<span class="nc" id="L289">        config.setExposedHeaders(Arrays.asList(&quot;Authorization&quot;));</span>
+<span class="nc" id="L290">        config.setMaxAge(3600L);</span>
+
+<span class="nc" id="L292">        return (HttpServletRequest request) -&gt; config;</span>
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
+<span class="nc" id="L297">        AuthenticationManagerBuilder builder = http.getSharedObject(AuthenticationManagerBuilder.class);</span>
+<span class="nc" id="L298">        builder.userDetailsService(userDetailsService())</span>
+<span class="nc" id="L299">                .passwordEncoder(passwordEncoder());</span>
+<span class="nc" id="L300">        return builder.build();</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.exception</a> &gt; <span class="el_source">DocumentExceptionHandler.java</span></div><h1>DocumentExceptionHandler.java</h1><pre class="source lang-java linenums">package com.spring.jwt.exception;
+
+import com.spring.jwt.dto.ErrorResponseDTO;
+import com.spring.jwt.config.DocumentProperties;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+
+/**
+ * Specialized exception handler for document management APIs
+ * 
+ * This handler focuses only on document-specific exceptions that need
+ * specialized handling beyond what the global exception handler provides.
+ * It works in conjunction with GlobalException handler, not as a replacement.
+ *
+ * @author Document Management System
+ * @since 2.0
+ */
+@RestControllerAdvice(basePackages = &quot;com.spring.jwt.Document&quot;)
+<span class="nc" id="L26">@Slf4j</span>
+<span class="nc" id="L27">@RequiredArgsConstructor</span>
+public class DocumentExceptionHandler
+{
+
+    private final DocumentProperties documentProperties;
+
+    /**
+     * Handle file upload size exceeded errors - Document specific handling with file size info
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleMaxUploadSizeExceeded
+    (
+            MaxUploadSizeExceededException ex, HttpServletRequest request
+    )
+    {
+
+<span class="nc" id="L43">        log.warn(&quot;File upload size exceeded for document request: {} {}&quot;, request.getMethod(), request.getRequestURI());</span>
+
+<span class="nc" id="L45">        long maxSizeMB = documentProperties.getMaxFileSizeMB();</span>
+
+<span class="nc" id="L47">        ErrorResponseDTO error = ErrorResponseDTO.fileUploadError(</span>
+<span class="nc" id="L48">                request.getRequestURI(),</span>
+<span class="nc" id="L49">                request.getMethod(),</span>
+<span class="nc" id="L50">                String.format(&quot;File size exceeds the maximum allowed limit of %dMB&quot;, maxSizeMB),</span>
+                maxSizeMB
+        );
+
+<span class="nc" id="L54">        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);</span>
+    }
+
+    /**
+     * Handle multipart/file upload errors - Document specific handling
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleMultipartException
+    (
+            MultipartException ex, HttpServletRequest request
+    )
+    {
+
+<span class="nc" id="L67">        log.warn(&quot;Multipart upload error for document request: {} {} - {}&quot;,</span>
+<span class="nc" id="L68">                request.getMethod(), request.getRequestURI(), ex.getMessage());</span>
+
+        String reason;
+<span class="nc bnc" id="L71" title="All 2 branches missed.">        if (ex.getCause() instanceof MaxUploadSizeExceededException)</span>
+        {
+<span class="nc" id="L73">            reason = String.format(&quot;File size exceeds the maximum allowed limit of %dMB&quot;,</span>
+<span class="nc" id="L74">                    documentProperties.getMaxFileSizeMB());</span>
+        } else
+        {
+<span class="nc" id="L77">            reason = &quot;Invalid file upload. Please ensure you're uploading a valid file.&quot;;</span>
+        }
+
+<span class="nc" id="L80">        ErrorResponseDTO error = ErrorResponseDTO.fileUploadError</span>
+<span class="nc" id="L81">                (</span>
+<span class="nc" id="L82">                request.getRequestURI(),</span>
+<span class="nc" id="L83">                request.getMethod(),</span>
+                reason,
+<span class="nc" id="L85">                documentProperties.getMaxFileSizeMB()</span>
+                );
+
+<span class="nc" id="L88">        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);</span>
+    }
+
+
+
+    /**
+     * Handle document-specific business validation exceptions
+     */
+    @ExceptionHandler(InvalidDocumentException.class)
+    public ResponseEntity&lt;ErrorResponseDTO&gt; handleInvalidDocumentException
+    (
+            InvalidDocumentException ex, HttpServletRequest request
+    )
+    {
+
+<span class="nc" id="L103">        log.warn(&quot;Invalid document error for request: {} {} - {}&quot;,</span>
+<span class="nc" id="L104">                request.getMethod(), request.getRequestURI(), ex.getMessage());</span>
+
+<span class="nc" id="L106">        ErrorResponseDTO error = ErrorResponseDTO.fileUploadError(</span>
+<span class="nc" id="L107">                request.getRequestURI(),</span>
+<span class="nc" id="L108">                request.getMethod(),</span>
+<span class="nc" id="L109">                ex.getMessage(),</span>
+<span class="nc" id="L110">                documentProperties.getMaxFileSizeMB()</span>
+        );
+
+<span class="nc" id="L113">        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckoutOrderLine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.checkout</a> &gt; <span class="el_source">CheckoutOrderLine.java</span></div><h1>CheckoutOrderLine.java</h1><pre class="source lang-java linenums">package com.spring.jwt.checkout;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+
+@Entity
+@Table(name = &quot;checkout_order_lines&quot;)
+@Getter
+<span class="nc" id="L11">@Setter</span>
+<span class="nc" id="L12">@NoArgsConstructor</span>
+<span class="nc" id="L13">@AllArgsConstructor</span>
+<span class="nc bnc" id="L14" title="All 2 branches missed.">@Builder</span>
+public class CheckoutOrderLine {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+<span class="nc" id="L19">    private Long id;</span>
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = &quot;order_id&quot;, nullable = false)
+<span class="nc" id="L23">    private CheckoutOrder order;</span>
+
+    @Column(name = &quot;product_id&quot;, nullable = false)
+<span class="nc" id="L26">    private Long productId;</span>
+
+    @Column(nullable = false)
+<span class="nc" id="L29">    private Integer quantity;</span>
+
+    @Column(name = &quot;unit_price_snapshot&quot;, nullable = false, precision = 14, scale = 2)
+<span class="nc" id="L32">    private BigDecimal unitPriceSnapshot;</span>
+
+    @Column(name = &quot;line_total&quot;, nullable = false, precision = 14, scale = 2)
+<span class="nc" id="L35">    private BigDecimal lineTotal;</span>
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = &quot;fulfillment_status&quot;, nullable = false, length = 30)
+    @Builder.Default
+<span class="nc" id="L40">    private CheckoutLineFulfillmentStatus fulfillmentStatus = CheckoutLineFulfillmentStatus.PENDING;</span>
+
+    @Version
+<span class="nc" id="L43">    private Long version;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

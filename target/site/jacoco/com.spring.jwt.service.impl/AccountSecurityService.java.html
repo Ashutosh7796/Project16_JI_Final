@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AccountSecurityService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.service.impl</a> &gt; <span class="el_source">AccountSecurityService.java</span></div><h1>AccountSecurityService.java</h1><pre class="source lang-java linenums">package com.spring.jwt.service.impl;
+
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.BaseException;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.utils.DataMaskingUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+
+@Component
+<span class="nc" id="L16">@RequiredArgsConstructor</span>
+<span class="nc" id="L17">@Slf4j</span>
+public class AccountSecurityService {
+
+    private final UserRepository userRepository;
+
+    public void checkAccountLock(String email) {
+<span class="nc bnc" id="L23" title="All 2 branches missed.">        if (isAccountLocked(email)) {</span>
+<span class="nc" id="L24">            log.warn(&quot;Login attempt on locked account: {}&quot;, DataMaskingUtils.maskEmail(email));</span>
+<span class="nc" id="L25">            throw new BaseException(String.valueOf(HttpStatus.LOCKED.value()), </span>
+                &quot;Account is temporarily locked due to multiple failed login attempts. Please try again later.&quot;);
+        }
+<span class="nc" id="L28">    }</span>
+
+    public boolean isAccountLocked(String email) {
+<span class="nc" id="L31">        User user = userRepository.findByEmail(email);</span>
+<span class="nc bnc" id="L32" title="All 2 branches missed.">        if (user == null) {</span>
+<span class="nc" id="L33">            return false;</span>
+        }
+        
+<span class="nc bnc" id="L36" title="All 2 branches missed.">        return user.getAccountLockedUntil() != null &amp;&amp; </span>
+<span class="nc bnc" id="L37" title="All 2 branches missed.">               LocalDateTime.now().isBefore(user.getAccountLockedUntil());</span>
+    }
+
+    @Transactional
+    public void lockAccount(String email, int lockDurationMinutes) {
+<span class="nc" id="L42">        User user = userRepository.findByEmail(email);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">        if (user != null) {</span>
+<span class="nc" id="L44">            user.setAccountLocked(true);</span>
+<span class="nc" id="L45">            user.setAccountLockedUntil(LocalDateTime.now().plusMinutes(lockDurationMinutes));</span>
+<span class="nc" id="L46">            userRepository.save(user);</span>
+<span class="nc" id="L47">            log.warn(&quot;Account locked for email: {}&quot;, DataMaskingUtils.maskEmail(email));</span>
+        }
+<span class="nc" id="L49">    }</span>
+
+    @Transactional
+    public void resetFailedAttempts(String email) {
+<span class="nc" id="L53">        User user = userRepository.findByEmail(email);</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        if (user != null) {</span>
+<span class="nc" id="L55">            user.setFailedLoginAttempts(0);</span>
+<span class="nc" id="L56">            user.setAccountLocked(false);</span>
+<span class="nc" id="L57">            user.setAccountLockedUntil(null);</span>
+<span class="nc" id="L58">            userRepository.save(user);</span>
+        }
+<span class="nc" id="L60">    }</span>
+
+    @Transactional
+    public void incrementFailedAttempts(String email, int maxFailedAttempts) {
+<span class="nc" id="L64">        User user = userRepository.findByEmail(email);</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        if (user != null) {</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">            int attempts = user.getFailedLoginAttempts() != null ? user.getFailedLoginAttempts() : 0;</span>
+<span class="nc" id="L67">            attempts++;</span>
+<span class="nc" id="L68">            user.setFailedLoginAttempts(attempts);</span>
+            
+<span class="nc bnc" id="L70" title="All 2 branches missed.">            if (attempts &gt;= maxFailedAttempts) {</span>
+<span class="nc" id="L71">                user.setAccountLocked(true);</span>
+<span class="nc" id="L72">                user.setAccountLockedUntil(LocalDateTime.now().plusMinutes(30));</span>
+<span class="nc" id="L73">                log.warn(&quot;Account locked for email: {}&quot;, DataMaskingUtils.maskEmail(email));</span>
+            }
+            
+<span class="nc" id="L76">            userRepository.save(user);</span>
+        }
+<span class="nc" id="L78">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

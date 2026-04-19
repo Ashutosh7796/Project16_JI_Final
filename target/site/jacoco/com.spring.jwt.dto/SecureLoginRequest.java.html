@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecureLoginRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">SecureLoginRequest.java</span></div><h1>SecureLoginRequest.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+<span class="nc bnc" id="L11" title="All 38 branches missed.">@Data</span>
+<span class="nc" id="L12">@AllArgsConstructor</span>
+<span class="nc" id="L13">@NoArgsConstructor</span>
+@Schema(description = &quot;Secure login request with device information&quot;)
+public class SecureLoginRequest {
+
+    @Schema(description = &quot;User's email address&quot;, example = &quot;user@example.com&quot;)
+    @NotBlank(message = &quot;Email is required&quot;)
+    @Email(message = &quot;Please provide a valid email address&quot;)
+<span class="nc" id="L20">    private String email;</span>
+
+    @Schema(description = &quot;User's password&quot;, example = &quot;SecurePass@123&quot;)
+    @NotBlank(message = &quot;Password is required&quot;)
+    @Size(min = 8, max = 128, message = &quot;Password must be between 8 and 128 characters&quot;)
+<span class="nc" id="L25">    private String password;</span>
+
+    @Schema(description = &quot;Device information for fingerprinting&quot;)
+<span class="nc" id="L28">    private DeviceInfo deviceInfo;</span>
+
+<span class="nc" id="L30">    @Schema(description = &quot;Remember this device&quot;, example = &quot;true&quot;)</span>
+<span class="nc" id="L31">    private Boolean rememberDevice = false;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

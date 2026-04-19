@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DocumentTypeDeserializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">DocumentTypeDeserializer.java</span></div><h1>DocumentTypeDeserializer.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.spring.jwt.Enums.DocumentType;
+
+import java.io.IOException;
+
+/**
+ * Custom JSON deserializer for DocumentType enum
+ * Handles case-insensitive deserialization from JSON
+ */
+<span class="nc" id="L14">public class DocumentTypeDeserializer extends JsonDeserializer&lt;DocumentType&gt; {</span>
+
+    @Override
+    public DocumentType deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+<span class="nc" id="L18">        String value = p.getText();</span>
+        
+<span class="nc bnc" id="L20" title="All 4 branches missed.">        if (value == null || value.trim().isEmpty()) {</span>
+<span class="nc" id="L21">            throw new IllegalArgumentException(&quot;Document type cannot be null or empty&quot;);</span>
+        }
+
+        // Try to match by enum constant name (case-insensitive)
+<span class="nc bnc" id="L25" title="All 2 branches missed.">        for (DocumentType type : DocumentType.values()) {</span>
+<span class="nc bnc" id="L26" title="All 2 branches missed.">            if (type.name().equalsIgnoreCase(value.trim())) {</span>
+<span class="nc" id="L27">                return type;</span>
+            }
+        }
+
+        // Try to match by display name (case-insensitive)
+<span class="nc bnc" id="L32" title="All 2 branches missed.">        for (DocumentType type : DocumentType.values()) {</span>
+<span class="nc bnc" id="L33" title="All 2 branches missed.">            if (type.getDisplayName().equalsIgnoreCase(value.trim())) {</span>
+<span class="nc" id="L34">                return type;</span>
+            }
+        }
+
+        // If no match found, throw exception
+<span class="nc" id="L39">        throw new IllegalArgumentException(</span>
+<span class="nc" id="L40">            String.format(&quot;Invalid document type: '%s'. Valid types are: %s&quot;, </span>
+                value, 
+<span class="nc" id="L42">                getValidTypeNames()</span>
+            )
+        );
+    }
+
+    private String getValidTypeNames() {
+<span class="nc" id="L48">        DocumentType[] types = DocumentType.values();</span>
+<span class="nc" id="L49">        StringBuilder sb = new StringBuilder();</span>
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        for (int i = 0; i &lt; types.length; i++) {</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">            if (i &gt; 0) sb.append(&quot;, &quot;);</span>
+<span class="nc" id="L52">            sb.append(types[i].name());</span>
+        }
+<span class="nc" id="L54">        return sb.toString();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecurityHeadersConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.config</a> &gt; <span class="el_source">SecurityHeadersConfig.java</span></div><h1>SecurityHeadersConfig.java</h1><pre class="source lang-java linenums">package com.spring.jwt.config;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.web.header.HeaderWriter;
+import org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Base64;
+
+/**
+ * Configuration for enhanced security headers
+ */
+@Configuration
+<span class="nc" id="L27">public class SecurityHeadersConfig {</span>
+
+<span class="nc" id="L29">    private static final SecureRandom RANDOM = new SecureRandom();</span>
+    private static final String CSP_NONCE_ATTRIBUTE = &quot;cspNonce&quot;;
+    
+    /**
+     * Generates nonce values for CSP
+     */
+    @Bean
+    public OncePerRequestFilter cspNonceFilter() {
+<span class="nc" id="L37">        return new OncePerRequestFilter() {</span>
+            @Override
+            protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                           FilterChain filterChain) throws ServletException, IOException {
+<span class="nc" id="L41">                byte[] nonceBytes = new byte[16];</span>
+<span class="nc" id="L42">                RANDOM.nextBytes(nonceBytes);</span>
+<span class="nc" id="L43">                String nonce = Base64.getEncoder().encodeToString(nonceBytes);</span>
+
+<span class="nc" id="L45">                request.setAttribute(CSP_NONCE_ATTRIBUTE, nonce);</span>
+
+<span class="nc" id="L47">                String cspHeader = getContentSecurityPolicy(nonce);</span>
+<span class="nc" id="L48">                response.setHeader(&quot;Content-Security-Policy&quot;, cspHeader);</span>
+                
+<span class="nc" id="L50">                filterChain.doFilter(request, response);</span>
+<span class="nc" id="L51">            }</span>
+        };
+    }
+    
+    /**
+     * Creates a Content Security Policy with nonce
+     */
+    private String getContentSecurityPolicy(String nonce) {
+<span class="nc" id="L59">        return String.format(</span>
+            &quot;default-src 'self'; &quot; +
+            &quot;script-src 'self' 'nonce-%s' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; &quot; +
+            &quot;style-src 'self' 'nonce-%s' https://fonts.googleapis.com https://cdn.jsdelivr.net; &quot; +
+            &quot;img-src 'self' data:; &quot; +
+            &quot;font-src 'self' https://fonts.gstatic.com; &quot; +
+            &quot;connect-src 'self'; &quot; +
+            &quot;frame-src 'none'; &quot; +
+            &quot;object-src 'none'; &quot; +
+            &quot;base-uri 'self'; &quot; +
+            &quot;form-action 'self'; &quot; +
+            &quot;frame-ancestors 'none'; &quot; +
+            &quot;upgrade-insecure-requests;&quot;,
+            nonce, nonce);
+    }
+    
+    /**
+     * Headers for API endpoints (no caching allowed)
+     */
+    @Bean
+    public HeaderWriter apiSecurityHeaders() {
+<span class="nc" id="L80">        RequestMatcher apiMatcher = new OrRequestMatcher(Arrays.asList(</span>
+                new AntPathRequestMatcher(&quot;/api/**&quot;),
+                new AntPathRequestMatcher(&quot;/questions/**&quot;)
+        ));
+        
+<span class="nc" id="L85">        return new DelegatingRequestMatcherHeaderWriter(</span>
+                apiMatcher,
+                new StaticHeadersWriter(
+                        &quot;Cache-Control&quot;, &quot;no-store, no-cache, must-revalidate, max-age=0&quot;,
+                        &quot;Pragma&quot;, &quot;no-cache&quot;,
+                        &quot;Expires&quot;, &quot;0&quot;,
+                        &quot;X-Content-Type-Options&quot;, &quot;nosniff&quot;,
+                        &quot;X-Frame-Options&quot;, &quot;DENY&quot;,
+                        &quot;X-XSS-Protection&quot;, &quot;1; mode=block&quot;,
+                        &quot;Strict-Transport-Security&quot;, &quot;max-age=31536000; includeSubDomains&quot;
+                )
+        );
+    }
+    
+    /**
+     * Headers for static resources (caching allowed)
+     */
+    @Bean
+    public HeaderWriter staticResourcesHeaders() {
+<span class="nc" id="L104">        RequestMatcher staticResourcesMatcher = new OrRequestMatcher(Arrays.asList(</span>
+                new AntPathRequestMatcher(&quot;/static/**&quot;),
+                new AntPathRequestMatcher(&quot;/css/**&quot;),
+                new AntPathRequestMatcher(&quot;/js/**&quot;),
+                new AntPathRequestMatcher(&quot;/images/**&quot;),
+                new AntPathRequestMatcher(&quot;/webjars/**&quot;),
+                new AntPathRequestMatcher(&quot;/**/*.ico&quot;)
+        ));
+        
+<span class="nc" id="L113">        return new DelegatingRequestMatcherHeaderWriter(</span>
+                staticResourcesMatcher,
+                new StaticHeadersWriter(
+                        &quot;Cache-Control&quot;, &quot;max-age=31536000, public&quot;,
+                        &quot;X-Content-Type-Options&quot;, &quot;nosniff&quot;
+                )
+        );
+    }
+    
+    /**
+     * Creates a referrer policy header writer
+     */
+    @Bean
+    public ReferrerPolicyHeaderWriter referrerPolicyHeaderWriter() {
+<span class="nc" id="L127">        return new ReferrerPolicyHeaderWriter(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN);</span>
+    }
+    
+    /**
+     * Creates a Permissions-Policy header
+     */
+    @Bean
+    public HeaderWriter permissionsPolicyHeaderWriter() {
+<span class="nc" id="L135">        return new StaticHeadersWriter(</span>
+                &quot;Permissions-Policy&quot;, 
+                &quot;camera=(), microphone=(), geolocation=(), payment=(), usb=()&quot;);
+    }
+    
+    /**
+     * Creates the Feature Policy header
+     */
+    @Bean
+    public HeaderWriter featurePolicyHeaderWriter() {
+<span class="nc" id="L145">        return new StaticHeadersWriter(</span>
+                &quot;Feature-Policy&quot;, 
+                &quot;camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'&quot;);
+    }
+    
+    /**
+     * Creates a Cross-Origin-Embedder-Policy header
+     */
+    @Bean
+    public HeaderWriter crossOriginEmbedderPolicyHeaderWriter() {
+<span class="nc" id="L155">        return new StaticHeadersWriter(&quot;Cross-Origin-Embedder-Policy&quot;, &quot;require-corp&quot;);</span>
+    }
+    
+    /**
+     * Creates a Cross-Origin-Opener-Policy header
+     */
+    @Bean
+    public HeaderWriter crossOriginOpenerPolicyHeaderWriter() {
+<span class="nc" id="L163">        return new StaticHeadersWriter(&quot;Cross-Origin-Opener-Policy&quot;, &quot;same-origin&quot;);</span>
+    }
+    
+    /**
+     * Creates a Cross-Origin-Resource-Policy header
+     */
+    @Bean
+    public HeaderWriter crossOriginResourcePolicyHeaderWriter() {
+<span class="nc" id="L171">        return new StaticHeadersWriter(&quot;Cross-Origin-Resource-Policy&quot;, &quot;same-origin&quot;);</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

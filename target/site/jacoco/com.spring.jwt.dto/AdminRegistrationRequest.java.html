@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminRegistrationRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">AdminRegistrationRequest.java</span></div><h1>AdminRegistrationRequest.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+<span class="nc bnc" id="L9" title="All 70 branches missed.">@Data</span>
+<span class="nc" id="L10">@AllArgsConstructor</span>
+<span class="nc" id="L11">@NoArgsConstructor</span>
+@Schema(description = &quot;Admin registration request with additional security fields&quot;)
+public class AdminRegistrationRequest {
+
+    @Schema(description = &quot;Admin's email address&quot;, example = &quot;admin@company.com&quot;)
+    @NotBlank(message = &quot;Email is required&quot;)
+    @Email(message = &quot;Please provide a valid email address&quot;)
+    @Size(max = 100, message = &quot;Email must not exceed 100 characters&quot;)
+<span class="nc" id="L19">    private String email;</span>
+
+    @Schema(description = &quot;Admin's mobile number&quot;, example = &quot;1234567890&quot;)
+    @NotNull(message = &quot;Mobile number is required&quot;)
+    @Min(value = 1000000000L, message = &quot;Mobile number must be at least 10 digits&quot;)
+    @Max(value = 9999999999L, message = &quot;Mobile number must not exceed 10 digits&quot;)
+<span class="nc" id="L25">    private Long mobileNumber;</span>
+
+    @Schema(description = &quot;Admin's password&quot;, example = &quot;AdminSecurePass@123&quot;)
+    @NotBlank(message = &quot;Password is required&quot;)
+    @Size(min = 12, max = 128, message = &quot;Admin password must be between 12 and 128 characters&quot;)
+    @Pattern(regexp = &quot;^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&amp;])[A-Za-z\\d@$!%*?&amp;]{12,}$&quot;,
+             message = &quot;Admin password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character&quot;)
+<span class="nc" id="L32">    private String password;</span>
+
+    @Schema(description = &quot;Password confirmation&quot;, example = &quot;AdminSecurePass@123&quot;)
+    @NotBlank(message = &quot;Password confirmation is required&quot;)
+<span class="nc" id="L36">    private String confirmPassword;</span>
+
+    @Schema(description = &quot;Admin's first name&quot;, example = &quot;Admin&quot;)
+    @NotBlank(message = &quot;First name is required&quot;)
+    @Size(min = 2, max = 50, message = &quot;First name must be between 2 and 50 characters&quot;)
+<span class="nc" id="L41">    private String firstName;</span>
+
+    @Schema(description = &quot;Admin's last name&quot;, example = &quot;User&quot;)
+    @NotBlank(message = &quot;Last name is required&quot;)
+    @Size(min = 2, max = 50, message = &quot;Last name must be between 2 and 50 characters&quot;)
+<span class="nc" id="L46">    private String lastName;</span>
+
+    @Schema(description = &quot;Admin registration secret key&quot;, example = &quot;ADMIN_SECRET_KEY_2024&quot;)
+    @NotBlank(message = &quot;Admin secret key is required&quot;)
+<span class="nc" id="L50">    private String adminSecretKey;</span>
+
+    @Schema(description = &quot;Department or role description (optional)&quot;, example = &quot;IT Administrator&quot;)
+    @Size(max = 100, message = &quot;Department must not exceed 100 characters&quot;)
+<span class="nc" id="L54">    private String department;</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

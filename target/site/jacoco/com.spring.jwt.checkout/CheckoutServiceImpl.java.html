@@ -1,0 +1,706 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CheckoutServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.checkout</a> &gt; <span class="el_source">CheckoutServiceImpl.java</span></div><h1>CheckoutServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.checkout;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.spring.jwt.Payment.CcAvenueConfig;
+import com.spring.jwt.Payment.CcAvenuePaymentRequest;
+import com.spring.jwt.Payment.CcAvenuePaymentService;
+import com.spring.jwt.Product.ProductRepository;
+import com.spring.jwt.checkout.dto.*;
+import com.spring.jwt.entity.Product;
+import com.spring.jwt.exception.ResourceNotFoundException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDateTime;
+import java.util.*;
+
+@Service
+<span class="nc" id="L28">@RequiredArgsConstructor</span>
+<span class="nc" id="L29">@Slf4j</span>
+public class CheckoutServiceImpl implements CheckoutService {
+
+<span class="nc" id="L32">    private static final BigDecimal PRICE_TOLERANCE = new BigDecimal(&quot;0.02&quot;);</span>
+
+    private CheckoutService self;
+
+    @Autowired
+    public void setSelf(@Lazy CheckoutService self) {
+<span class="nc" id="L38">        this.self = self;</span>
+<span class="nc" id="L39">    }</span>
+
+    private final CheckoutOrderRepository orderRepository;
+    private final CheckoutReservationRepository reservationRepository;
+    private final CheckoutGatewayPaymentRepository gatewayPaymentRepository;
+    private final CheckoutPaymentEventRepository paymentEventRepository;
+    private final CheckoutRefundRepository refundRepository;
+    private final ProductRepository productRepository;
+    private final ProductInventoryRepository inventoryRepository;
+    private final CcAvenuePaymentService ccAvenuePaymentService;
+    private final CcAvenueConfig ccAvenueConfig;
+    private final CheckoutProperties checkoutProperties;
+    private final CcAvenueOrderStatusClient ccAvenueOrderStatusClient;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    @Transactional
+    public CheckoutOrderResponse createOrder(Long userId, CreateCheckoutOrderRequest request, String checkoutIdempotencyKey) {
+<span class="nc bnc" id="L57" title="All 4 branches missed.">        if (checkoutIdempotencyKey != null &amp;&amp; !checkoutIdempotencyKey.isBlank()) {</span>
+<span class="nc" id="L58">            Optional&lt;CheckoutOrder&gt; existing = orderRepository.findByUserIdAndCheckoutIdempotencyKey(userId, checkoutIdempotencyKey.trim());</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">            if (existing.isPresent()) {</span>
+<span class="nc" id="L60">                return mapOrder(existing.get());</span>
+            }
+        }
+
+<span class="nc" id="L64">        Map&lt;Long, Product&gt; productsById = loadProducts(request);</span>
+<span class="nc" id="L65">        List&lt;CheckoutOrderLine&gt; lines = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L66">        BigDecimal total = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);</span>
+<span class="nc" id="L67">        StringBuilder hashInput = new StringBuilder();</span>
+
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        for (CheckoutLineRequest lineReq : request.getLines()) {</span>
+<span class="nc" id="L70">            Product p = productsById.get(lineReq.getProductId());</span>
+<span class="nc" id="L71">            BigDecimal unit = unitSellingPrice(p);</span>
+<span class="nc" id="L72">            BigDecimal lineTotal = unit.multiply(BigDecimal.valueOf(lineReq.getQuantity())).setScale(2, RoundingMode.HALF_UP);</span>
+<span class="nc" id="L73">            total = total.add(lineTotal);</span>
+<span class="nc" id="L74">            hashInput.append(p.getProductId()).append(':').append(unit).append(':').append(lineReq.getQuantity()).append('|');</span>
+
+<span class="nc" id="L76">            validateAvailabilitySoft(p, lineReq.getQuantity());</span>
+
+<span class="nc" id="L78">            CheckoutOrderLine line = CheckoutOrderLine.builder()</span>
+<span class="nc" id="L79">                    .productId(p.getProductId())</span>
+<span class="nc" id="L80">                    .quantity(lineReq.getQuantity())</span>
+<span class="nc" id="L81">                    .unitPriceSnapshot(unit)</span>
+<span class="nc" id="L82">                    .lineTotal(lineTotal)</span>
+<span class="nc" id="L83">                    .fulfillmentStatus(CheckoutLineFulfillmentStatus.PENDING)</span>
+<span class="nc" id="L84">                    .build();</span>
+<span class="nc" id="L85">            lines.add(line);</span>
+<span class="nc" id="L86">        }</span>
+
+<span class="nc" id="L88">        CheckoutOrder order = CheckoutOrder.builder()</span>
+<span class="nc" id="L89">                .userId(userId)</span>
+<span class="nc" id="L90">                .status(CheckoutOrderStatus.PENDING)</span>
+<span class="nc" id="L91">                .merchantOrderId(tempMerchantId())</span>
+<span class="nc" id="L92">                .currency(&quot;INR&quot;)</span>
+<span class="nc" id="L93">                .totalAmount(total)</span>
+<span class="nc" id="L94">                .pricingSnapshotHash(sha256Hex(hashInput.toString()))</span>
+<span class="nc" id="L95">                .customerName(request.getCustomerName().trim())</span>
+<span class="nc" id="L96">                .contactNumber(request.getContactNumber().trim())</span>
+<span class="nc" id="L97">                .deliveryAddress(request.getDeliveryAddress().trim())</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">                .checkoutIdempotencyKey(checkoutIdempotencyKey != null ? checkoutIdempotencyKey.trim() : null)</span>
+<span class="nc" id="L99">                .build();</span>
+
+<span class="nc bnc" id="L101" title="All 2 branches missed.">        for (CheckoutOrderLine line : lines) {</span>
+<span class="nc" id="L102">            order.addLine(line);</span>
+<span class="nc" id="L103">        }</span>
+
+<span class="nc" id="L105">        orderRepository.saveAndFlush(order);</span>
+<span class="nc" id="L106">        order.setMerchantOrderId(CheckoutMerchantOrderIds.forOrderId(order.getId()));</span>
+<span class="nc" id="L107">        orderRepository.save(order);</span>
+
+<span class="nc" id="L109">        log.info(&quot;checkout order created id={} user={} total={}&quot;, order.getId(), userId, total);</span>
+<span class="nc" id="L110">        return mapOrder(order);</span>
+    }
+
+    @Override
+    @Transactional
+    public InitiateCheckoutPaymentResponse initiatePayment(Long userId, Long orderId, String paymentInitIdempotencyKey) {
+<span class="nc bnc" id="L116" title="All 4 branches missed.">        String payKey = (paymentInitIdempotencyKey == null || paymentInitIdempotencyKey.isBlank())</span>
+<span class="nc" id="L117">                ? &quot;order-init-&quot; + orderId</span>
+<span class="nc" id="L118">                : paymentInitIdempotencyKey.trim();</span>
+
+<span class="nc" id="L120">        Optional&lt;CheckoutOrder&gt; idem = orderRepository.findByUserIdAndPaymentInitIdempotencyKey(userId, payKey);</span>
+<span class="nc bnc" id="L121" title="All 4 branches missed.">        if (idem.isPresent() &amp;&amp; !idem.get().getId().equals(orderId)) {</span>
+<span class="nc" id="L122">            throw new IllegalStateException(&quot;Payment idempotency key already used for another order&quot;);</span>
+        }
+
+<span class="nc" id="L125">        CheckoutOrder order = orderRepository.findByIdForUpdate(orderId)</span>
+<span class="nc" id="L126">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Checkout order not found&quot;));</span>
+
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        if (!order.getUserId().equals(userId)) {</span>
+<span class="nc" id="L129">            throw new SecurityException(&quot;Order does not belong to current user&quot;);</span>
+        }
+
+<span class="nc bnc" id="L132" title="All 2 branches missed.">        if (order.getStatus() == CheckoutOrderStatus.PAYMENT_PENDING</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">                &amp;&amp; payKey.equals(Optional.ofNullable(order.getPaymentInitIdempotencyKey()).orElse(&quot;&quot;))</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">                &amp;&amp; order.getReservationExpiresAt() != null</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">                &amp;&amp; order.getReservationExpiresAt().isAfter(LocalDateTime.now())) {</span>
+<span class="nc" id="L136">            return buildInitiateResponse(order);</span>
+        }
+
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PENDING) {</span>
+<span class="nc" id="L140">            throw new IllegalStateException(&quot;Order cannot start payment in status &quot; + order.getStatus());</span>
+        }
+
+<span class="nc" id="L143">        validateLivePricing(order);</span>
+<span class="nc" id="L144">        LocalDateTime expires = LocalDateTime.now().plusMinutes(checkoutProperties.getReservationTtlMinutes());</span>
+<span class="nc" id="L145">        reserveInventoryForOrder(order, expires);</span>
+
+<span class="nc" id="L147">        order.setStatus(CheckoutOrderStatus.PAYMENT_PENDING);</span>
+<span class="nc" id="L148">        order.setReservationExpiresAt(expires);</span>
+<span class="nc" id="L149">        order.setPaymentInitIdempotencyKey(payKey);</span>
+<span class="nc" id="L150">        order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L151">        orderRepository.save(order);</span>
+
+<span class="nc" id="L153">        log.info(&quot;checkout payment initiated orderId={} merchantOrderId={}&quot;, order.getId(), order.getMerchantOrderId());</span>
+<span class="nc" id="L154">        return buildInitiateResponse(order);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CheckoutOrderResponse getOrder(Long userId, Long orderId) {
+<span class="nc" id="L160">        CheckoutOrder order = orderRepository.findById(orderId)</span>
+<span class="nc" id="L161">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Checkout order not found&quot;));</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (!order.getUserId().equals(userId)) {</span>
+<span class="nc" id="L163">            throw new SecurityException(&quot;Order does not belong to current user&quot;);</span>
+        }
+<span class="nc" id="L165">        return mapOrder(order);</span>
+    }
+
+    @Override
+    @Transactional
+    public void cancelOrder(Long userId, Long orderId) {
+<span class="nc" id="L171">        CheckoutOrder order = orderRepository.findByIdForUpdate(orderId)</span>
+<span class="nc" id="L172">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Checkout order not found&quot;));</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">        if (!order.getUserId().equals(userId)) {</span>
+<span class="nc" id="L174">            throw new SecurityException(&quot;Order does not belong to current user&quot;);</span>
+        }
+<span class="nc bnc" id="L176" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PENDING) {</span>
+<span class="nc" id="L177">            throw new IllegalStateException(&quot;Only PENDING orders can be cancelled by customer&quot;);</span>
+        }
+<span class="nc" id="L179">        order.setStatus(CheckoutOrderStatus.CANCELLED);</span>
+<span class="nc" id="L180">        order.setCancelledAt(LocalDateTime.now());</span>
+<span class="nc" id="L181">        order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L182">        orderRepository.save(order);</span>
+<span class="nc" id="L183">        log.info(&quot;checkout order cancelled id={}&quot;, orderId);</span>
+<span class="nc" id="L184">    }</span>
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void handleCcAvenueDecryptedCallback(Map&lt;String, String&gt; params, String encResp, String clientIp) {
+<span class="nc" id="L189">        String merchantOrderId = params.get(&quot;order_id&quot;);</span>
+<span class="nc" id="L190">        String orderStatus = params.get(&quot;order_status&quot;);</span>
+<span class="nc" id="L191">        String trackingId = params.get(&quot;tracking_id&quot;);</span>
+<span class="nc" id="L192">        String amountStr = params.get(&quot;amount&quot;);</span>
+<span class="nc" id="L193">        String paymentMode = params.get(&quot;payment_mode&quot;);</span>
+<span class="nc" id="L194">        String statusMessage = params.get(&quot;status_message&quot;);</span>
+
+<span class="nc" id="L196">        appendEvent(null, merchantOrderId, &quot;CALLBACK_DECRYPTED&quot;,</span>
+<span class="nc" id="L197">                safeJsonPreview(params));</span>
+
+<span class="nc" id="L199">        Long orderPk = CheckoutMerchantOrderIds.parseOrderId(merchantOrderId);</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">        if (orderPk == null) {</span>
+<span class="nc" id="L201">            log.warn(&quot;checkout callback: unparseable merchant order id {}&quot;, merchantOrderId);</span>
+<span class="nc" id="L202">            return;</span>
+        }
+
+<span class="nc" id="L205">        CheckoutOrder order = orderRepository.findByIdForUpdate(orderPk)</span>
+<span class="nc" id="L206">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Checkout order not found for callback&quot;));</span>
+
+<span class="nc" id="L208">        appendEvent(order.getId(), merchantOrderId, &quot;CALLBACK_ORDER_LOCKED&quot;,</span>
+                &quot;status=&quot; + orderStatus + &quot;,tracking=&quot; + trackingId);
+
+<span class="nc bnc" id="L211" title="All 6 branches missed.">        if (trackingId != null &amp;&amp; !trackingId.isBlank() &amp;&amp; gatewayPaymentRepository.existsByTrackingId(trackingId)) {</span>
+<span class="nc" id="L212">            log.info(&quot;Duplicate CCAvenue callback ignored for trackingId={} orderId={}&quot;, trackingId, order.getId());</span>
+<span class="nc" id="L213">            return;</span>
+        }
+
+<span class="nc bnc" id="L216" title="All 4 branches missed.">        if (orderStatus == null || orderStatus.isBlank()) {</span>
+<span class="nc" id="L217">            log.warn(&quot;checkout callback missing order_status for order {}&quot;, order.getId());</span>
+<span class="nc" id="L218">            return;</span>
+        }
+
+<span class="nc" id="L221">        String normalized = orderStatus.trim();</span>
+<span class="nc bnc" id="L222" title="All 2 branches missed.">        if (isSuccessStatus(normalized)) {</span>
+<span class="nc" id="L223">            applyPaymentSuccess(order, params, encResp, clientIp, trackingId, amountStr, paymentMode, statusMessage);</span>
+<span class="nc bnc" id="L224" title="All 2 branches missed.">        } else if (isPendingStatus(normalized)) {</span>
+<span class="nc" id="L225">            extendReservationIfNeeded(order);</span>
+<span class="nc" id="L226">            appendEvent(order.getId(), merchantOrderId, &quot;CALLBACK_PENDING_GATEWAY_STATE&quot;, normalized);</span>
+        } else {
+<span class="nc" id="L228">            applyPaymentFailure(order, encResp, clientIp, trackingId, amountStr, paymentMode, statusMessage, normalized);</span>
+        }
+<span class="nc" id="L230">    }</span>
+
+    @Override
+    @Transactional
+    public void expireDuePaymentPendingOrders() {
+<span class="nc" id="L235">        List&lt;CheckoutOrder&gt; due = orderRepository.findPaymentPendingExpired(CheckoutOrderStatus.PAYMENT_PENDING, LocalDateTime.now());</span>
+<span class="nc bnc" id="L236" title="All 2 branches missed.">        for (CheckoutOrder snapshot : due) {</span>
+<span class="nc" id="L237">            orderRepository.findByIdForUpdate(snapshot.getId()).ifPresent(order -&gt; {</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">                if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {</span>
+<span class="nc" id="L239">                    return;</span>
+                }
+<span class="nc bnc" id="L241" title="All 4 branches missed.">                if (order.getReservationExpiresAt() == null || !order.getReservationExpiresAt().isBefore(LocalDateTime.now())) {</span>
+<span class="nc" id="L242">                    return;</span>
+                }
+<span class="nc" id="L244">                releaseActiveReservations(order);</span>
+<span class="nc" id="L245">                order.setStatus(CheckoutOrderStatus.FAILED);</span>
+<span class="nc" id="L246">                order.setFailReason(&quot;Payment reservation TTL expired&quot;);</span>
+<span class="nc" id="L247">                order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L248">                orderRepository.save(order);</span>
+<span class="nc" id="L249">                log.info(&quot;checkout order expired reservations id={}&quot;, order.getId());</span>
+<span class="nc" id="L250">            });</span>
+<span class="nc" id="L251">        }</span>
+<span class="nc" id="L252">    }</span>
+
+    @Override
+    @Transactional
+    public void adminMarkRefunded(Long orderId) {
+<span class="nc" id="L257">        CheckoutOrder order = orderRepository.findByIdForUpdate(orderId)</span>
+<span class="nc" id="L258">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Checkout order not found&quot;));</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PAID) {</span>
+<span class="nc" id="L260">            throw new IllegalStateException(&quot;Only PAID orders can be marked REFUNDED&quot;);</span>
+        }
+<span class="nc" id="L262">        order.setStatus(CheckoutOrderStatus.REFUNDED);</span>
+<span class="nc" id="L263">        order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L264">        orderRepository.save(order);</span>
+<span class="nc" id="L265">        log.info(&quot;checkout order {} marked REFUNDED (admin)&quot;, orderId);</span>
+<span class="nc" id="L266">    }</span>
+
+    @Override
+    public void reconcileStalePaymentPendingOrders() {
+<span class="nc bnc" id="L270" title="All 2 branches missed.">        if (!checkoutProperties.isReconciliationEnabled()) {</span>
+<span class="nc" id="L271">            return;</span>
+        }
+<span class="nc" id="L273">        LocalDateTime threshold = LocalDateTime.now().minusMinutes(checkoutProperties.getReconcileOrderAgeMinutes());</span>
+<span class="nc" id="L274">        List&lt;CheckoutOrder&gt; stale = orderRepository.findByStatusAndUpdatedAtBefore(CheckoutOrderStatus.PAYMENT_PENDING, threshold);</span>
+<span class="nc bnc" id="L275" title="All 2 branches missed.">        for (CheckoutOrder o : stale) {</span>
+            try {
+<span class="nc" id="L277">                ccAvenueOrderStatusClient.fetchStatus(o.getMerchantOrderId()).ifPresentOrElse(</span>
+<span class="nc" id="L278">                        status -&gt; applyReconciliationOutcome(status),</span>
+<span class="nc" id="L279">                        () -&gt; log.debug(&quot;No status from CCAvenue for order {}&quot;, o.getMerchantOrderId())</span>
+                );
+<span class="nc" id="L281">            } catch (Exception ex) {</span>
+<span class="nc" id="L282">                log.warn(&quot;checkout reconciliation failed for order {}: {}&quot;, o.getId(), ex.getMessage());</span>
+<span class="nc" id="L283">            }</span>
+<span class="nc" id="L284">        }</span>
+<span class="nc" id="L285">    }</span>
+
+    private void applyReconciliationOutcome(CcAvenueOrderStatusClient.CcAvenueOrderStatusResult status) {
+<span class="nc" id="L288">        Map&lt;String, String&gt; synthetic = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L289">        synthetic.put(&quot;order_id&quot;, status.merchantOrderId());</span>
+<span class="nc" id="L290">        synthetic.put(&quot;order_status&quot;, status.orderStatus());</span>
+<span class="nc" id="L291">        synthetic.put(&quot;amount&quot;, status.amount());</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">        synthetic.put(&quot;tracking_id&quot;, status.trackingId() != null ? status.trackingId() : &quot;&quot;);</span>
+<span class="nc bnc" id="L293" title="All 2 branches missed.">        synthetic.put(&quot;payment_mode&quot;, status.paymentMode() != null ? status.paymentMode() : &quot;&quot;);</span>
+<span class="nc bnc" id="L294" title="All 2 branches missed.">        synthetic.put(&quot;status_message&quot;, status.statusMessage() != null ? status.statusMessage() : &quot;&quot;);</span>
+<span class="nc" id="L295">        self.handleCcAvenueDecryptedCallback(synthetic, null, &quot;reconciliation-job&quot;);</span>
+<span class="nc" id="L296">    }</span>
+
+    private void applyPaymentSuccess(CheckoutOrder order,
+                                     Map&lt;String, String&gt; params,
+                                     String encResp,
+                                     String clientIp,
+                                     String trackingId,
+                                     String amountStr,
+                                     String paymentMode,
+                                     String statusMessage) {
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        if (order.getStatus() == CheckoutOrderStatus.PAID) {</span>
+<span class="nc" id="L307">            log.info(&quot;checkout order {} already PAID (idempotent)&quot;, order.getId());</span>
+<span class="nc" id="L308">            return;</span>
+        }
+
+<span class="nc bnc" id="L311" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {</span>
+<span class="nc" id="L312">            log.warn(&quot;Late or orphan success for checkout order {} in status {} — recording payment only&quot;, order.getId(), order.getStatus());</span>
+<span class="nc" id="L313">            persistGatewayPaymentOrIgnore(order, trackingId, amountStr, params, encResp, clientIp,</span>
+                    CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
+<span class="nc" id="L315">            recordOrphanRefundSuggestion(order, amountStr, &quot;Payment succeeded after order left PAYMENT_PENDING&quot;);</span>
+<span class="nc" id="L316">            return;</span>
+        }
+
+<span class="nc" id="L319">        BigDecimal amount = parseAmount(amountStr);</span>
+<span class="nc bnc" id="L320" title="All 4 branches missed.">        if (amount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).compareTo(amount) != 0) {</span>
+<span class="nc" id="L321">            log.error(&quot;Amount mismatch for checkout order {}: expected {} got {}&quot;, order.getId(), order.getTotalAmount(), amountStr);</span>
+<span class="nc" id="L322">            appendEvent(order.getId(), order.getMerchantOrderId(), &quot;CALLBACK_AMOUNT_MISMATCH&quot;, amountStr);</span>
+<span class="nc" id="L323">            return;</span>
+        }
+
+<span class="nc bnc" id="L326" title="All 4 branches missed.">        if (trackingId == null || trackingId.isBlank()) {</span>
+<span class="nc" id="L327">            log.error(&quot;Missing tracking_id for successful checkout order {}&quot;, order.getId());</span>
+<span class="nc" id="L328">            return;</span>
+        }
+
+        try {
+<span class="nc" id="L332">            persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,</span>
+                    CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
+<span class="nc" id="L334">        } catch (DataIntegrityViolationException dup) {</span>
+<span class="nc" id="L335">            log.info(&quot;Duplicate tracking insert for order {} — treating as idempotent&quot;, order.getId());</span>
+<span class="nc" id="L336">            return;</span>
+<span class="nc" id="L337">        }</span>
+
+<span class="nc" id="L339">        fulfillInventoryAfterPayment(order);</span>
+
+<span class="nc" id="L341">        order.setStatus(CheckoutOrderStatus.PAID);</span>
+<span class="nc" id="L342">        order.setPaidAt(LocalDateTime.now());</span>
+<span class="nc" id="L343">        order.setReservationExpiresAt(null);</span>
+<span class="nc" id="L344">        order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L345">        orderRepository.save(order);</span>
+
+<span class="nc" id="L347">        log.info(&quot;checkout order {} marked PAID&quot;, order.getId());</span>
+<span class="nc" id="L348">    }</span>
+
+    private void applyPaymentFailure(CheckoutOrder order,
+                                     String encResp,
+                                     String clientIp,
+                                     String trackingId,
+                                     String amountStr,
+                                     String paymentMode,
+                                     String statusMessage,
+                                     String normalizedStatus) {
+<span class="nc bnc" id="L358" title="All 2 branches missed.">        if (order.getStatus() == CheckoutOrderStatus.PAID) {</span>
+<span class="nc" id="L359">            log.warn(&quot;Ignoring failure callback for already PAID checkout order {}&quot;, order.getId());</span>
+<span class="nc" id="L360">            return;</span>
+        }
+<span class="nc bnc" id="L362" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {</span>
+<span class="nc" id="L363">            appendEvent(order.getId(), order.getMerchantOrderId(), &quot;CALLBACK_FAILURE_IGNORED_STATE&quot;, order.getStatus().name());</span>
+<span class="nc" id="L364">            return;</span>
+        }
+
+<span class="nc bnc" id="L367" title="All 4 branches missed.">        if (trackingId != null &amp;&amp; !trackingId.isBlank()) {</span>
+<span class="nc" id="L368">            persistGatewayPaymentOrIgnore(order, trackingId, amountStr, Map.of(), encResp, clientIp,</span>
+                    CheckoutGatewayPaymentRecordStatus.DECLINED, paymentMode, statusMessage);
+        }
+
+<span class="nc" id="L372">        releaseActiveReservations(order);</span>
+<span class="nc" id="L373">        order.setStatus(CheckoutOrderStatus.FAILED);</span>
+<span class="nc" id="L374">        order.setFailReason(truncate(&quot;Gateway: &quot; + normalizedStatus + &quot; / &quot; + statusMessage, 480));</span>
+<span class="nc" id="L375">        order.setReservationExpiresAt(null);</span>
+<span class="nc" id="L376">        order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L377">        orderRepository.save(order);</span>
+<span class="nc" id="L378">        log.info(&quot;checkout order {} marked FAILED ({})&quot;, order.getId(), normalizedStatus);</span>
+<span class="nc" id="L379">    }</span>
+
+    private void persistGatewayPaymentOrThrow(CheckoutOrder order,
+                                              String trackingId,
+                                              String amountStr,
+                                              Map&lt;String, String&gt; params,
+                                              String encResp,
+                                              String clientIp,
+                                              CheckoutGatewayPaymentRecordStatus status,
+                                              String paymentMode,
+                                              String statusMessage) {
+<span class="nc" id="L390">        CheckoutGatewayPayment row = CheckoutGatewayPayment.builder()</span>
+<span class="nc" id="L391">                .order(order)</span>
+<span class="nc" id="L392">                .trackingId(trackingId)</span>
+<span class="nc" id="L393">                .gatewayOrderId(params.get(&quot;order_id&quot;))</span>
+<span class="nc" id="L394">                .amount(parseAmount(amountStr))</span>
+<span class="nc" id="L395">                .currency(order.getCurrency())</span>
+<span class="nc" id="L396">                .status(status)</span>
+<span class="nc" id="L397">                .paymentMode(paymentMode)</span>
+<span class="nc" id="L398">                .statusMessage(statusMessage)</span>
+<span class="nc" id="L399">                .rawResponseEnc(encResp)</span>
+<span class="nc" id="L400">                .rawResponseDec(safeJsonPreview(params))</span>
+<span class="nc" id="L401">                .clientIp(clientIp)</span>
+<span class="nc" id="L402">                .build();</span>
+<span class="nc" id="L403">        gatewayPaymentRepository.save(row);</span>
+<span class="nc" id="L404">    }</span>
+
+    private void persistGatewayPaymentOrIgnore(CheckoutOrder order,
+                                               String trackingId,
+                                               String amountStr,
+                                               Map&lt;String, String&gt; params,
+                                               String encResp,
+                                               String clientIp,
+                                               CheckoutGatewayPaymentRecordStatus status,
+                                               String paymentMode,
+                                               String statusMessage) {
+<span class="nc bnc" id="L415" title="All 4 branches missed.">        if (trackingId == null || trackingId.isBlank()) {</span>
+<span class="nc" id="L416">            return;</span>
+        }
+<span class="nc bnc" id="L418" title="All 2 branches missed.">        if (gatewayPaymentRepository.existsByTrackingId(trackingId)) {</span>
+<span class="nc" id="L419">            return;</span>
+        }
+        try {
+<span class="nc" id="L422">            persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp, status, paymentMode, statusMessage);</span>
+<span class="nc" id="L423">        } catch (DataIntegrityViolationException ignored) {</span>
+            // duplicate
+<span class="nc" id="L425">        }</span>
+<span class="nc" id="L426">    }</span>
+
+    private void recordOrphanRefundSuggestion(CheckoutOrder order, String amountStr, String reason) {
+<span class="nc" id="L429">        BigDecimal amt = parseAmount(amountStr);</span>
+<span class="nc bnc" id="L430" title="All 2 branches missed.">        if (amt == null) {</span>
+<span class="nc" id="L431">            amt = order.getTotalAmount();</span>
+        }
+<span class="nc" id="L433">        CheckoutRefund refund = CheckoutRefund.builder()</span>
+<span class="nc" id="L434">                .order(order)</span>
+<span class="nc" id="L435">                .amount(amt)</span>
+<span class="nc" id="L436">                .reason(reason)</span>
+<span class="nc" id="L437">                .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)</span>
+<span class="nc" id="L438">                .build();</span>
+<span class="nc" id="L439">        refundRepository.save(refund);</span>
+<span class="nc" id="L440">        order.setRefundNote(truncate(reason, 480));</span>
+<span class="nc" id="L441">        order.setRefundTotalAmount(amt);</span>
+<span class="nc" id="L442">        orderRepository.save(order);</span>
+<span class="nc" id="L443">    }</span>
+
+    private void fulfillInventoryAfterPayment(CheckoutOrder order) {
+<span class="nc" id="L446">        List&lt;CheckoutReservation&gt; active = reservationRepository.findByOrderIdAndStatus(order.getId(), CheckoutReservationStatus.ACTIVE);</span>
+<span class="nc bnc" id="L447" title="All 2 branches missed.">        for (CheckoutReservation r : active) {</span>
+<span class="nc" id="L448">            Product p = productRepository.findById(r.getProductId()).orElse(null);</span>
+<span class="nc bnc" id="L449" title="All 4 branches missed.">            if (p == null || p.getStockOnHand() == null) {</span>
+<span class="nc" id="L450">                r.getOrderLine().setFulfillmentStatus(CheckoutLineFulfillmentStatus.FULFILLED);</span>
+<span class="nc" id="L451">                r.setStatus(CheckoutReservationStatus.CONSUMED);</span>
+<span class="nc" id="L452">                reservationRepository.save(r);</span>
+<span class="nc" id="L453">                continue;</span>
+            }
+<span class="nc" id="L455">            int n = inventoryRepository.consumeReservedAndDecreaseOnHand(r.getProductId(), r.getQuantity());</span>
+<span class="nc bnc" id="L456" title="All 2 branches missed.">            if (n == 0) {</span>
+<span class="nc" id="L457">                inventoryRepository.decreaseReservedStock(r.getProductId(), r.getQuantity());</span>
+<span class="nc" id="L458">                r.getOrderLine().setFulfillmentStatus(CheckoutLineFulfillmentStatus.OUT_OF_STOCK);</span>
+<span class="nc" id="L459">                BigDecimal refundAmt = r.getOrderLine().getLineTotal();</span>
+<span class="nc" id="L460">                refundRepository.save(CheckoutRefund.builder()</span>
+<span class="nc" id="L461">                        .order(order)</span>
+<span class="nc" id="L462">                        .amount(refundAmt)</span>
+<span class="nc" id="L463">                        .reason(&quot;Paid but inventory consume failed for product &quot; + r.getProductId())</span>
+<span class="nc" id="L464">                        .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)</span>
+<span class="nc" id="L465">                        .build());</span>
+<span class="nc" id="L466">                r.setStatus(CheckoutReservationStatus.RELEASED);</span>
+<span class="nc" id="L467">                reservationRepository.save(r);</span>
+<span class="nc" id="L468">            } else {</span>
+<span class="nc" id="L469">                r.getOrderLine().setFulfillmentStatus(CheckoutLineFulfillmentStatus.FULFILLED);</span>
+<span class="nc" id="L470">                r.setStatus(CheckoutReservationStatus.CONSUMED);</span>
+<span class="nc" id="L471">                reservationRepository.save(r);</span>
+            }
+<span class="nc" id="L473">        }</span>
+<span class="nc" id="L474">    }</span>
+
+    private void releaseActiveReservations(CheckoutOrder order) {
+<span class="nc bnc" id="L477" title="All 2 branches missed.">        for (CheckoutReservation r : reservationRepository.findByOrderIdAndStatus(order.getId(), CheckoutReservationStatus.ACTIVE)) {</span>
+<span class="nc" id="L478">            Product p = productRepository.findById(r.getProductId()).orElse(null);</span>
+<span class="nc bnc" id="L479" title="All 4 branches missed.">            if (p != null &amp;&amp; p.getStockOnHand() != null) {</span>
+<span class="nc" id="L480">                inventoryRepository.decreaseReservedStock(r.getProductId(), r.getQuantity());</span>
+            }
+<span class="nc" id="L482">            r.setStatus(CheckoutReservationStatus.RELEASED);</span>
+<span class="nc" id="L483">            reservationRepository.save(r);</span>
+<span class="nc" id="L484">        }</span>
+<span class="nc" id="L485">    }</span>
+
+    private void reserveInventoryForOrder(CheckoutOrder order, LocalDateTime reservationExpiresAt) {
+<span class="nc" id="L488">        List&lt;Long&gt; rollbackPids = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L489">        List&lt;Integer&gt; rollbackQty = new ArrayList&lt;&gt;();</span>
+        try {
+<span class="nc bnc" id="L491" title="All 2 branches missed.">            for (CheckoutOrderLine line : order.getLines()) {</span>
+<span class="nc" id="L492">                Product p = productRepository.findById(line.getProductId()).orElseThrow();</span>
+<span class="nc bnc" id="L493" title="All 2 branches missed.">                if (p.getStockOnHand() == null) {</span>
+<span class="nc" id="L494">                    CheckoutReservation res = CheckoutReservation.builder()</span>
+<span class="nc" id="L495">                            .orderLine(line)</span>
+<span class="nc" id="L496">                            .productId(line.getProductId())</span>
+<span class="nc" id="L497">                            .quantity(line.getQuantity())</span>
+<span class="nc" id="L498">                            .status(CheckoutReservationStatus.ACTIVE)</span>
+<span class="nc" id="L499">                            .expiresAt(reservationExpiresAt)</span>
+<span class="nc" id="L500">                            .build();</span>
+<span class="nc" id="L501">                    reservationRepository.save(res);</span>
+<span class="nc" id="L502">                    continue;</span>
+                }
+<span class="nc" id="L504">                int updated = inventoryRepository.increaseReservedStock(line.getProductId(), line.getQuantity());</span>
+<span class="nc bnc" id="L505" title="All 2 branches missed.">                if (updated == 0) {</span>
+<span class="nc" id="L506">                    throw new IllegalStateException(&quot;Insufficient stock for product &quot; + line.getProductId());</span>
+                }
+<span class="nc" id="L508">                rollbackPids.add(line.getProductId());</span>
+<span class="nc" id="L509">                rollbackQty.add(line.getQuantity());</span>
+<span class="nc" id="L510">                CheckoutReservation res = CheckoutReservation.builder()</span>
+<span class="nc" id="L511">                        .orderLine(line)</span>
+<span class="nc" id="L512">                        .productId(line.getProductId())</span>
+<span class="nc" id="L513">                        .quantity(line.getQuantity())</span>
+<span class="nc" id="L514">                        .status(CheckoutReservationStatus.ACTIVE)</span>
+<span class="nc" id="L515">                        .expiresAt(reservationExpiresAt)</span>
+<span class="nc" id="L516">                        .build();</span>
+<span class="nc" id="L517">                reservationRepository.save(res);</span>
+<span class="nc" id="L518">            }</span>
+<span class="nc" id="L519">        } catch (RuntimeException ex) {</span>
+<span class="nc bnc" id="L520" title="All 2 branches missed.">            for (int i = rollbackPids.size() - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L521">                inventoryRepository.decreaseReservedStock(rollbackPids.get(i), rollbackQty.get(i));</span>
+            }
+<span class="nc" id="L523">            throw ex;</span>
+<span class="nc" id="L524">        }</span>
+<span class="nc" id="L525">    }</span>
+
+    private void validateLivePricing(CheckoutOrder order) {
+<span class="nc bnc" id="L528" title="All 2 branches missed.">        for (CheckoutOrderLine line : order.getLines()) {</span>
+<span class="nc" id="L529">            Product p = productRepository.findById(line.getProductId())</span>
+<span class="nc" id="L530">                    .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Product not found &quot; + line.getProductId()));</span>
+<span class="nc" id="L531">            BigDecimal live = unitSellingPrice(p);</span>
+<span class="nc bnc" id="L532" title="All 2 branches missed.">            if (live.subtract(line.getUnitPriceSnapshot()).abs().compareTo(PRICE_TOLERANCE) &gt; 0) {</span>
+<span class="nc" id="L533">                throw new IllegalStateException(&quot;Price changed for product &quot; + line.getProductId()</span>
+                        + &quot; during checkout; create a new order.&quot;);
+            }
+<span class="nc bnc" id="L536" title="All 2 branches missed.">            if (!Boolean.TRUE.equals(p.getActive())) {</span>
+<span class="nc" id="L537">                throw new IllegalStateException(&quot;Product inactive: &quot; + line.getProductId());</span>
+            }
+<span class="nc" id="L539">        }</span>
+<span class="nc" id="L540">    }</span>
+
+    private void validateAvailabilitySoft(Product p, int quantity) {
+<span class="nc bnc" id="L543" title="All 2 branches missed.">        if (p.getStockOnHand() == null) {</span>
+<span class="nc" id="L544">            return;</span>
+        }
+<span class="nc" id="L546">        int available = p.getStockOnHand() - Optional.ofNullable(p.getStockReserved()).orElse(0);</span>
+<span class="nc bnc" id="L547" title="All 2 branches missed.">        if (available &lt; quantity) {</span>
+<span class="nc" id="L548">            throw new IllegalStateException(&quot;Insufficient stock for product &quot; + p.getProductId());</span>
+        }
+<span class="nc" id="L550">    }</span>
+
+    private Map&lt;Long, Product&gt; loadProducts(CreateCheckoutOrderRequest request) {
+<span class="nc" id="L553">        Set&lt;Long&gt; ids = new HashSet&lt;&gt;();</span>
+<span class="nc bnc" id="L554" title="All 2 branches missed.">        for (CheckoutLineRequest lr : request.getLines()) {</span>
+<span class="nc bnc" id="L555" title="All 2 branches missed.">            if (!ids.add(lr.getProductId())) {</span>
+<span class="nc" id="L556">                throw new IllegalArgumentException(&quot;Duplicate product in cart: &quot; + lr.getProductId());</span>
+            }
+<span class="nc" id="L558">        }</span>
+<span class="nc" id="L559">        Map&lt;Long, Product&gt; map = new HashMap&lt;&gt;();</span>
+<span class="nc bnc" id="L560" title="All 2 branches missed.">        for (Long id : ids) {</span>
+<span class="nc" id="L561">            Product p = productRepository.findById(id)</span>
+<span class="nc" id="L562">                    .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Product not found &quot; + id));</span>
+<span class="nc bnc" id="L563" title="All 2 branches missed.">            if (!Boolean.TRUE.equals(p.getActive())) {</span>
+<span class="nc" id="L564">                throw new IllegalStateException(&quot;Product inactive: &quot; + id);</span>
+            }
+<span class="nc" id="L566">            map.put(id, p);</span>
+<span class="nc" id="L567">        }</span>
+<span class="nc" id="L568">        return map;</span>
+    }
+
+    private BigDecimal unitSellingPrice(Product p) {
+<span class="nc bnc" id="L572" title="All 2 branches missed.">        double price = p.getPrice() != null ? p.getPrice() : 0.0;</span>
+<span class="nc bnc" id="L573" title="All 2 branches missed.">        double discount = p.getOffers() != null ? p.getOffers() : 0.0;</span>
+<span class="nc" id="L574">        double finalPrice = price - (price * discount / 100.0);</span>
+<span class="nc" id="L575">        return BigDecimal.valueOf(finalPrice).setScale(2, RoundingMode.HALF_UP);</span>
+    }
+
+    private InitiateCheckoutPaymentResponse buildInitiateResponse(CheckoutOrder order) {
+<span class="nc" id="L579">        String redirect = firstNonBlank(checkoutProperties.getCcavenueRedirectUrl(), ccAvenueConfig.getRedirectUrl());</span>
+<span class="nc" id="L580">        String cancel = firstNonBlank(checkoutProperties.getCcavenueCancelUrl(), ccAvenueConfig.getCancelUrl());</span>
+<span class="nc" id="L581">        CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()</span>
+<span class="nc" id="L582">                .orderId(order.getMerchantOrderId())</span>
+<span class="nc" id="L583">                .amount(order.getTotalAmount())</span>
+<span class="nc" id="L584">                .redirectUrl(redirect)</span>
+<span class="nc" id="L585">                .cancelUrl(cancel)</span>
+<span class="nc" id="L586">                .billingName(order.getCustomerName())</span>
+<span class="nc" id="L587">                .billingAddress(order.getDeliveryAddress())</span>
+<span class="nc" id="L588">                .billingTel(order.getContactNumber())</span>
+<span class="nc" id="L589">                .build();</span>
+<span class="nc" id="L590">        String form = ccAvenuePaymentService.generatePaymentForm(paymentRequest);</span>
+<span class="nc" id="L591">        return InitiateCheckoutPaymentResponse.builder()</span>
+<span class="nc" id="L592">                .orderId(order.getId())</span>
+<span class="nc" id="L593">                .merchantOrderId(order.getMerchantOrderId())</span>
+<span class="nc" id="L594">                .paymentFormHtml(form)</span>
+<span class="nc" id="L595">                .build();</span>
+    }
+
+    private CheckoutOrderResponse mapOrder(CheckoutOrder order) {
+<span class="nc" id="L599">        List&lt;CheckoutOrderLineResponse&gt; lines = new ArrayList&lt;&gt;();</span>
+<span class="nc bnc" id="L600" title="All 2 branches missed.">        for (CheckoutOrderLine line : order.getLines()) {</span>
+<span class="nc" id="L601">            lines.add(CheckoutOrderLineResponse.builder()</span>
+<span class="nc" id="L602">                    .lineId(line.getId())</span>
+<span class="nc" id="L603">                    .productId(line.getProductId())</span>
+<span class="nc" id="L604">                    .quantity(line.getQuantity())</span>
+<span class="nc" id="L605">                    .unitPriceSnapshot(line.getUnitPriceSnapshot())</span>
+<span class="nc" id="L606">                    .lineTotal(line.getLineTotal())</span>
+<span class="nc" id="L607">                    .fulfillmentStatus(line.getFulfillmentStatus().name())</span>
+<span class="nc" id="L608">                    .build());</span>
+<span class="nc" id="L609">        }</span>
+<span class="nc" id="L610">        return CheckoutOrderResponse.builder()</span>
+<span class="nc" id="L611">                .orderId(order.getId())</span>
+<span class="nc" id="L612">                .status(order.getStatus().name())</span>
+<span class="nc" id="L613">                .merchantOrderId(order.getMerchantOrderId())</span>
+<span class="nc" id="L614">                .totalAmount(order.getTotalAmount())</span>
+<span class="nc" id="L615">                .currency(order.getCurrency())</span>
+<span class="nc" id="L616">                .reservationExpiresAt(order.getReservationExpiresAt())</span>
+<span class="nc" id="L617">                .lines(lines)</span>
+<span class="nc" id="L618">                .build();</span>
+    }
+
+    private void appendEvent(Long orderId, String merchantOrderId, String type, String payload) {
+        try {
+<span class="nc" id="L623">            paymentEventRepository.save(CheckoutPaymentEvent.builder()</span>
+<span class="nc" id="L624">                    .orderId(orderId)</span>
+<span class="nc" id="L625">                    .merchantOrderId(merchantOrderId)</span>
+<span class="nc" id="L626">                    .eventType(type)</span>
+<span class="nc" id="L627">                    .payload(truncate(payload, 8000))</span>
+<span class="nc" id="L628">                    .build());</span>
+<span class="nc" id="L629">        } catch (Exception e) {</span>
+<span class="nc" id="L630">            log.warn(&quot;checkout payment event log failed: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L631">        }</span>
+<span class="nc" id="L632">    }</span>
+
+    private String safeJsonPreview(Map&lt;String, String&gt; params) {
+        try {
+<span class="nc" id="L636">            return truncate(objectMapper.writeValueAsString(params), 8000);</span>
+<span class="nc" id="L637">        } catch (Exception e) {</span>
+<span class="nc" id="L638">            return String.valueOf(params);</span>
+        }
+    }
+
+    private static BigDecimal parseAmount(String amountStr) {
+<span class="nc bnc" id="L643" title="All 4 branches missed.">        if (amountStr == null || amountStr.isBlank()) {</span>
+<span class="nc" id="L644">            return null;</span>
+        }
+        try {
+<span class="nc" id="L647">            return new BigDecimal(amountStr.trim()).setScale(2, RoundingMode.HALF_UP);</span>
+<span class="nc" id="L648">        } catch (NumberFormatException e) {</span>
+<span class="nc" id="L649">            return null;</span>
+        }
+    }
+
+    private static boolean isSuccessStatus(String orderStatus) {
+<span class="nc bnc" id="L654" title="All 4 branches missed.">        return &quot;Success&quot;.equalsIgnoreCase(orderStatus) || &quot;SUCCESS&quot;.equalsIgnoreCase(orderStatus);</span>
+    }
+
+    private static boolean isPendingStatus(String orderStatus) {
+<span class="nc" id="L658">        String s = orderStatus.toLowerCase(Locale.ROOT);</span>
+<span class="nc bnc" id="L659" title="All 8 branches missed.">        return s.contains(&quot;initiated&quot;) || s.contains(&quot;await&quot;) || s.contains(&quot;pending&quot;) || s.contains(&quot;bounced&quot;);</span>
+    }
+
+    private void extendReservationIfNeeded(CheckoutOrder order) {
+<span class="nc bnc" id="L663" title="All 2 branches missed.">        if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {</span>
+<span class="nc" id="L664">            return;</span>
+        }
+<span class="nc" id="L666">        LocalDateTime ext = LocalDateTime.now().plusMinutes(Math.max(checkoutProperties.getReservationTtlMinutes(), 30));</span>
+<span class="nc bnc" id="L667" title="All 4 branches missed.">        if (order.getReservationExpiresAt() == null || ext.isAfter(order.getReservationExpiresAt())) {</span>
+<span class="nc" id="L668">            order.setReservationExpiresAt(ext);</span>
+<span class="nc" id="L669">            order.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L670">            orderRepository.save(order);</span>
+        }
+<span class="nc" id="L672">    }</span>
+
+    private static String sha256Hex(String input) {
+        try {
+<span class="nc" id="L676">            MessageDigest md = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L677">            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));</span>
+<span class="nc" id="L678">            StringBuilder sb = new StringBuilder(digest.length * 2);</span>
+<span class="nc bnc" id="L679" title="All 2 branches missed.">            for (byte b : digest) {</span>
+<span class="nc" id="L680">                sb.append(String.format(&quot;%02x&quot;, b));</span>
+            }
+<span class="nc" id="L682">            return sb.toString();</span>
+<span class="nc" id="L683">        } catch (Exception e) {</span>
+<span class="nc" id="L684">            throw new IllegalStateException(&quot;hash failed&quot;, e);</span>
+        }
+    }
+
+    private static String tempMerchantId() {
+<span class="nc" id="L689">        return &quot;CHX&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;).substring(0, 26);</span>
+    }
+
+    private static String truncate(String s, int max) {
+<span class="nc bnc" id="L693" title="All 2 branches missed.">        if (s == null) {</span>
+<span class="nc" id="L694">            return null;</span>
+        }
+<span class="nc bnc" id="L696" title="All 2 branches missed.">        return s.length() &lt;= max ? s : s.substring(0, max);</span>
+    }
+
+    private static String firstNonBlank(String a, String b) {
+<span class="nc bnc" id="L700" title="All 4 branches missed.">        if (a != null &amp;&amp; !a.isBlank()) {</span>
+<span class="nc" id="L701">            return a;</span>
+        }
+<span class="nc bnc" id="L703" title="All 2 branches missed.">        return b == null ? &quot;&quot; : b;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

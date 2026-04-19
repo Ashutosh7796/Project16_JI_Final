@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProductPhotoController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.ProductPhoto</a> &gt; <span class="el_source">ProductPhotoController.java</span></div><h1>ProductPhotoController.java</h1><pre class="source lang-java linenums">package com.spring.jwt.ProductPhoto;
+
+import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
+import com.spring.jwt.Enums.ImageType;
+import com.spring.jwt.Enums.PhotoType;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+
+/**
+ * REST Controller responsible for handling Product Photo operations.
+ *
+ * This controller supports:
+ * - Uploading product photo images
+ * - Fetching photo details by image ID
+ * - Fetching photo details by product ID
+ * - Updating (patching) the product image only
+ *
+ * All responses are wrapped using BaseResponseDTO1
+ * for consistency across the application.
+ */
+@RestController
+@RequestMapping(&quot;/api/v1/product-photo&quot;)
+<span class="nc" id="L28">@RequiredArgsConstructor</span>
+public class ProductPhotoController {
+    /**
+     * Service layer dependency handling all business logic
+     * related to product photo operations.
+     */
+
+    private final ProductPhotoService productPhotoService;
+
+    /**
+     * Upload a product photo for a given product
+     *
+     * Business Rules:
+     * - A valid productId must be provided
+     * - Only image files are allowed
+     * - Only one photo is allowed per product
+     *
+     * @param productId ID of the product
+     * @param photoType Type of photo
+     * @param photo Multipart image file to be uploaded
+     * @return Created ProductPhotoResponseUploadDTO
+     */
+    @PostMapping(&quot;/upload&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseUploadDTO&gt;&gt; uploadProductPhoto(
+            @RequestParam Long productId,
+            @RequestParam ImageType photoType,
+            @RequestParam(&quot;photo&quot;) MultipartFile photo
+    ) {
+<span class="nc" id="L56">        ProductPhotoResponseUploadDTO response =</span>
+<span class="nc" id="L57">                productPhotoService.uploadProductPhoto(productId, photoType, photo);</span>
+<span class="nc" id="L58">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L59">                .body(new BaseResponseDTO1&lt;&gt;(</span>
+                        &quot;201&quot;,
+                        &quot;Product photo uploaded successfully&quot;,
+                        response
+                ));
+    }
+
+    /**
+     * Fetch product photo details using image ID.
+     *
+     * @param imageId Unique ID of the product image
+     * @return ProductPhotoResponseDTO
+     */
+    @GetMapping(&quot;/{imageId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseDTO&gt;&gt; getByImageId(
+            @PathVariable Long imageId
+    ) {
+<span class="nc" id="L76">        ProductPhotoResponseDTO response =</span>
+<span class="nc" id="L77">                productPhotoService.getPhotoById(imageId);</span>
+<span class="nc" id="L78">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Product photo fetched successfully&quot;,
+                        response
+                )
+        );
+
+    }
+
+    /**
+     * Fetch product photo details using product ID.
+     *
+     * Use case:
+     * - Mobile / frontend wants product image while viewing product details
+     *
+     * @param productId ID of the product
+     * @return ProductPhotoResponseDTO
+     */
+    @GetMapping(&quot;/product/{productId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseDTO&gt;&gt; getByProductId(
+            @PathVariable Long productId
+    ) {
+<span class="nc" id="L101">        ProductPhotoResponseDTO response =</span>
+<span class="nc" id="L102">                productPhotoService.getPhotoByProductId(productId);</span>
+<span class="nc" id="L103">        return ResponseEntity.ok(</span>
+                new BaseResponseDTO1&lt;&gt;(
+                        &quot;200&quot;,
+                        &quot;Product photo fetched successfully by product ID&quot;,
+                        response
+                )
+        );
+
+    }
+
+    /**
+     * Update (replace) the product photo image.
+     *
+     * Notes:
+     * - This is a PATCH operation because only the image is updated
+     * - Existing product photo metadata remains unchanged
+     *
+     * @param imageId ID of the product image to be updated
+     * @param image New image file
+     * @return Updated ProductPhotoResponseDTO
+     */
+    /**
+     * Get all photos for a product (returns both COVERIMAGE and PHOTO types).
+     */
+    @GetMapping(&quot;/product/{productId}/all&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;List&lt;ProductPhotoResponseDTO&gt;&gt;&gt; getAllByProductId(
+            @PathVariable Long productId) {
+<span class="nc" id="L130">        List&lt;ProductPhotoResponseDTO&gt; response = productPhotoService.getAllPhotosByProductId(productId);</span>
+<span class="nc" id="L131">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;All photos fetched&quot;, response));</span>
+    }
+
+    /**
+     * Get a specific photo type for a product.
+     * photoType = COVERIMAGE or PHOTO
+     */
+    @GetMapping(&quot;/product/{productId}/type/{photoType}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseDTO&gt;&gt; getByProductIdAndType(
+            @PathVariable Long productId,
+            @PathVariable ImageType photoType) {
+<span class="nc" id="L142">        ProductPhotoResponseDTO response = productPhotoService.getPhotoByProductIdAndType(productId, photoType);</span>
+<span class="nc" id="L143">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Photo fetched&quot;, response));</span>
+    }
+
+    /**
+     * Update (replace) product image by productId + photoType.
+     * Works whether or not a photo already exists — type-safe upsert.
+     * photoType = COVERIMAGE or PHOTO
+     */
+    @PatchMapping(&quot;/product/{productId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseDTO&gt;&gt; updateProductImageByProductId(
+            @PathVariable Long productId,
+            @RequestParam(&quot;image&quot;) MultipartFile image,
+            @RequestParam ImageType photoType) {
+<span class="nc" id="L156">        ProductPhotoResponseDTO response =</span>
+<span class="nc" id="L157">                productPhotoService.updateProductImageByProductId(productId, image, photoType);</span>
+<span class="nc" id="L158">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Product photo updated successfully&quot;, response));</span>
+    }
+
+    /**
+     * Update product photo by imageId (use only if you know the imageId).
+     */
+    @PatchMapping(&quot;/{imageId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;ProductPhotoResponseDTO&gt;&gt; updateProductImage(
+            @PathVariable Long imageId,
+            @RequestParam MultipartFile image) {
+<span class="nc" id="L168">        ProductPhotoResponseDTO response = productPhotoService.updateProductImage(imageId, image);</span>
+<span class="nc" id="L169">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(&quot;200&quot;, &quot;Product photo image updated successfully&quot;, response));</span>
+    }
+
+    // ── Delete endpoints ──────────────────────────────────────────────────────
+
+    /**
+     * Delete a specific photo by productId + imageId.
+     * Validates ownership — imageId must belong to the given productId.
+     *
+     * DELETE /api/v1/product-photo/product/{productId}/image/{imageId}
+     */
+    @DeleteMapping(&quot;/product/{productId}/image/{imageId}&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Void&gt;&gt; deletePhotoByImageId(
+            @PathVariable Long productId,
+            @PathVariable Long imageId) {
+<span class="nc" id="L184">        productPhotoService.deletePhotoByImageId(productId, imageId);</span>
+<span class="nc" id="L185">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(</span>
+                &quot;200&quot;, &quot;Photo deleted successfully&quot;, null));
+    }
+
+    /**
+     * Delete all photos for a product.
+     *
+     * DELETE /api/v1/product-photo/product/{productId}/all
+     */
+    @DeleteMapping(&quot;/product/{productId}/all&quot;)
+    public ResponseEntity&lt;BaseResponseDTO1&lt;Void&gt;&gt; deleteAllPhotosForProduct(
+            @PathVariable Long productId) {
+<span class="nc" id="L197">        productPhotoService.deleteAllPhotosForProduct(productId);</span>
+<span class="nc" id="L198">        return ResponseEntity.ok(new BaseResponseDTO1&lt;&gt;(</span>
+                &quot;200&quot;, &quot;All photos deleted for product &quot; + productId, null));
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

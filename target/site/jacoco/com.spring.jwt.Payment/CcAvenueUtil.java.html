@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CcAvenueUtil.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Payment</a> &gt; <span class="el_source">CcAvenueUtil.java</span></div><h1>CcAvenueUtil.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Payment;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.MessageDigest;
+
+public class CcAvenueUtil {
+
+    private CcAvenueUtil() {}
+
+<span class="nc" id="L12">    private static final byte[] CCAVENUE_IV = {</span>
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+
+    public static String encrypt(String plainText, String workingKey) {
+        try {
+<span class="nc" id="L19">            byte[] digest = MessageDigest.getInstance(&quot;MD5&quot;).digest(workingKey.getBytes(&quot;UTF-8&quot;));</span>
+<span class="nc" id="L20">            SecretKeySpec secretKey = new SecretKeySpec(digest, &quot;AES&quot;);</span>
+<span class="nc" id="L21">            IvParameterSpec iv = new IvParameterSpec(CCAVENUE_IV);</span>
+<span class="nc" id="L22">            Cipher cipher = Cipher.getInstance(&quot;AES/CBC/PKCS5Padding&quot;);</span>
+<span class="nc" id="L23">            cipher.init(Cipher.ENCRYPT_MODE, secretKey, iv);</span>
+<span class="nc" id="L24">            return bytesToHex(cipher.doFinal(plainText.getBytes(&quot;UTF-8&quot;)));</span>
+<span class="nc" id="L25">        } catch (Exception e) {</span>
+<span class="nc" id="L26">            throw new RuntimeException(&quot;CCAvenue encryption failed&quot;, e);</span>
+        }
+    }
+
+    public static String decrypt(String encryptedText, String workingKey) {
+        try {
+<span class="nc" id="L32">            byte[] digest = MessageDigest.getInstance(&quot;MD5&quot;).digest(workingKey.getBytes(&quot;UTF-8&quot;));</span>
+<span class="nc" id="L33">            SecretKeySpec secretKey = new SecretKeySpec(digest, &quot;AES&quot;);</span>
+<span class="nc" id="L34">            IvParameterSpec iv = new IvParameterSpec(CCAVENUE_IV);</span>
+<span class="nc" id="L35">            Cipher cipher = Cipher.getInstance(&quot;AES/CBC/PKCS5Padding&quot;);</span>
+<span class="nc" id="L36">            cipher.init(Cipher.DECRYPT_MODE, secretKey, iv);</span>
+<span class="nc" id="L37">            return new String(cipher.doFinal(hexToBytes(encryptedText)), &quot;UTF-8&quot;);</span>
+<span class="nc" id="L38">        } catch (Exception e) {</span>
+<span class="nc" id="L39">            throw new RuntimeException(&quot;CCAvenue decryption failed&quot;, e);</span>
+        }
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+<span class="nc" id="L44">        StringBuilder hex = new StringBuilder(bytes.length * 2);</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        for (byte b : bytes) {</span>
+<span class="nc" id="L46">            hex.append(String.format(&quot;%02x&quot;, b));</span>
+        }
+<span class="nc" id="L48">        return hex.toString();</span>
+    }
+
+    private static byte[] hexToBytes(String hex) {
+<span class="nc" id="L52">        int len = hex.length();</span>
+<span class="nc" id="L53">        byte[] data = new byte[len / 2];</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        for (int i = 0; i &lt; len; i += 2) {</span>
+<span class="nc" id="L55">            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) &lt;&lt; 4)</span>
+<span class="nc" id="L56">                    + Character.digit(hex.charAt(i + 1), 16));</span>
+        }
+<span class="nc" id="L58">        return data;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

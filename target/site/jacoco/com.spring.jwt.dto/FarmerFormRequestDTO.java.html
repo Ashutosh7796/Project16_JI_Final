@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FarmerFormRequestDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.dto</a> &gt; <span class="el_source">FarmerFormRequestDTO.java</span></div><h1>FarmerFormRequestDTO.java</h1><pre class="source lang-java linenums">package com.spring.jwt.dto;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+<span class="nc bnc" id="L10" title="All 70 branches missed.">@Data</span>
+<span class="nc" id="L11">@AllArgsConstructor</span>
+<span class="nc" id="L12">@NoArgsConstructor</span>
+public class FarmerFormRequestDTO {
+
+    @NotBlank(message = &quot;Form Number is required&quot;)
+    @Schema(description = &quot;Form No Must Be Unique&quot;)
+<span class="nc" id="L17">    private String formNumber;</span>
+
+    @NotBlank(message = &quot;Farmer name is required&quot;)
+    @Pattern(
+            regexp = &quot;^[A-Z][A-Za-z ]{2,50}$&quot;,
+            message = &quot;Farmer name must starts with capital letters and contain only letter and spaces(2-50 characters)&quot;
+    )
+    @Schema(
+            description = &quot;Name of the farmer&quot;,
+            example = &quot;Ramesh Patil&quot;
+    )
+<span class="nc" id="L28">    private String farmerName;</span>
+
+    @NotBlank(message = &quot;Mobile number is required&quot;)
+    @Pattern(
+            regexp = &quot;^[6-9]\\d{9}$&quot;,
+            message = &quot;Please Enter Valid 10 digit Mobile No, e.g 7665671265&quot;
+    )
+    @Schema(
+            description = &quot;Enter 10 digit Valid Mobile No&quot;,
+            example = &quot;9766431234&quot;
+    )
+<span class="nc" id="L39">    private String mobile;</span>
+
+
+    @NotBlank(message = &quot;Address is Required&quot;)
+    @Schema(
+            description = &quot;Complete Residential Address Of Farmer&quot;,
+            example = &quot;Village Abc , Near Main Road&quot;
+    )
+<span class="nc" id="L47">    private String address;</span>
+
+    @NotBlank(message = &quot;Taluka is Requied&quot;)
+    @Schema(
+            description = &quot;Name of Taluka&quot;,
+            example = &quot;Mulshi&quot;
+    )
+<span class="nc" id="L54">    private String taluka;</span>
+
+    @NotBlank(message = &quot;District is Required&quot;)
+    @Schema(
+            description = &quot;Name of District&quot;,
+            example = &quot;Pune&quot;
+    )
+<span class="nc" id="L61">    private String district;</span>
+
+    @NotBlank(message = &quot;Village is required&quot;)
+    @Schema(
+            description = &quot;Name of Village&quot;,
+            example = &quot;Deulgaon&quot;
+    )
+<span class="nc" id="L68">    private String village;</span>
+
+    @NotBlank(message = &quot;About the problem&quot;)
+    @Schema(
+            description = &quot;Problems that are being faced by the farmer&quot;,
+            example = &quot; Seed is not giving results etc&quot;
+    )
+<span class="nc" id="L75">    private String problem;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

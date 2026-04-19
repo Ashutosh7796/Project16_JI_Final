@@ -35,7 +35,7 @@ public class PaymentCallbackController {
     }
 
 
-    @PostMapping("/product/cancel")
+    @RequestMapping(value = "/product/cancel", method = {RequestMethod.GET, RequestMethod.POST})
     public void handleProductCancel(@RequestParam(value = "encResp", required = false) String encResp,
                                     HttpServletRequest request,
                                     HttpServletResponse response) throws IOException {
@@ -43,6 +43,26 @@ public class PaymentCallbackController {
         log.info("Product payment cancelled from IP: {}", clientIp);
         PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("PRODUCT", "PRODUCT_CANCEL", encResp, clientIp);
         response.sendRedirect(frontendUrl + "/payment/cancelled?cbToken=" + urlEncode(enqueued.statusToken()));
+    }
+
+    @PostMapping("/checkout/response")
+    public void handleCheckoutResponse(@RequestParam("encResp") String encResp,
+                                       HttpServletRequest request,
+                                       HttpServletResponse response) throws IOException {
+        String clientIp = getClientIp(request);
+        log.info("Checkout payment callback received from IP: {}", clientIp);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("CHECKOUT", "CHECKOUT_RESPONSE", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/dashboard/payment/return?cbToken=" + urlEncode(enqueued.statusToken()));
+    }
+
+    @RequestMapping(value = "/checkout/cancel", method = {RequestMethod.GET, RequestMethod.POST})
+    public void handleCheckoutCancel(@RequestParam(value = "encResp", required = false) String encResp,
+                                     HttpServletRequest request,
+                                     HttpServletResponse response) throws IOException {
+        String clientIp = getClientIp(request);
+        log.info("Checkout payment cancelled from IP: {}", clientIp);
+        PaymentCallbackEnqueueResult enqueued = callbackQueueService.enqueue("CHECKOUT", "CHECKOUT_CANCEL", encResp, clientIp);
+        response.sendRedirect(frontendUrl + "/dashboard/payment/return?cbToken=" + urlEncode(enqueued.statusToken()));
     }
 
     @PostMapping("/farmer/response")
@@ -55,7 +75,7 @@ public class PaymentCallbackController {
         response.sendRedirect(frontendUrl + "/farmer-payment/processing?cbToken=" + urlEncode(enqueued.statusToken()));
     }
 
-    @PostMapping("/farmer/cancel")
+    @RequestMapping(value = "/farmer/cancel", method = {RequestMethod.GET, RequestMethod.POST})
     public void handleFarmerCancel(@RequestParam(value = "encResp", required = false) String encResp,
                                    HttpServletRequest request,
                                    HttpServletResponse response) throws IOException {

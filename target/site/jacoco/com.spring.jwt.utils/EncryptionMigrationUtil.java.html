@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EncryptionMigrationUtil.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.utils</a> &gt; <span class="el_source">EncryptionMigrationUtil.java</span></div><h1>EncryptionMigrationUtil.java</h1><pre class="source lang-java linenums">package com.spring.jwt.utils;
+
+import com.spring.jwt.entity.User;
+import com.spring.jwt.repository.UserRepository;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.regex.Pattern;
+
+/**
+ * Utility to migrate existing data to encrypted format
+ * Only runs when migration profile is active
+ */
+@Component
+<span class="nc" id="L21">@Slf4j</span>
+<span class="nc" id="L22">@RequiredArgsConstructor</span>
+@Profile(&quot;migration&quot;)
+public class EncryptionMigrationUtil implements ApplicationRunner {
+
+    private final UserRepository userRepository;
+    private final EncryptionUtil encryptionUtil;
+    
+<span class="nc" id="L29">    private static final Pattern BASE64_PATTERN = Pattern.compile(&quot;^[A-Za-z0-9+/=]+$&quot;);</span>
+    
+    @Override
+    @Transactional
+    public void run(ApplicationArguments args) {
+<span class="nc" id="L34">        log.info(&quot;Starting encryption migration for user data...&quot;);</span>
+        
+<span class="nc" id="L36">        List&lt;User&gt; users = userRepository.findAll();</span>
+<span class="nc" id="L37">        int migrated = 0;</span>
+        
+<span class="nc bnc" id="L39" title="All 2 branches missed.">        for (User user : users) {</span>
+<span class="nc" id="L40">            boolean updated = false;</span>
+
+//            if (user.getFirstName() != null &amp;&amp; !isLikelyEncrypted(user.getFirstName())) {
+//                user.setFirstName(encryptionUtil.encrypt(user.getFirstName()));
+//                updated = true;
+//            }
+//
+//            if (user.getLastName() != null &amp;&amp; !isLikelyEncrypted(user.getLastName())) {
+//                user.setLastName(encryptionUtil.encrypt(user.getLastName()));
+//                updated = true;
+//            }
+//
+//            if (user.getAddress() != null &amp;&amp; !isLikelyEncrypted(user.getAddress())) {
+//                user.setAddress(encryptionUtil.encrypt(user.getAddress()));
+//                updated = true;
+//            }
+            
+<span class="nc bnc" id="L57" title="All 2 branches missed.">            if (updated) {</span>
+<span class="nc" id="L58">                userRepository.save(user);</span>
+<span class="nc" id="L59">                migrated++;</span>
+            }
+<span class="nc" id="L61">        }</span>
+        
+<span class="nc" id="L63">        log.info(&quot;Encryption migration completed. Migrated {} users.&quot;, migrated);</span>
+<span class="nc" id="L64">    }</span>
+    
+    /**
+     * Check if a string is likely to be already encrypted (Base64 encoded)
+     */
+    private boolean isLikelyEncrypted(String data) {
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        if (data.length() &lt; 10) {</span>
+<span class="nc" id="L71">            return false;</span>
+        }
+        
+<span class="nc" id="L74">        return BASE64_PATTERN.matcher(data).matches();</span>
+    }
+} 
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

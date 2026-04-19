@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OptimizedFileProcessingServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Document.Service.Impl</a> &gt; <span class="el_source">OptimizedFileProcessingServiceImpl.java</span></div><h1>OptimizedFileProcessingServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Document.Service.Impl;
+
+import com.spring.jwt.Document.Service.FileProcessingService;
+import com.spring.jwt.utils.ImageOptimizationService;
+import com.spring.jwt.Document.domain.FileProcessingResult;
+import com.spring.jwt.Enums.DocumentType;
+import com.spring.jwt.config.DocumentProperties;
+import com.spring.jwt.exception.DocumentProcessingException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Optimized file processing service
+ * Target: &lt; 1 second processing time
+ */
+@Service
+@Primary
+<span class="nc" id="L24">@Slf4j</span>
+<span class="nc" id="L25">@RequiredArgsConstructor</span>
+public class OptimizedFileProcessingServiceImpl implements FileProcessingService
+{
+
+    private final DocumentProperties documentProperties;
+    private final ImageOptimizationService imageOptimizationService;
+
+    @Override
+    public CompletableFuture&lt;FileProcessingResult&gt; processFile(MultipartFile file, DocumentType documentType)
+    {
+        try {
+<span class="nc" id="L36">            long startTime = System.currentTimeMillis();</span>
+
+<span class="nc" id="L38">            byte[] originalData = file.getBytes();</span>
+<span class="nc" id="L39">            String contentType = file.getContentType();</span>
+<span class="nc" id="L40">            long originalSize = originalData.length;</span>
+
+<span class="nc bnc" id="L42" title="All 2 branches missed.">            if (&quot;application/pdf&quot;.equals(contentType))</span>
+            {
+<span class="nc bnc" id="L44" title="All 2 branches missed.">                if (originalSize &gt; documentProperties.getPdf().getMaxInputSizeBytes())</span>
+                {
+<span class="nc" id="L46">                    throw new DocumentProcessingException(&quot;PDF file size exceeds maximum limit of &quot; +</span>
+<span class="nc" id="L47">                            (documentProperties.getPdf().getMaxInputSizeBytes() / 1024 / 1024) + &quot;MB&quot;);</span>
+                }
+<span class="nc bnc" id="L49" title="All 4 branches missed.">            } else if (contentType != null &amp;&amp; contentType.startsWith(&quot;image/&quot;))</span>
+            {
+<span class="nc bnc" id="L51" title="All 2 branches missed.">                if (originalSize &gt; documentProperties.getImage().getMaxInputSizeBytes())</span>
+                {
+<span class="nc" id="L53">                    throw new DocumentProcessingException(&quot;Image file size exceeds maximum limit of &quot; +</span>
+<span class="nc" id="L54">                            (documentProperties.getImage().getMaxInputSizeBytes() / 1024 / 1024) + &quot;MB&quot;);</span>
+                }
+            }
+
+<span class="nc bnc" id="L58" title="All 2 branches missed.">            if (!imageOptimizationService.needsProcessing(originalSize, contentType))</span>
+            {
+<span class="nc" id="L60">                log.info(&quot;File {} is small enough according to configuration, skipping processing&quot;,</span>
+<span class="nc" id="L61">                        file.getOriginalFilename());</span>
+
+<span class="nc" id="L63">                FileProcessingResult result = FileProcessingResult.builder()</span>
+<span class="nc" id="L64">                        .processedData(originalData)</span>
+<span class="nc" id="L65">                        .originalSize(originalSize)</span>
+<span class="nc" id="L66">                        .processedSize(originalSize)</span>
+<span class="nc" id="L67">                        .processingType(&quot;NO_PROCESSING&quot;)</span>
+<span class="nc" id="L68">                        .processingDetails(&quot;File size acceptable, processing skipped for performance&quot;)</span>
+<span class="nc" id="L69">                        .build();</span>
+
+<span class="nc" id="L71">                return CompletableFuture.completedFuture(result);</span>
+            }
+
+            FileProcessingResult result;
+
+<span class="nc bnc" id="L76" title="All 2 branches missed.">            if (documentProperties.isSupportedFileType(contentType))</span>
+            {
+<span class="nc" id="L78">                byte[] processedData = imageOptimizationService.processDocument(originalData, contentType,</span>
+<span class="nc" id="L79">                        documentType.name());</span>
+<span class="nc" id="L80">                long processedSize = processedData.length;</span>
+
+<span class="nc" id="L82">                result = FileProcessingResult.builder()</span>
+<span class="nc" id="L83">                        .processedData(processedData)</span>
+<span class="nc" id="L84">                        .originalSize(originalSize)</span>
+<span class="nc" id="L85">                        .processedSize(processedSize)</span>
+<span class="nc" id="L86">                        .processingType(&quot;UNIFIED_OPTIMIZATION&quot;)</span>
+<span class="nc" id="L87">                        .processingDetails(String.format(&quot;Smart compression (Target: %dKB)&quot;,</span>
+<span class="nc" id="L88">                                documentProperties.getFileSize().getTargetFileSizeKb()))</span>
+<span class="nc" id="L89">                        .build();</span>
+<span class="nc" id="L90">            } else</span>
+            {
+<span class="nc" id="L92">                throw new DocumentProcessingException(&quot;Unsupported file type: &quot; + contentType);</span>
+            }
+
+<span class="nc" id="L95">            long processingTime = System.currentTimeMillis() - startTime;</span>
+<span class="nc" id="L96">            log.info(&quot;Optimized file processing completed in {}ms: {}&quot;, processingTime, result.getProcessingSummary());</span>
+
+<span class="nc" id="L98">            return CompletableFuture.completedFuture(result);</span>
+
+<span class="nc" id="L100">        } catch (IOException e)</span>
+        {
+<span class="nc" id="L102">            log.error(&quot;Optimized processing failed for file: {}&quot;, file.getOriginalFilename(), e);</span>
+<span class="nc" id="L103">            throw new DocumentProcessingException(&quot;Optimized processing failed: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    public CompletableFuture&lt;FileProcessingResult&gt; processImage(byte[] fileData, DocumentType documentType)
+    {
+        try {
+<span class="nc" id="L111">            FileProcessingResult result = processImageOptimized(fileData, documentType);</span>
+<span class="nc" id="L112">            return CompletableFuture.completedFuture(result);</span>
+<span class="nc" id="L113">        } catch (Exception e)</span>
+        {
+<span class="nc" id="L115">            log.error(&quot;Optimized image processing failed for document type: {}&quot;, documentType, e);</span>
+<span class="nc" id="L116">            throw new DocumentProcessingException(&quot;Optimized image processing failed: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    public CompletableFuture&lt;FileProcessingResult&gt; processPdf(byte[] fileData)
+    {
+        try {
+<span class="nc" id="L124">            FileProcessingResult result = processPdfOptimized(fileData);</span>
+<span class="nc" id="L125">            return CompletableFuture.completedFuture(result);</span>
+<span class="nc" id="L126">        } catch (Exception e)</span>
+        {
+<span class="nc" id="L128">            log.error(&quot;Optimized PDF processing failed&quot;, e);</span>
+<span class="nc" id="L129">            throw new DocumentProcessingException(&quot;Optimized PDF processing failed: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    @Override
+    public String getProcessingStrategy(DocumentType documentType)
+    {
+<span class="nc" id="L136">        return &quot;OPTIMIZED_PROCESSING&quot;;</span>
+    }
+
+
+    private FileProcessingResult processImageOptimized(byte[] originalData, DocumentType documentType)
+            throws IOException
+    {
+<span class="nc" id="L143">        long originalSize = originalData.length;</span>
+
+<span class="nc" id="L145">        byte[] processedData = imageOptimizationService.compressImage(originalData, documentType.name());</span>
+<span class="nc" id="L146">        long processedSize = processedData.length;</span>
+
+<span class="nc" id="L148">        return FileProcessingResult.builder()</span>
+<span class="nc" id="L149">                .processedData(processedData)</span>
+<span class="nc" id="L150">                .originalSize(originalSize)</span>
+<span class="nc" id="L151">                .processedSize(processedSize)</span>
+<span class="nc" id="L152">                .processingType(&quot;OPTIMIZED_IMAGE_COMPRESSION&quot;)</span>
+<span class="nc" id="L153">                .processingDetails(String.format(&quot;Optimized compression for %s using configured quality&quot;, documentType))</span>
+<span class="nc" id="L154">                .build();</span>
+    }
+
+    private FileProcessingResult processPdfOptimized(byte[] originalData) throws IOException
+    {
+        // IOException allowed to propagate or caught inside? The original wrapper
+        // caught it.
+        // Let's keep the try-catch wrapper in the caller or here?
+        // The original logic caught IOException and threw DocumentProcessingException.
+        // The replace block below replaces the WHOLE method.
+
+        try {
+<span class="nc" id="L166">            long originalSize = originalData.length;</span>
+
+<span class="nc" id="L168">            byte[] processedData = imageOptimizationService.compressPdf(originalData);</span>
+
+<span class="nc" id="L170">            long processedSize = processedData.length;</span>
+
+<span class="nc" id="L172">            return FileProcessingResult.builder()</span>
+<span class="nc" id="L173">                    .processedData(processedData)</span>
+<span class="nc" id="L174">                    .originalSize(originalSize)</span>
+<span class="nc" id="L175">                    .processedSize(processedSize)</span>
+<span class="nc" id="L176">                    .processingType(&quot;OPTIMIZED_PDF_PROCESSING&quot;)</span>
+<span class="nc" id="L177">                    .processingDetails(String.format(&quot;Optimized PDF processing, size: %dKB&quot;, processedSize / 1024))</span>
+<span class="nc" id="L178">                    .build();</span>
+
+<span class="nc" id="L180">        } catch (IOException e)</span>
+        {
+<span class="nc" id="L182">            throw new DocumentProcessingException(&quot;Optimized PDF processing failed&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

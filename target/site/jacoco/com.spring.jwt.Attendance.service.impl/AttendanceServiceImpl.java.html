@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AttendanceServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.Attendance.service.impl</a> &gt; <span class="el_source">AttendanceServiceImpl.java</span></div><h1>AttendanceServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.Attendance.service.impl;
+
+import com.spring.jwt.Attendance.dto.request.CheckInRequest;
+import com.spring.jwt.Attendance.dto.request.CheckOutRequest;
+import com.spring.jwt.Attendance.dto.request.LeaveRequestDTO;
+import com.spring.jwt.Attendance.dto.response.AttendanceResponse;
+import com.spring.jwt.Attendance.dto.response.LeaveRequestResponse;
+import com.spring.jwt.Attendance.dto.response.MonthlyAttendanceResponse;
+import com.spring.jwt.Attendance.service.AttendanceService;
+import com.spring.jwt.Attendance.mapper.AttendanceMapper;
+import com.spring.jwt.Attendance.model.Attendance;
+import com.spring.jwt.Attendance.model.AttendanceStatus;
+import com.spring.jwt.Attendance.model.LeaveRequest;
+import com.spring.jwt.Attendance.model.embedded.Location;
+import com.spring.jwt.Attendance.repository.AttendanceRepository;
+import com.spring.jwt.Attendance.repository.LeaveRequestRepository;
+import com.spring.jwt.entity.User;
+import com.spring.jwt.exception.AttendanceException;
+import com.spring.jwt.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Attendance Service Implementation
+ * Implements business logic for attendance operations
+ */
+@Service
+<span class="nc" id="L39">@RequiredArgsConstructor</span>
+<span class="nc" id="L40">@Slf4j</span>
+@Transactional
+public class AttendanceServiceImpl implements AttendanceService {
+
+    private final AttendanceRepository attendanceRepository;
+    private final AttendanceMapper attendanceMapper;
+    private final LeaveRequestRepository leaveRequestRepository;
+    private final UserRepository userRepository;
+
+    @Override
+    public AttendanceResponse checkIn(CheckInRequest request) {
+<span class="nc" id="L51">        log.info(&quot;Processing check-in for user: {} on date: {}&quot;, request.getUserId(), request.getDate());</span>
+
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (hasCheckedIn(request.getUserId(), request.getDate())) {</span>
+<span class="nc" id="L54">            throw new AttendanceException(&quot;You have already checked in for today&quot;);</span>
+        }
+
+<span class="nc" id="L57">        Location checkInLocation = Location.builder()</span>
+<span class="nc" id="L58">            .latitude(request.getLocation().getLatitude())</span>
+<span class="nc" id="L59">            .longitude(request.getLocation().getLongitude())</span>
+<span class="nc" id="L60">            .address(request.getLocation().getAddress())</span>
+<span class="nc" id="L61">            .build();</span>
+
+<span class="nc" id="L63">        Attendance attendance = Attendance.builder()</span>
+<span class="nc" id="L64">            .userId(request.getUserId())</span>
+<span class="nc" id="L65">            .date(request.getDate())</span>
+<span class="nc" id="L66">            .attendanceStatus(request.getAttendanceStatus())</span>
+<span class="nc" id="L67">            .checkInTime(LocalTime.now())</span>
+<span class="nc" id="L68">            .checkInLocation(checkInLocation)</span>
+<span class="nc" id="L69">            .remarks(request.getRemarks())</span>
+<span class="nc" id="L70">            .createdBy(request.getUserId())</span>
+<span class="nc" id="L71">            .build();</span>
+
+<span class="nc" id="L73">        Attendance savedAttendance = attendanceRepository.save(attendance);</span>
+<span class="nc" id="L74">        log.info(&quot;Check-in successful for user: {} at {}&quot;, request.getUserId(), savedAttendance.getCheckInTime());</span>
+
+<span class="nc" id="L76">        return attendanceMapper.toResponse(savedAttendance);</span>
+    }
+
+    @Override
+    public AttendanceResponse checkOut(CheckOutRequest request) {
+<span class="nc" id="L81">        log.info(&quot;Processing check-out for user: {} on date: {}&quot;, request.getUserId(), request.getDate());</span>
+
+<span class="nc" id="L83">        Attendance attendance = attendanceRepository.findByUserIdAndDate(request.getUserId(), request.getDate())</span>
+<span class="nc" id="L84">            .orElseThrow(() -&gt; new AttendanceException(&quot;You must check in first before checking out&quot;));</span>
+
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (!attendance.isCheckedIn()) {</span>
+<span class="nc" id="L87">            throw new AttendanceException(&quot;You must check in first before checking out&quot;);</span>
+        }
+
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        if (attendance.isCheckedOut()) {</span>
+<span class="nc" id="L91">            throw new AttendanceException(&quot;You have already checked out for today&quot;);</span>
+        }
+
+<span class="nc" id="L94">        Location checkOutLocation = Location.builder()</span>
+<span class="nc" id="L95">            .latitude(request.getLocation().getLatitude())</span>
+<span class="nc" id="L96">            .longitude(request.getLocation().getLongitude())</span>
+<span class="nc" id="L97">            .address(request.getLocation().getAddress())</span>
+<span class="nc" id="L98">            .build();</span>
+
+<span class="nc" id="L100">        attendance.setCheckOutTime(LocalTime.now());</span>
+<span class="nc" id="L101">        attendance.setCheckOutLocation(checkOutLocation);</span>
+        
+<span class="nc bnc" id="L103" title="All 4 branches missed.">        if (request.getRemarks() != null &amp;&amp; !request.getRemarks().isEmpty()) {</span>
+<span class="nc" id="L104">            attendance.setRemarks(request.getRemarks());</span>
+        }
+        
+<span class="nc" id="L107">        attendance.setUpdatedBy(request.getUserId());</span>
+<span class="nc" id="L108">        attendance.calculateTotalHours();</span>
+
+<span class="nc" id="L110">        Attendance updatedAttendance = attendanceRepository.save(attendance);</span>
+<span class="nc" id="L111">        log.info(&quot;Check-out successful for user: {} at {}&quot;, request.getUserId(), updatedAttendance.getCheckOutTime());</span>
+
+<span class="nc" id="L113">        return attendanceMapper.toResponse(updatedAttendance);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AttendanceResponse getTodayAttendance(Long userId) {
+<span class="nc" id="L119">        log.debug(&quot;Fetching today's attendance for user: {}&quot;, userId);</span>
+        
+<span class="nc" id="L121">        return attendanceRepository.findByUserIdAndDate(userId, LocalDate.now())</span>
+<span class="nc" id="L122">            .map(attendanceMapper::toResponse)</span>
+<span class="nc" id="L123">            .orElse(null);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AttendanceResponse getAttendanceByDate(Long userId, LocalDate date) {
+<span class="nc" id="L129">        log.debug(&quot;Fetching attendance for user: {} on date: {}&quot;, userId, date);</span>
+        
+<span class="nc" id="L131">        return attendanceRepository.findByUserIdAndDate(userId, date)</span>
+<span class="nc" id="L132">            .map(attendanceMapper::toResponse)</span>
+<span class="nc" id="L133">            .orElse(null);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MonthlyAttendanceResponse getMonthlyAttendance(Long userId, int year, int month) {
+<span class="nc" id="L139">        log.info(&quot;Fetching monthly attendance for user: {} - {}/{}&quot;, userId, year, month);</span>
+
+<span class="nc" id="L141">        List&lt;Attendance&gt; attendances = attendanceRepository.findByUserIdAndYearAndMonth(userId, year, month);</span>
+        
+<span class="nc" id="L143">        log.info(&quot;Found {} attendance records for user: {} in {}/{}&quot;, attendances.size(), userId, year, month);</span>
+        
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (attendances.isEmpty()) {</span>
+<span class="nc" id="L146">            log.warn(&quot;No attendance records found for user: {} in {}/{}&quot;, userId, year, month);</span>
+<span class="nc" id="L147">            return null;</span>
+        }
+
+<span class="nc" id="L150">        YearMonth yearMonth = YearMonth.of(year, month);</span>
+<span class="nc" id="L151">        LocalDate startDate = yearMonth.atDay(1);</span>
+<span class="nc" id="L152">        LocalDate endDate = yearMonth.atEndOfMonth();</span>
+
+<span class="nc" id="L154">        long presentCount = countByStatus(userId, startDate, endDate, AttendanceStatus.PRESENT);</span>
+<span class="nc" id="L155">        long absentCount = countByStatus(userId, startDate, endDate, AttendanceStatus.ABSENT);</span>
+<span class="nc" id="L156">        long leaveCount = countByStatus(userId, startDate, endDate, AttendanceStatus.LEAVE);</span>
+<span class="nc" id="L157">        long halfDayCount = countByStatus(userId, startDate, endDate, AttendanceStatus.HALF_DAY);</span>
+<span class="nc" id="L158">        long wfhCount = countByStatus(userId, startDate, endDate, AttendanceStatus.WORK_FROM_HOME);</span>
+        
+<span class="nc" id="L160">        Double totalHours = attendanceRepository.getTotalWorkingHours(userId, startDate, endDate);</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">        double avgHours = attendances.isEmpty() ? 0 : totalHours / attendances.size();</span>
+
+<span class="nc" id="L163">        MonthlyAttendanceResponse.AttendanceSummary summary = MonthlyAttendanceResponse.AttendanceSummary.builder()</span>
+<span class="nc" id="L164">            .totalDays(attendances.size())</span>
+<span class="nc" id="L165">            .presentCount((int) presentCount)</span>
+<span class="nc" id="L166">            .absentCount((int) absentCount)</span>
+<span class="nc" id="L167">            .leaveCount((int) leaveCount)</span>
+<span class="nc" id="L168">            .halfDayCount((int) halfDayCount)</span>
+<span class="nc" id="L169">            .workFromHomeCount((int) wfhCount)</span>
+<span class="nc" id="L170">            .totalWorkingHours(totalHours)</span>
+<span class="nc" id="L171">            .averageWorkingHours(avgHours)</span>
+<span class="nc" id="L172">            .build();</span>
+
+<span class="nc" id="L174">        List&lt;AttendanceResponse&gt; records = attendances.stream()</span>
+<span class="nc" id="L175">            .map(attendanceMapper::toResponse)</span>
+<span class="nc" id="L176">            .collect(Collectors.toList());</span>
+
+<span class="nc" id="L178">        return MonthlyAttendanceResponse.builder()</span>
+<span class="nc" id="L179">            .records(records)</span>
+<span class="nc" id="L180">            .summary(summary)</span>
+<span class="nc" id="L181">            .build();</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List&lt;AttendanceResponse&gt; getAttendanceByDateRange(Long userId, LocalDate startDate, LocalDate endDate) {
+<span class="nc" id="L187">        log.debug(&quot;Fetching attendance for user: {} from {} to {}&quot;, userId, startDate, endDate);</span>
+        
+<span class="nc" id="L189">        List&lt;Attendance&gt; attendances = attendanceRepository.findByUserIdAndDateBetweenOrderByDateDesc(</span>
+            userId, startDate, endDate
+        );
+        
+<span class="nc" id="L193">        return attendances.stream()</span>
+<span class="nc" id="L194">            .map(attendanceMapper::toResponse)</span>
+<span class="nc" id="L195">            .collect(Collectors.toList());</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasCheckedIn(Long userId, LocalDate date) {
+<span class="nc" id="L201">        return attendanceRepository.findByUserIdAndDate(userId, date)</span>
+<span class="nc" id="L202">            .map(Attendance::isCheckedIn)</span>
+<span class="nc" id="L203">            .orElse(false);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasCheckedOut(Long userId, LocalDate date) {
+<span class="nc" id="L209">        return attendanceRepository.findByUserIdAndDate(userId, date)</span>
+<span class="nc" id="L210">            .map(Attendance::isCheckedOut)</span>
+<span class="nc" id="L211">            .orElse(false);</span>
+    }
+
+    @Override
+    public int autoCheckOut(LocalDate date) {
+<span class="nc" id="L216">        log.info(&quot;Running auto check-out for date: {}&quot;, date);</span>
+        
+<span class="nc" id="L218">        List&lt;Attendance&gt; pendingCheckouts = attendanceRepository.findPendingCheckouts(date);</span>
+        
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        for (Attendance attendance : pendingCheckouts) {</span>
+<span class="nc" id="L221">            attendance.setCheckOutTime(LocalTime.of(18, 0)); // Default 6 PM</span>
+<span class="nc" id="L222">            attendance.setRemarks(&quot;Auto checked out by system&quot;);</span>
+<span class="nc" id="L223">            attendance.calculateTotalHours();</span>
+<span class="nc" id="L224">        }</span>
+        
+<span class="nc" id="L226">        attendanceRepository.saveAll(pendingCheckouts);</span>
+        
+<span class="nc" id="L228">        log.info(&quot;Auto check-out completed. {} records updated&quot;, pendingCheckouts.size());</span>
+<span class="nc" id="L229">        return pendingCheckouts.size();</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List&lt;MonthlyAttendanceResponse&gt; getAllEmployeesMonthlyAttendance(int year, int month) {
+<span class="nc" id="L235">        log.info(&quot;Fetching monthly attendance for all employees - {}/{}&quot;, year, month);</span>
+
+<span class="nc" id="L237">        List&lt;Long&gt; userIds = attendanceRepository.findDistinctUserIdsByYearAndMonth(year, month);</span>
+        
+<span class="nc" id="L239">        log.info(&quot;Found {} employees with attendance records in {}/{}&quot;, userIds.size(), year, month);</span>
+
+<span class="nc" id="L241">        List&lt;MonthlyAttendanceResponse&gt; responses = new java.util.ArrayList&lt;&gt;();</span>
+        
+<span class="nc bnc" id="L243" title="All 2 branches missed.">        for (Long userId : userIds) {</span>
+<span class="nc" id="L244">            MonthlyAttendanceResponse response = getMonthlyAttendance(userId, year, month);</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">            if (response != null) {</span>
+<span class="nc" id="L246">                responses.add(response);</span>
+            }
+<span class="nc" id="L248">        }</span>
+        
+<span class="nc" id="L250">        return responses;</span>
+    }
+
+    private long countByStatus(Long userId, LocalDate startDate, LocalDate endDate, AttendanceStatus status) {
+<span class="nc" id="L254">        return attendanceRepository.countByUserIdAndDateRangeAndStatus(userId, startDate, endDate, status);</span>
+    }
+
+    @Override
+    public LeaveRequestResponse requestLeave(LeaveRequestDTO request) {
+<span class="nc" id="L259">        log.info(&quot;Processing leave request for user: {} from {} to {}&quot;, </span>
+<span class="nc" id="L260">            request.getUserId(), request.getStartDate(), request.getEndDate());</span>
+
+<span class="nc bnc" id="L262" title="All 2 branches missed.">        if (request.getEndDate().isBefore(request.getStartDate())) {</span>
+<span class="nc" id="L263">            throw new AttendanceException(&quot;End date cannot be before start date&quot;);</span>
+        }
+
+<span class="nc bnc" id="L266" title="All 2 branches missed.">        if (leaveRequestRepository.hasOverlappingLeave(</span>
+<span class="nc" id="L267">                request.getUserId(), request.getStartDate(), request.getEndDate())) {</span>
+<span class="nc" id="L268">            throw new AttendanceException(&quot;You already have a leave request for overlapping dates&quot;);</span>
+        }
+
+<span class="nc" id="L271">        User user = userRepository.findById(request.getUserId())</span>
+<span class="nc" id="L272">            .orElseThrow(() -&gt; new AttendanceException(&quot;User not found&quot;));</span>
+
+<span class="nc" id="L274">        String employeeName = user.getFirstName() + &quot; &quot; + user.getLastName();</span>
+
+<span class="nc" id="L276">        LeaveRequest leaveRequest = LeaveRequest.builder()</span>
+<span class="nc" id="L277">            .userId(request.getUserId())</span>
+<span class="nc" id="L278">            .employeeName(employeeName)</span>
+<span class="nc" id="L279">            .leaveType(request.getLeaveType())</span>
+<span class="nc" id="L280">            .startDate(request.getStartDate())</span>
+<span class="nc" id="L281">            .endDate(request.getEndDate())</span>
+<span class="nc" id="L282">            .reason(request.getReason())</span>
+<span class="nc" id="L283">            .status(&quot;PENDING&quot;)</span>
+<span class="nc" id="L284">            .build();</span>
+
+<span class="nc" id="L286">        LeaveRequest saved = leaveRequestRepository.save(leaveRequest);</span>
+<span class="nc" id="L287">        log.info(&quot;Leave request created with ID: {}&quot;, saved.getLeaveRequestId());</span>
+
+<span class="nc" id="L289">        return mapToLeaveResponse(saved);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page&lt;LeaveRequestResponse&gt; getAllLeaveRequests(Pageable pageable) {
+<span class="nc" id="L295">        log.debug(&quot;Fetching all leave requests&quot;);</span>
+        
+<span class="nc" id="L297">        Page&lt;LeaveRequest&gt; requests = leaveRequestRepository.findAll(pageable);</span>
+<span class="nc" id="L298">        return requests.map(this::mapToLeaveResponse);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page&lt;LeaveRequestResponse&gt; getLeaveRequestsByStatus(String status, Pageable pageable) {
+<span class="nc" id="L304">        log.debug(&quot;Fetching leave requests with status: {}&quot;, status);</span>
+        
+<span class="nc" id="L306">        Page&lt;LeaveRequest&gt; requests = leaveRequestRepository.findByStatusOrderByRequestedAtDesc(</span>
+<span class="nc" id="L307">            status.toUpperCase(), pageable);</span>
+<span class="nc" id="L308">        return requests.map(this::mapToLeaveResponse);</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page&lt;LeaveRequestResponse&gt; getMyLeaveRequests(Long userId, Pageable pageable) {
+<span class="nc" id="L314">        log.debug(&quot;Fetching leave requests for user: {}&quot;, userId);</span>
+        
+<span class="nc" id="L316">        Page&lt;LeaveRequest&gt; requests = leaveRequestRepository.findByUserIdOrderByRequestedAtDesc(</span>
+            userId, pageable);
+<span class="nc" id="L318">        return requests.map(this::mapToLeaveResponse);</span>
+    }
+
+    @Override
+    public LeaveRequestResponse approveLeaveRequest(Long leaveRequestId, Long approvedBy) {
+<span class="nc" id="L323">        log.info(&quot;Approving leave request: {} by user: {}&quot;, leaveRequestId, approvedBy);</span>
+
+<span class="nc" id="L325">        LeaveRequest leaveRequest = leaveRequestRepository.findById(leaveRequestId)</span>
+<span class="nc" id="L326">            .orElseThrow(() -&gt; new AttendanceException(&quot;Leave request not found&quot;));</span>
+
+<span class="nc bnc" id="L328" title="All 2 branches missed.">        if (!&quot;PENDING&quot;.equals(leaveRequest.getStatus())) {</span>
+<span class="nc" id="L329">            throw new AttendanceException(&quot;Leave request has already been processed&quot;);</span>
+        }
+
+<span class="nc" id="L332">        leaveRequest.setStatus(&quot;APPROVED&quot;);</span>
+<span class="nc" id="L333">        leaveRequest.setRespondedAt(LocalDateTime.now());</span>
+<span class="nc" id="L334">        leaveRequest.setRespondedBy(approvedBy);</span>
+
+<span class="nc" id="L336">        LeaveRequest updated = leaveRequestRepository.save(leaveRequest);</span>
+<span class="nc" id="L337">        log.info(&quot;Leave request approved: {}&quot;, leaveRequestId);</span>
+
+<span class="nc" id="L339">        return mapToLeaveResponse(updated);</span>
+    }
+
+    @Override
+    public LeaveRequestResponse rejectLeaveRequest(Long leaveRequestId, String rejectionReason, Long rejectedBy) {
+<span class="nc" id="L344">        log.info(&quot;Rejecting leave request: {} by user: {}&quot;, leaveRequestId, rejectedBy);</span>
+
+<span class="nc" id="L346">        LeaveRequest leaveRequest = leaveRequestRepository.findById(leaveRequestId)</span>
+<span class="nc" id="L347">            .orElseThrow(() -&gt; new AttendanceException(&quot;Leave request not found&quot;));</span>
+
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        if (!&quot;PENDING&quot;.equals(leaveRequest.getStatus())) {</span>
+<span class="nc" id="L350">            throw new AttendanceException(&quot;Leave request has already been processed&quot;);</span>
+        }
+
+<span class="nc" id="L353">        leaveRequest.setStatus(&quot;REJECTED&quot;);</span>
+<span class="nc" id="L354">        leaveRequest.setRejectionReason(rejectionReason);</span>
+<span class="nc" id="L355">        leaveRequest.setRespondedAt(LocalDateTime.now());</span>
+<span class="nc" id="L356">        leaveRequest.setRespondedBy(rejectedBy);</span>
+
+<span class="nc" id="L358">        LeaveRequest updated = leaveRequestRepository.save(leaveRequest);</span>
+<span class="nc" id="L359">        log.info(&quot;Leave request rejected: {}&quot;, leaveRequestId);</span>
+
+<span class="nc" id="L361">        return mapToLeaveResponse(updated);</span>
+    }
+
+    private LeaveRequestResponse mapToLeaveResponse(LeaveRequest request) {
+<span class="nc" id="L365">        return LeaveRequestResponse.builder()</span>
+<span class="nc" id="L366">            .leaveRequestId(request.getLeaveRequestId())</span>
+<span class="nc" id="L367">            .userId(request.getUserId())</span>
+<span class="nc" id="L368">            .employeeName(request.getEmployeeName())</span>
+<span class="nc" id="L369">            .leaveType(request.getLeaveType())</span>
+<span class="nc" id="L370">            .startDate(request.getStartDate())</span>
+<span class="nc" id="L371">            .endDate(request.getEndDate())</span>
+<span class="nc" id="L372">            .totalDays(request.getTotalDays())</span>
+<span class="nc" id="L373">            .reason(request.getReason())</span>
+<span class="nc" id="L374">            .status(request.getStatus())</span>
+<span class="nc" id="L375">            .rejectionReason(request.getRejectionReason())</span>
+<span class="nc" id="L376">            .requestedAt(request.getRequestedAt())</span>
+<span class="nc" id="L377">            .respondedAt(request.getRespondedAt())</span>
+<span class="nc" id="L378">            .respondedBy(request.getRespondedBy())</span>
+<span class="nc" id="L379">            .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

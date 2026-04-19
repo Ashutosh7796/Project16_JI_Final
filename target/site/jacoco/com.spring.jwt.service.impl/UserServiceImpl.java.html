@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">JWT-with-Spring-Security</a> &gt; <a href="index.source.html" class="el_package">com.spring.jwt.service.impl</a> &gt; <span class="el_source">UserServiceImpl.java</span></div><h1>UserServiceImpl.java</h1><pre class="source lang-java linenums">package com.spring.jwt.service.impl;
+
+import com.spring.jwt.dto.*;
+import com.spring.jwt.entity.*;
+import com.spring.jwt.exception.UserNotFoundExceptions;
+import com.spring.jwt.repository.UserRepository;
+import com.spring.jwt.service.UserService;
+import com.spring.jwt.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * User Service Implementation
+ * 
+ * Handles user management operations:
+ * - User CRUD operations
+ * - User profile management
+ * 
+ * Note: Password reset functionality moved to PasswordResetService
+ * Note: Registration functionality handled by RegistrationService
+ * 
+ * @author System
+ * @version 2.0
+ */
+@Service
+<span class="nc" id="L34">@RequiredArgsConstructor</span>
+<span class="nc" id="L35">@Slf4j</span>
+public class UserServiceImpl implements UserService {
+
+    private final UserRepository userRepository;
+    private final UserMapper userMapper;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page&lt;UserDTO&gt; getAllUsers(int pageNo, int pageSize) {
+<span class="nc" id="L44">        Pageable pageable = PageRequest.of(pageNo, pageSize);</span>
+<span class="nc" id="L45">        Page&lt;User&gt; users = userRepository.findAll(pageable);</span>
+
+<span class="nc" id="L47">        return users.map(user -&gt; {</span>
+<span class="nc" id="L48">            UserDTO userDTO = userMapper.toDTO(user);</span>
+<span class="nc" id="L49">            return populateRoleSpecificData(user, userDTO);</span>
+        });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserDTO getUserById(Long id) {
+<span class="nc" id="L56">        User user = userRepository.findById(id)</span>
+<span class="nc" id="L57">                .orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;User not found with id: &quot; + id));</span>
+
+<span class="nc" id="L59">        UserDTO userDTO = userMapper.toDTO(user);</span>
+<span class="nc" id="L60">        return populateRoleSpecificData(user, userDTO);</span>
+    }
+
+    @Override
+    @Transactional
+    public UserDTO updateUser(Long id, UserUpdateRequest request) {
+<span class="nc" id="L66">        User user = userRepository.findById(id)</span>
+<span class="nc" id="L67">                .orElseThrow(() -&gt; new UserNotFoundExceptions(&quot;User not found with id: &quot; + id));</span>
+
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (request.getMobileNumber() != null) {</span>
+<span class="nc" id="L70">            user.setMobileNumber(request.getMobileNumber());</span>
+        }
+
+<span class="nc" id="L73">        User updatedUser = userRepository.save(user);</span>
+<span class="nc" id="L74">        return userMapper.toDTO(updatedUser);</span>
+    }
+
+    /**
+     * Populates role-specific data in UserDTO
+     */
+    private UserDTO populateRoleSpecificData(User user, UserDTO userDTO) {
+<span class="nc" id="L81">        Set&lt;String&gt; roles = user.getRoles().stream()</span>
+<span class="nc" id="L82">                .map(Role::getName)</span>
+<span class="nc" id="L83">                .collect(Collectors.toSet());</span>
+
+<span class="nc" id="L85">        userDTO.setRoles(roles);</span>
+<span class="nc" id="L86">        return userDTO;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
