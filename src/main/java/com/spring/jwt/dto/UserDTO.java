@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,6 +33,9 @@ public class UserDTO {
 
     private String role;
     private Set<String> roles;
+    
+    private Boolean accountLocked;
+    private LocalDateTime createdAt;
 
     private String employeeCode;
     private String companyName;
@@ -55,6 +59,8 @@ public class UserDTO {
         this.mobileNumber = user.getMobileNumber();
         this.firstName = user.getFirstName();
         this.lastName = user.getLastName();
+        this.accountLocked = user.getAccountLocked();
+        this.createdAt = user.getCreatedAt();
 
         if (user.getRoles() != null) {
             this.roles = user.getRoles().stream()

@@ -25,4 +25,9 @@ public class CheckoutOrderResponse {
     private String failReason;
     /** Latest refund workflow status for this order, if any. */
     private String refundStatus;
+    
+    // Customer Details
+    private String customerName;
+    private String contactNumber;
+    private String deliveryAddress;
 }

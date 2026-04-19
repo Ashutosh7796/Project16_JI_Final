@@ -6,6 +6,8 @@ import com.spring.jwt.EmployeeFarmerSurvey.EmployeeFarmerSurveyRepository;
 import com.spring.jwt.Product.ProductRepository;
 import com.spring.jwt.ProductBuyConfirmed.ProductBuyConfirmedRepository;
 import com.spring.jwt.ProductBuyPending.ProductBuyPendingRepository;
+import com.spring.jwt.checkout.CheckoutOrderRepository;
+import com.spring.jwt.checkout.CheckoutOrderStatus;
 import com.spring.jwt.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,7 @@ public class AdminDashboardService {
     private final ProductRepository productRepository;
     private final ProductBuyPendingRepository productBuyPendingRepository;
     private final ProductBuyConfirmedRepository productBuyConfirmedRepository;
+    private final CheckoutOrderRepository checkoutOrderRepository;
 
     @Autowired
     @Qualifier("dashboardStatsExecutor")
@@ -53,6 +56,12 @@ public class AdminDashboardService {
                 CompletableFuture.supplyAsync(() -> productBuyPendingRepository.count(), ex);
         CompletableFuture<Long> confirmed =
                 CompletableFuture.supplyAsync(() -> productBuyConfirmedRepository.count(), ex);
+        
+        CompletableFuture<Long> checkoutOrdersAmt =
+                CompletableFuture.supplyAsync(() -> checkoutOrderRepository.countAllOrders(), ex);
+                
+        CompletableFuture<Double> totalRev =
+                CompletableFuture.supplyAsync(() -> checkoutOrderRepository.sumTotalAmountByStatus(CheckoutOrderStatus.PAID), ex);
 
         List<CompletableFuture<OrderWeekPointDTO>> weekFutures = new ArrayList<>(8);
         for (int w = 0; w < 8; w++) {
@@ -77,7 +86,7 @@ public class AdminDashboardService {
 
         CompletableFuture<Void> weeksDone =
                 CompletableFuture.allOf(weekFutures.toArray(new CompletableFuture[0]));
-        CompletableFuture.allOf(farmers, employees, products, pending, confirmed, weeksDone)
+        CompletableFuture.allOf(farmers, employees, products, pending, confirmed, checkoutOrdersAmt, totalRev, weeksDone)
                 .join();
 
         List<OrderWeekPointDTO> orderTrack = weekFutures.stream()
@@ -93,6 +102,8 @@ public class AdminDashboardService {
                 .employees(employees.join())
                 .products(products.join())
                 .orders(orders)
+                .totalCheckoutOrders(checkoutOrdersAmt.join())
+                .totalRevenue(totalRev.join())
                 .orderTrack(orderTrack)
                 .build();
     }

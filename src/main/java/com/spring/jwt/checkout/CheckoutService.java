@@ -74,6 +74,9 @@ public interface CheckoutService {
      * For PAID orders, automatically initiates a refund to the original payment method.
      */
     void adminCancelOrder(Long orderId, Long adminId, String reason);
+    
+    /** Marks all pending line items as fulfilled for a PAID order. */
+    CheckoutOrderResponse adminFulfillOrder(Long orderId, Long adminId);
 
     /** Admin: list all checkout orders across all users (newest first). */
     List<CheckoutOrderResponse> adminListAllOrders(int limit);

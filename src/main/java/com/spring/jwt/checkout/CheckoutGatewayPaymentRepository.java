@@ -12,4 +12,6 @@ public interface CheckoutGatewayPaymentRepository extends JpaRepository<Checkout
     Optional<CheckoutGatewayPayment> findByTrackingId(String trackingId);
 
     List<CheckoutGatewayPayment> findByOrder_IdOrderByIdDesc(Long orderId);
+
+    List<CheckoutGatewayPayment> findAllByOrderByCreatedAtDesc();
 }

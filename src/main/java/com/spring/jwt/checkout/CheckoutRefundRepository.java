@@ -27,4 +27,6 @@ public interface CheckoutRefundRepository extends JpaRepository<CheckoutRefund, 
     Optional<CheckoutRefund> findFirstByOrder_IdOrderByIdDesc(Long orderId);
 
     List<CheckoutRefund> findByOrder_IdAndStatusIn(Long orderId, Collection<CheckoutRefundRecordStatus> statuses);
+
+    List<CheckoutRefund> findAllByOrderByCreatedAtDesc();
 }

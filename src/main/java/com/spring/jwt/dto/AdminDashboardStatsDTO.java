@@ -24,5 +24,10 @@ public class AdminDashboardStatsDTO {
     private long products;
     /** Total order-like records (pending + confirmed tables). */
     private long orders;
+    
+    /** TRUE E-Commerce metrics */
+    private long totalCheckoutOrders;
+    private Double totalRevenue;
+    
     private List<OrderWeekPointDTO> orderTrack;
 }

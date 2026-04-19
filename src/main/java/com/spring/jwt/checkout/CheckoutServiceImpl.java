@@ -585,6 +585,33 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .orElseThrow(() -> new ResourceNotFoundException("Checkout order not found"));
         return mapOrder(order);
     }
+    
+    @Override
+    @Transactional
+    public CheckoutOrderResponse adminFulfillOrder(Long orderId, Long adminId) {
+        CheckoutOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Checkout order not found"));
+
+        if (order.getStatus() != CheckoutOrderStatus.PAID) {
+            throw new IllegalStateException("Only PAID orders can be fulfilled. Current status: " + order.getStatus());
+        }
+
+        boolean changed = false;
+        for (CheckoutOrderLine line : order.getLines()) {
+            if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING) {
+                line.setFulfillmentStatus(CheckoutLineFulfillmentStatus.FULFILLED);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            order.setUpdatedAt(LocalDateTime.now());
+            orderRepository.save(order);
+            appendEvent(order.getId(), order.getMerchantOrderId(), "ADMIN_FULFILL", "Order manually fulfilled by admin_id=" + adminId);
+        }
+
+        return mapOrder(order);
+    }
 
     @Override
     @Transactional
@@ -1040,6 +1067,9 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .lines(lines)
                 .failReason(order.getFailReason())
                 .refundStatus(refundStatus)
+                .customerName(order.getCustomerName())
+                .contactNumber(order.getContactNumber())
+                .deliveryAddress(order.getDeliveryAddress())
                 .build();
     }
 

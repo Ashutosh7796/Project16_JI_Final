@@ -20,6 +20,29 @@ import org.springframework.web.bind.annotation.*;
 public class CheckoutRefundAdminController {
 
     private final CheckoutRefundLifecycleService refundLifecycleService;
+    private final CheckoutRefundRepository refundRepository;
+
+    @GetMapping
+    public java.util.List<java.util.Map<String, Object>> getAllRefunds() {
+        return refundRepository.findAllByOrderByCreatedAtDesc()
+            .stream()
+            .map(r -> {
+                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("id", r.getId());
+                m.put("orderId", r.getOrder() != null ? r.getOrder().getId() : null);
+                m.put("merchantOrderId", r.getOrder() != null ? r.getOrder().getMerchantOrderId() : null);
+                m.put("amount", r.getAmount());
+                m.put("reason", r.getReason());
+                m.put("status", r.getStatus() != null ? r.getStatus().name() : null);
+                m.put("gatewayReference", r.getGatewayReference());
+                m.put("ccaTrackingId", r.getCcaTrackingId());
+                m.put("createdAt", r.getCreatedAt());
+                m.put("isManual", r.getIsManual());
+                m.put("adminNotes", r.getAdminNotes());
+                return m;
+            })
+            .collect(java.util.stream.Collectors.toList());
+    }
 
     @PostMapping("/{refundId}/manual-success")
     @ResponseStatus(HttpStatus.NO_CONTENT)

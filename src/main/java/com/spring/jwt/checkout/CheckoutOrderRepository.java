@@ -39,4 +39,19 @@ public interface CheckoutOrderRepository extends JpaRepository<CheckoutOrder, Lo
     Optional<CheckoutOrder> findTopByStatusOrderByCreatedAtDesc(CheckoutOrderStatus status);
 
     Page<CheckoutOrder> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM CheckoutOrder o WHERE o.status = :status")
+    Double sumTotalAmountByStatus(@Param("status") CheckoutOrderStatus status);
+
+    long countByStatus(CheckoutOrderStatus status);
+    
+    @Query("SELECT COUNT(o) FROM CheckoutOrder o")
+    long countAllOrders();
+
+    @Query(value = "SELECT DATE(created_at) as sale_date, SUM(total_amount) as total_sales, COUNT(*) as order_count " +
+                   "FROM checkout_orders " +
+                   "WHERE status NOT IN ('INITIATED', 'FAILED', 'CANCELLED') " +
+                   "GROUP BY DATE(created_at) " +
+                   "ORDER BY sale_date ASC", nativeQuery = true)
+    List<java.util.Map<String, Object>> findSalesTrends();
 }

@@ -121,6 +121,27 @@ public class AdminController {
         userRepository.save(user);
         return ResponseEntity.ok(new BaseResponseDTO("200", "Employee updated successfully", null));
     }
+    
+    @GetMapping("/store-users")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
+    public ResponseEntity<List<UserDTO>> getStoreUsers() {
+        List<User> users = userRepository.findAllStoreUsersList();
+        List<UserDTO> ret = users.stream().map(this::convertToDTO).collect(Collectors.toList());
+        return ResponseEntity.ok(ret);
+    }
+
+    @PutMapping("/store-users/{id}/block")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<BaseResponseDTO> toggleUserBlock(@PathVariable Long id) {
+        Optional<User> uOpt = userRepository.findById(id);
+        if (uOpt.isEmpty()) return ResponseEntity.status(404).body(new BaseResponseDTO("404", "Not found", null));
+        User user = uOpt.get();
+        // Toggle the flag
+        user.setAccountLocked(!user.getAccountLocked());
+        if(user.getAccountLocked()) user.setStatus(false);
+        userRepository.save(user);
+        return ResponseEntity.ok(new BaseResponseDTO("200", "Block status toggled successfully", null));
+    }
 
     @DeleteMapping("/employees/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
@@ -143,6 +164,8 @@ public class AdminController {
         dto.setMobileNumber(user.getMobileNumber());
         dto.setFirstName(user.getFirstName());
         dto.setLastName(user.getLastName());
+        dto.setAccountLocked(user.getAccountLocked());
+        dto.setCreatedAt(user.getCreatedAt());
         if (!user.getRoles().isEmpty()) {
             dto.setRole(user.getRoles().iterator().next().getName());
         }

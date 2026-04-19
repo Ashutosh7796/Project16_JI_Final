@@ -13,7 +13,7 @@ public class CheckoutRefundAuditService {
 
     private final CheckoutRefundAuditLogRepository auditLogRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRED)
     public void log(Long refundId, Long adminId, String action, String details) {
         try {
             auditLogRepository.save(CheckoutRefundAuditLog.builder()
