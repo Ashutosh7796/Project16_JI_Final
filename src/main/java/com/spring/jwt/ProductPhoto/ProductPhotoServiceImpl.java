@@ -222,7 +222,11 @@ public class ProductPhotoServiceImpl implements ProductPhotoService {
         try {
             image.setProduct(product);
             image.setImageType(photoType);
-            image.setImageData(file.getBytes());          // raw bytes — no Base64 bloat
+            
+            byte[] originalBytes = file.getBytes();
+            byte[] compressedBytes = com.spring.jwt.utils.ImageCompressionUtil.compressImage(originalBytes);
+            
+            image.setImageData(compressedBytes);          
             image.setContentType(file.getContentType());
             image.setFileName(file.getOriginalFilename());
             image.setUploadedAt(LocalDateTime.now());

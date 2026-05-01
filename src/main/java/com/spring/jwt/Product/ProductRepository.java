@@ -15,7 +15,7 @@ import java.util.Optional;
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // Fetch all products with sections and section contents in 2 queries (batch fetch)
-    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.sections s LEFT JOIN FETCH s.content")
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.sections s LEFT JOIN FETCH s.content ORDER BY p.productId DESC")
     List<Product> findAllWithSections();
 
     // Single product with full graph — used by getById

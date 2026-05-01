@@ -45,4 +45,7 @@ public class ProductBuyConfirmed {
 
     // 🔥 Important for tracking system
     private Boolean deliveryCreated = false;
+
+    @Column(name = "order_number", length = 50)
+    private String orderNumber;
 }

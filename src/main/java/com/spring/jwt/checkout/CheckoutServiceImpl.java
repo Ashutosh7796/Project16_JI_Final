@@ -276,9 +276,9 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
 
     @Override
-    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @Transactional(readOnly = true)
     public void syncPaymentStatusIfPending(Long userId, Long orderId) {
-        orderRepository.findByIdForUpdate(orderId).ifPresent(o -> {
+        orderRepository.findById(orderId).ifPresent(o -> {
             if (!o.getUserId().equals(userId)) return;
             if (o.getStatus() == CheckoutOrderStatus.PAYMENT_PENDING) {
                 // To avoid rate-limiting, only perform explicit sync if it hasn't been updated in the last 15 seconds
@@ -418,6 +418,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             return;
         }
         if (order.getStatus() == CheckoutOrderStatus.PAID) {
+            restoreConsumedStock(order);
             cancelOrderLines(order);
             order.setStatus(CheckoutOrderStatus.CANCELLED);
             order.setCancelledAt(LocalDateTime.now());
@@ -588,18 +589,18 @@ public class CheckoutServiceImpl implements CheckoutService {
     
     @Override
     @Transactional
-    public CheckoutOrderResponse adminFulfillOrder(Long orderId, Long adminId) {
+    public CheckoutOrderResponse adminUpdateFulfillment(Long orderId, Long adminId, CheckoutLineFulfillmentStatus targetStatus) {
         CheckoutOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Checkout order not found"));
 
         if (order.getStatus() != CheckoutOrderStatus.PAID) {
-            throw new IllegalStateException("Only PAID orders can be fulfilled. Current status: " + order.getStatus());
+            throw new IllegalStateException("Only PAID orders can have dispatch status updated. Current status: " + order.getStatus());
         }
 
         boolean changed = false;
         for (CheckoutOrderLine line : order.getLines()) {
-            if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING) {
-                line.setFulfillmentStatus(CheckoutLineFulfillmentStatus.FULFILLED);
+            if (line.getFulfillmentStatus() != targetStatus && line.getFulfillmentStatus() != CheckoutLineFulfillmentStatus.CANCELLED) {
+                line.setFulfillmentStatus(targetStatus);
                 changed = true;
             }
         }
@@ -607,7 +608,7 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (changed) {
             order.setUpdatedAt(LocalDateTime.now());
             orderRepository.save(order);
-            appendEvent(order.getId(), order.getMerchantOrderId(), "ADMIN_FULFILL", "Order manually fulfilled by admin_id=" + adminId);
+            appendEvent(order.getId(), order.getMerchantOrderId(), "ADMIN_UPDATE_FULFILLMENT", "Fulfillment changed to " + targetStatus.name() + " by admin_id=" + adminId);
         }
 
         return mapOrder(order);
@@ -651,6 +652,7 @@ public class CheckoutServiceImpl implements CheckoutService {
                 log.info("admin cancelled order {} (was PAYMENT_PENDING) admin={}", orderId, adminId);
             }
             case PAID -> {
+                restoreConsumedStock(order);
                 cancelOrderLines(order);
                 order.setStatus(CheckoutOrderStatus.CANCELLED);
                 order.setCancelledAt(LocalDateTime.now());
@@ -909,6 +911,17 @@ public class CheckoutServiceImpl implements CheckoutService {
             Product p = productRepository.findById(r.getProductId()).orElse(null);
             if (p != null && p.getStockOnHand() != null) {
                 inventoryRepository.decreaseReservedStock(r.getProductId(), r.getQuantity());
+            }
+            r.setStatus(CheckoutReservationStatus.RELEASED);
+            reservationRepository.save(r);
+        }
+    }
+
+    private void restoreConsumedStock(CheckoutOrder order) {
+        for (CheckoutReservation r : reservationRepository.findByOrderIdAndStatus(order.getId(), CheckoutReservationStatus.CONSUMED)) {
+            Product p = productRepository.findById(r.getProductId()).orElse(null);
+            if (p != null && p.getStockOnHand() != null) {
+                inventoryRepository.restoreStockOnHand(r.getProductId(), r.getQuantity());
             }
             r.setStatus(CheckoutReservationStatus.RELEASED);
             reservationRepository.save(r);

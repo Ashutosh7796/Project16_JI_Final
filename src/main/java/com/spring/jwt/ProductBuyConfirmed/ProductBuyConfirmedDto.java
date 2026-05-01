@@ -36,4 +36,6 @@ public class ProductBuyConfirmedDto {
     private String contactNumber;
 
     private Boolean deliveryCreated;
+
+    private String orderNumber;
 }

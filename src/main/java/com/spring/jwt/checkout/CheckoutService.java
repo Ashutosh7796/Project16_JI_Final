@@ -75,8 +75,8 @@ public interface CheckoutService {
      */
     void adminCancelOrder(Long orderId, Long adminId, String reason);
     
-    /** Marks all pending line items as fulfilled for a PAID order. */
-    CheckoutOrderResponse adminFulfillOrder(Long orderId, Long adminId);
+    /** Marks all active line items to a specific target status. */
+    CheckoutOrderResponse adminUpdateFulfillment(Long orderId, Long adminId, CheckoutLineFulfillmentStatus targetStatus);
 
     /** Admin: list all checkout orders across all users (newest first). */
     List<CheckoutOrderResponse> adminListAllOrders(int limit);

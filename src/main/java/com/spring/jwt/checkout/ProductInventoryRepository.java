@@ -49,4 +49,17 @@ public interface ProductInventoryRepository extends Repository<Product, Long> {
               AND stock_on_hand >= :qty
             """, nativeQuery = true)
     int consumeReservedAndDecreaseOnHand(@Param("pid") long productId, @Param("qty") int quantity);
+
+    /**
+     * Restore permanently deducted stock when a PAID order is cancelled.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = """
+            UPDATE products
+            SET stock_on_hand = stock_on_hand + :qty
+            WHERE product_id = :pid
+              AND stock_on_hand IS NOT NULL
+            """, nativeQuery = true)
+    int restoreStockOnHand(@Param("pid") long productId, @Param("qty") int quantity);
 }

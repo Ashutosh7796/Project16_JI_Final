@@ -64,8 +64,16 @@ public class ProductBuyServiceImpl implements ProductBuyService {
 
         pendingRepo.save(pending);
 
+        // Generate unique Amazon-style Order ID: 406-XXXXXXX-XXXXXXX (Ensure absolute uniqueness using DB auto-increment ID)
+        String rndC1 = String.format("%07d", (long)(Math.random() * 10000000L));
+        String rndC2 = String.format("%07d", (pending.getProductBuyPendingId() * 100) + (long)(Math.random() * 100L));
+        String orderNumber = "406-" + rndC1 + "-" + rndC2;
+        pending.setOrderNumber(orderNumber);
+        // Fallback to storing it for gateway as well
+        pending.setPaymentGatewayOrderId(orderNumber);
+        
         CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()
-                .orderId("PROD-" + pending.getProductBuyPendingId())
+                .orderId(orderNumber)
                 .amount(BigDecimal.valueOf(totalAmount))
                 .billingName(dto.getCustomerName())
                 .billingAddress(dto.getDeliveryAddress())
@@ -74,10 +82,9 @@ public class ProductBuyServiceImpl implements ProductBuyService {
 
         String paymentForm = ccAvenuePaymentService.generatePaymentForm(paymentRequest);
 
-        pending.setPaymentGatewayOrderId("PROD-" + pending.getProductBuyPendingId());
         pendingRepo.save(pending);
 
-        log.info("Created pending order {} for product {}", pending.getProductBuyPendingId(), product.getProductId());
+        log.info("Created pending order {} with number {} for product {}", pending.getProductBuyPendingId(), orderNumber, product.getProductId());
 
         ProductBuyPendingDto response = mapToPendingDto(pending);
         response.setPaymentGatewayOrderId(paymentForm);
@@ -128,6 +135,7 @@ public class ProductBuyServiceImpl implements ProductBuyService {
             confirmed.setCustomerName(pending.getCustomerName());
             confirmed.setContactNumber(pending.getContactNumber());
             confirmed.setDeliveryAddress(pending.getDeliveryAddress());
+            confirmed.setOrderNumber(pending.getOrderNumber());
             confirmedRepo.save(confirmed);
 
             log.info("Payment confirmed for order {}", pending.getProductBuyPendingId());
@@ -218,19 +226,20 @@ public class ProductBuyServiceImpl implements ProductBuyService {
     }
 
     private ProductBuyPendingDto mapToPendingDto(ProductBuyPending e) {
-        return new ProductBuyPendingDto(
-                e.getProductBuyPendingId(),
-                e.getUserId(),
-                e.getProductId(),
-                e.getQuantity(),
-                e.getTotalAmount(),
-                e.getPaymentStatus() != null ? e.getPaymentStatus().name() : null,
-                e.getPaymentGatewayOrderId(),
-                e.getCreatedAt(),
-                e.getDeliveryAddress(),
-                e.getCustomerName(),
-                e.getContactNumber()
-        );
+        ProductBuyPendingDto dto = new ProductBuyPendingDto();
+        dto.setId(e.getProductBuyPendingId());
+        dto.setUserId(e.getUserId());
+        dto.setProductId(e.getProductId());
+        dto.setQuantity(e.getQuantity());
+        dto.setTotalAmount(e.getTotalAmount());
+        dto.setPaymentStatus(e.getPaymentStatus() != null ? e.getPaymentStatus().name() : null);
+        dto.setPaymentGatewayOrderId(e.getPaymentGatewayOrderId());
+        dto.setCreatedAt(e.getCreatedAt());
+        dto.setDeliveryAddress(e.getDeliveryAddress());
+        dto.setCustomerName(e.getCustomerName());
+        dto.setContactNumber(e.getContactNumber());
+        dto.setOrderNumber(e.getOrderNumber());
+        return dto;
     }
 
     private ProductBuyConfirmedDto mapToConfirmedDto(ProductBuyConfirmed e) {
@@ -248,6 +257,7 @@ public class ProductBuyServiceImpl implements ProductBuyService {
         dto.setContactNumber(e.getContactNumber());
         dto.setDeliveryAddress(e.getDeliveryAddress());
         dto.setDeliveryCreated(e.getDeliveryCreated());
+        dto.setOrderNumber(e.getOrderNumber());
         if (e.getProduct() != null) {
             dto.setProductName(e.getProduct().getProductName());
         }

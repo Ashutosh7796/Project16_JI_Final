@@ -171,7 +171,8 @@ public class DocumentController
         @GetMapping("/{documentId}/metadata")
         public ResponseEntity<ApiResponse<DocumentMetadata>> getDocumentMetadata
         (
-                        @PathVariable Integer documentId)
+                        @PathVariable Integer documentId
+        )
         {
 
                 Long userId = SecurityUtil.getCurrentUserId();

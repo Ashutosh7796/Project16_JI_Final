@@ -28,4 +28,6 @@ public class ProductBuyPendingDto {
     private String deliveryAddress;
     private String customerName;
     private String contactNumber;
+
+    private String orderNumber;
 }

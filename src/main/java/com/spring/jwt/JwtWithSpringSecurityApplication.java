@@ -11,9 +11,11 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import java.security.Security;
 
+import org.springframework.cache.annotation.EnableCaching;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
+@EnableCaching
 @EnableMethodSecurity(
     securedEnabled = true,
     jsr250Enabled = true,

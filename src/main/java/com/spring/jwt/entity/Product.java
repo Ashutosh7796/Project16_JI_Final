@@ -40,6 +40,18 @@ public class Product {
     private Double offers;
     private Boolean active = true;
 
+    private String brand;
+    
+    @Column(unique = true)
+    private String sku;
+    
+    private String netQuantity;
+    
+    private String manufacturer;
+    
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     /**
      * Sellable units on hand. {@code null} means unlimited inventory (no reservation / stock checks).
      */

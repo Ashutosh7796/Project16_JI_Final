@@ -44,6 +44,7 @@ public class CacheConfig implements CachingConfigurer {
         ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager();
 
         cacheManager.setCacheNames(Arrays.asList(
+            "products",
             "profiles",
             "publicProfiles", 
             "profileStats",

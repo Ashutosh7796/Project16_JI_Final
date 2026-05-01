@@ -42,7 +42,17 @@ public class CheckoutAdminController {
 
     @PostMapping("/{orderId}/fulfill")
     public CheckoutOrderResponse fulfillOrder(@PathVariable Long orderId) {
-        return checkoutService.adminFulfillOrder(orderId, currentAdminId());
+        return checkoutService.adminUpdateFulfillment(orderId, currentAdminId(), CheckoutLineFulfillmentStatus.FULFILLED);
+    }
+    
+    @PostMapping("/{orderId}/shipped")
+    public CheckoutOrderResponse markShipped(@PathVariable Long orderId) {
+        return checkoutService.adminUpdateFulfillment(orderId, currentAdminId(), CheckoutLineFulfillmentStatus.SHIPPED);
+    }
+    
+    @PostMapping("/{orderId}/delivered")
+    public CheckoutOrderResponse markDelivered(@PathVariable Long orderId) {
+        return checkoutService.adminUpdateFulfillment(orderId, currentAdminId(), CheckoutLineFulfillmentStatus.DELIVERED);
     }
 
     @PostMapping("/{orderId}/cancel")

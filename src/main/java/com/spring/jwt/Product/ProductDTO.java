@@ -14,6 +14,14 @@ public class ProductDTO {
     private Double price;
     private Double offers;
     private Boolean active;
+    
+    private String brand;
+    private String sku;
+    private String netQuantity;
+    private String manufacturer;
+    private String description;
+    private Integer stockOnHand;
+    private Integer stockReserved;
     private List<ProductSectionDTO> sections;
     // Cover photo (COVERIMAGE type, or first available) — for listing cards
     private ProductPhotoDTO photoDTO;

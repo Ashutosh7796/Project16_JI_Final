@@ -41,4 +41,7 @@ public class ProductBuyPending {
 
     @Version
     private Long version;
+
+    @Column(name = "order_number", length = 50)
+    private String orderNumber;
 }

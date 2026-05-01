@@ -11,7 +11,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
-
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import java.util.List;
 import java.util.Set;
 
@@ -24,6 +25,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductPhotoRepository productPhotoRepository;
 
     @Override
+    @CacheEvict(value = "products", allEntries = true)
     public ProductDTO create(ProductDTO dto) throws BadRequestException {
 
         if (dto == null) {
@@ -55,6 +57,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    @Cacheable(value = "products")
     public List<ProductDTO> getAll() {
         List<Product> products = productRepository.findAllWithSections();
         return mapToDtoList(products);
@@ -62,6 +65,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    @Cacheable(value = "products")
     public Page<ProductDTO> getAllByProductType(Product.ProductType productType, Pageable pageable) {
         Page<Product> page = productRepository.findByProductTypeWithSections(productType, pageable);
         if (pageable.getPageNumber() >= page.getTotalPages() && page.getTotalPages() > 0) {
@@ -72,6 +76,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    @Cacheable(value = "products")
     public Page<ProductDTO> getAllByProductTypeAndCategory(Product.ProductType productType, Product.Category category, Pageable pageable) {
         Page<Product> page;
         if (category == Product.Category.ALL) {
@@ -86,6 +91,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @CacheEvict(value = "products", allEntries = true)
     public ProductDTO patch(Long id, ProductDTO dto) throws BadRequestException {
 
         if (dto == null) {
@@ -114,6 +120,25 @@ public class ProductServiceImpl implements ProductService {
             product.setActive(dto.getActive());
         }
 
+        if (dto.getBrand() != null) {
+            product.setBrand(dto.getBrand());
+        }
+        if (dto.getSku() != null) {
+            product.setSku(dto.getSku().isBlank() ? null : dto.getSku().trim());
+        }
+        if (dto.getNetQuantity() != null) {
+            product.setNetQuantity(dto.getNetQuantity());
+        }
+        if (dto.getManufacturer() != null) {
+            product.setManufacturer(dto.getManufacturer());
+        }
+        if (dto.getDescription() != null) {
+            product.setDescription(dto.getDescription());
+        }
+        if (dto.getStockOnHand() != null) {
+            product.setStockOnHand(dto.getStockOnHand());
+        }
+
         if (dto.getSections() != null) {
             product.getSections().clear();
             product.getSections().addAll(mapSections(dto.getSections(), product));
@@ -124,6 +149,7 @@ public class ProductServiceImpl implements ProductService {
 
 
     @Override
+    @CacheEvict(value = "products", allEntries = true)
     public void delete(Long id) throws BadRequestException {
         Product product = getProduct(id);
         productRepository.delete(product);
@@ -149,6 +175,12 @@ public class ProductServiceImpl implements ProductService {
         product.setPrice(roundToTwoDecimals(dto.getPrice()));
         product.setOffers(roundToTwoDecimals(dto.getOffers()));
         product.setActive(dto.getActive() != null ? dto.getActive() : true);
+        product.setBrand(dto.getBrand());
+        product.setSku(dto.getSku() != null && dto.getSku().isBlank() ? null : (dto.getSku() != null ? dto.getSku().trim() : null));
+        product.setNetQuantity(dto.getNetQuantity());
+        product.setManufacturer(dto.getManufacturer());
+        product.setDescription(dto.getDescription());
+        product.setStockOnHand(dto.getStockOnHand());
 
         if (dto.getSections() != null) {
             product.setSections(mapSections(dto.getSections(), product));
@@ -246,6 +278,13 @@ public class ProductServiceImpl implements ProductService {
         dto.setPrice(roundToTwoDecimals(product.getPrice()));
         dto.setOffers(roundToTwoDecimals(product.getOffers()));
         dto.setActive(product.getActive());
+        dto.setBrand(product.getBrand());
+        dto.setSku(product.getSku());
+        dto.setNetQuantity(product.getNetQuantity());
+        dto.setManufacturer(product.getManufacturer());
+        dto.setDescription(product.getDescription());
+        dto.setStockOnHand(product.getStockOnHand());
+        dto.setStockReserved(product.getStockReserved());
 
         if (product.getSections() != null) {
             dto.setSections(product.getSections().stream().map(s -> {
