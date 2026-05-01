@@ -89,6 +89,18 @@ public class CcAvenueOrderStatusClient {
             if (status != null && !"0".equals(status.trim())) {
                 String errorMsg = outer.get("error");
                 log.warn("CCAvenue status API returned status={} error={} for order {}", status, errorMsg, merchantOrderId);
+
+                // CCAvenue status API envelope codes:
+                //   0 = success (enc_response present)
+                //   1 = order not found / not yet processed (user may still be on payment page)
+                //   2 = malformed request / authentication error
+                // CRITICAL: status=1 does NOT mean payment failed — it means CCAvenue hasn't
+                // processed it yet. Returning Failure here would kill live payment sessions.
+                if ("1".equals(status.trim())) {
+                    log.info("CCAvenue status API: order {} not yet processed (status=1) — will retry later", merchantOrderId);
+                    return Optional.empty(); // retry on next reconciliation cycle
+                }
+                // status=2+ → genuine API error, safe to report as Failure
                 String synth = String.format("{\"order_status\":\"Failure\",\"status_message\":\"%s\"}", 
                         errorMsg != null ? errorMsg.replace("\"", "\\\"") : ("API Error " + status));
                 return Optional.of(objectMapper.readTree(synth));

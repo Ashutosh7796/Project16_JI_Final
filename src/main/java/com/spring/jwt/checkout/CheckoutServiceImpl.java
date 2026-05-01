@@ -166,7 +166,52 @@ public class CheckoutServiceImpl implements CheckoutService {
             }
         }
 
+        // PAYMENT_PENDING with different key or expired reservation:
+        // This happens when user refreshes, opens a new tab, or CCAvenue session timed out.
+        // Instead of crashing, treat like a retry — release old reservation and re-initiate.
+        if (order.getStatus() == CheckoutOrderStatus.PAYMENT_PENDING) {
+            boolean reservationExpired = order.getReservationExpiresAt() == null
+                    || !order.getReservationExpiresAt().isAfter(LocalDateTime.now());
+
+            if (reservationExpired) {
+                // Reservation expired — release inventory and re-reserve fresh
+                releaseActiveReservations(order);
+                validateLivePricing(order);
+                LocalDateTime expires = LocalDateTime.now().plusMinutes(checkoutProperties.getReservationTtlMinutes());
+                reserveInventoryForOrder(order, expires);
+                InitiateCheckoutPaymentResponse response;
+                try {
+                    response = buildInitiateResponse(order);
+                } catch (RuntimeException e) {
+                    registerInitiateBuildFailureCallback(userId, order.getId(), e);
+                    throw e;
+                }
+                order.setAbandonToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+                order.setReservationExpiresAt(expires);
+                order.setPaymentInitIdempotencyKey(payKey);
+                order.setUpdatedAt(LocalDateTime.now());
+                orderRepository.save(order);
+                log.info("checkout payment re-initiated after PAYMENT_PENDING (reservation expired) orderId={}", orderId);
+                return response;
+            } else {
+                // Reservation still valid — just regenerate the CCAvenue form (idempotent)
+                try {
+                    InitiateCheckoutPaymentResponse response = buildInitiateResponse(order);
+                    order.setPaymentInitIdempotencyKey(payKey);
+                    order.setUpdatedAt(LocalDateTime.now());
+                    orderRepository.save(order);
+                    log.info("checkout payment form regenerated for PAYMENT_PENDING orderId={}", orderId);
+                    return response;
+                } catch (RuntimeException e) {
+                    registerInitiateBuildFailureCallback(userId, order.getId(), e);
+                    throw e;
+                }
+            }
+        }
+
         if (order.getStatus() == CheckoutOrderStatus.FAILED) {
+            // Defensive: release any orphan ACTIVE reservations from crash scenarios
+            releaseActiveReservations(order);
             validateLivePricing(order);
             LocalDateTime expires = LocalDateTime.now().plusMinutes(checkoutProperties.getReservationTtlMinutes());
             reserveInventoryForOrder(order, expires);
@@ -177,10 +222,13 @@ public class CheckoutServiceImpl implements CheckoutService {
                 registerInitiateBuildFailureCallback(userId, order.getId(), e);
                 throw e;
             }
+            // Regenerate abandon token for the new payment session
+            order.setAbandonToken(java.util.UUID.randomUUID().toString().replace("-", ""));
             order.setStatus(CheckoutOrderStatus.PAYMENT_PENDING);
             order.setReservationExpiresAt(expires);
             order.setPaymentInitIdempotencyKey(payKey);
             order.setFailReason(null);
+            order.setFailureReason(null);
             order.setUpdatedAt(LocalDateTime.now());
             orderRepository.save(order);
             log.info("checkout payment re-initiated after FAILED orderId={}", orderId);
@@ -276,7 +324,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public void syncPaymentStatusIfPending(Long userId, Long orderId) {
         orderRepository.findById(orderId).ifPresent(o -> {
             if (!o.getUserId().equals(userId)) return;
@@ -304,7 +352,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CheckoutOrderResponse> listMyCheckoutOrders(Long userId, int limit) {
         int size = Math.min(limit <= 0 ? 50 : limit, 100);
         List<CheckoutOrder> orders = orderRepository
@@ -312,15 +360,21 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .getContent();
 
         // Perform JIT sync for any pending orders before mapping them to output
+        boolean synced = false;
         for (CheckoutOrder o : orders) {
             if (o.getStatus() == CheckoutOrderStatus.PAYMENT_PENDING) {
-                // Ignore failure if sync errors out. 
                 try {
                     this.self.syncPaymentStatusIfPending(userId, o.getId());
+                    synced = true;
                 } catch (Exception ignored) {}
             }
         }
-        
+
+        if (synced) {
+            // Clear L1 cache so refetch sees writes from REQUIRES_NEW child transactions
+            orderRepository.flush();
+        }
+
         // Refetch to get the updated status if any were modified via JIT sync
         return orderRepository
                 .findByUserIdOrderByCreatedAtDesc(userId, org.springframework.data.domain.PageRequest.of(0, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")))
@@ -559,24 +613,43 @@ public class CheckoutServiceImpl implements CheckoutService {
         // Find the most recent PAYMENT_PENDING order and fail it.
         // This is the fail-fast path for when CCAvenue redirects to the cancel URL
         // without any encrypted response (e.g. 10002 Merchant Authentication Failed).
-        orderRepository.findTopByStatusOrderByCreatedAtDesc(CheckoutOrderStatus.PAYMENT_PENDING)
-                .ifPresent(snapshot -> {
-                    orderRepository.findByIdForUpdate(snapshot.getId()).ifPresent(order -> {
-                        if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {
-                            return; // already resolved by another thread
-                        }
-                        releaseActiveReservations(order);
-                        cancelOrderLines(order);
-                        order.setStatus(CheckoutOrderStatus.FAILED);
-                        order.setFailReason("Gateway cancel callback (no response data — likely merchant authentication failure)");
-                        order.setFailureReason(FailureReason.AUTH_FAILED);
-                        order.setReservationExpiresAt(null);
-                        order.setUpdatedAt(LocalDateTime.now());
-                        orderRepository.save(order);
-                        log.warn("FAIL-FAST: checkout order {} marked FAILED on cancel callback with no encResp (10002?), ip={}",
-                                order.getId(), clientIp);
-                    });
-                });
+        //
+        // WARNING: This method operates WITHOUT order_id context (CCAvenue sent NO data).
+        // We pick the latest PAYMENT_PENDING order. In multi-user concurrent scenarios,
+        // there is a small risk of killing the wrong order — but leaving it PAYMENT_PENDING
+        // forever is worse (inventory locked, user stuck). The reservation TTL expiry
+        // serves as a safety net if this picks wrong.
+        List<CheckoutOrder> pending = orderRepository
+                .findByStatusAndUpdatedAtBefore(CheckoutOrderStatus.PAYMENT_PENDING, LocalDateTime.now().plusMinutes(1));
+        if (pending.isEmpty()) {
+            log.warn("FAIL-FAST: no PAYMENT_PENDING order found for cancel callback (ip={})", clientIp);
+            return;
+        }
+        // Sort by createdAt DESC and pick the most recent — most likely the one that just bounced
+        pending.sort((a, b) -> {
+            if (a.getCreatedAt() == null || b.getCreatedAt() == null) return 0;
+            return b.getCreatedAt().compareTo(a.getCreatedAt());
+        });
+        CheckoutOrder snapshot = pending.get(0);
+        if (pending.size() > 1) {
+            log.warn("FAIL-FAST: {} PAYMENT_PENDING orders exist — failing most recent id={} (may affect wrong order!), ip={}",
+                    pending.size(), snapshot.getId(), clientIp);
+        }
+        orderRepository.findByIdForUpdate(snapshot.getId()).ifPresent(order -> {
+            if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {
+                return; // already resolved by another thread
+            }
+            releaseActiveReservations(order);
+            cancelOrderLines(order);
+            order.setStatus(CheckoutOrderStatus.FAILED);
+            order.setFailReason("Gateway cancel callback (no response data — likely merchant authentication failure)");
+            order.setFailureReason(FailureReason.AUTH_FAILED);
+            order.setReservationExpiresAt(null);
+            order.setUpdatedAt(LocalDateTime.now());
+            orderRepository.save(order);
+            log.warn("FAIL-FAST: checkout order {} marked FAILED on cancel callback with no encResp (10002?), ip={}",
+                    order.getId(), clientIp);
+        });
     }
 
     @Override

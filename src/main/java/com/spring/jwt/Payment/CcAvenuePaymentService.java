@@ -18,30 +18,34 @@ public class CcAvenuePaymentService {
 
     @PostConstruct
     void validateConfig() {
-        boolean valid = true;
+        StringBuilder errors = new StringBuilder();
         String workingKey = trimToEmpty(config.getWorkingKey());
         String accessCode = trimToEmpty(config.getAccessCode());
         String merchantId = trimToEmpty(config.getMerchantId());
 
-        if (isBlank(workingKey)) { log.error("CCAvenue workingKey is EMPTY"); valid = false; }
-        if (isBlank(accessCode))  { log.error("CCAvenue accessCode is EMPTY"); valid = false; }
-        if (isBlank(merchantId))   { log.error("CCAvenue merchantId is EMPTY"); valid = false; }
-        if (isBlank(config.getPaymentUrl()))   { log.error("CCAvenue paymentUrl is EMPTY"); valid = false; }
-        if (isBlank(config.getRedirectUrl()))  { log.warn("CCAvenue redirectUrl is EMPTY");  }
-        if (isBlank(config.getCancelUrl()))    { log.warn("CCAvenue cancelUrl is EMPTY");    }
-        if (!workingKey.matches("^[A-Fa-f0-9]{32}$")) {
-            log.error("CCAvenue workingKey format invalid. Expected 32 hex characters, got length={}", workingKey.length());
-            valid = false;
+        if (isBlank(workingKey)) errors.append("CCAvenue workingKey is EMPTY. ");
+        if (isBlank(accessCode)) errors.append("CCAvenue accessCode is EMPTY. ");
+        if (isBlank(merchantId)) errors.append("CCAvenue merchantId is EMPTY. ");
+        if (isBlank(config.getPaymentUrl())) errors.append("CCAvenue paymentUrl is EMPTY. ");
+        if (isBlank(config.getRedirectUrl())) log.warn("CCAvenue redirectUrl is EMPTY — fallback may apply");
+        if (isBlank(config.getCancelUrl())) log.warn("CCAvenue cancelUrl is EMPTY — fallback may apply");
+
+        // workingKey must be exactly 32 hex chars for AES-128
+        if (!isBlank(workingKey) && !workingKey.matches("^[A-Fa-f0-9]{32}$")) {
+            errors.append(String.format("CCAvenue workingKey format invalid. Expected 32 hex characters, got length=%d. ", workingKey.length()));
         }
 
-        if (valid) {
-            log.info("CCAvenue config loaded: merchantId={}, accessCode={}..., paymentUrl={}, redirectUrl={}, cancelUrl={}",
-                    merchantId,
-                    accessCode.substring(0, Math.min(4, accessCode.length())) + "****",
-                    config.getPaymentUrl(),
-                    config.getRedirectUrl(),
-                    config.getCancelUrl());
+        if (errors.length() > 0) {
+            log.error("CCAvenue configuration errors: {}", errors);
+            throw new IllegalStateException("CCAvenue misconfigured — payment gateway will not work. Fix application properties. Errors: " + errors);
         }
+
+        log.info("CCAvenue config loaded: merchantId={}, accessCode={}..., paymentUrl={}, redirectUrl={}, cancelUrl={}",
+                merchantId,
+                accessCode.substring(0, Math.min(4, accessCode.length())) + "****",
+                config.getPaymentUrl(),
+                config.getRedirectUrl(),
+                config.getCancelUrl());
     }
 
     public String generatePaymentForm(CcAvenuePaymentRequest request) {

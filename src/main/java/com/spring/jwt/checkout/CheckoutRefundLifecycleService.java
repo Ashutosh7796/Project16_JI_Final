@@ -93,9 +93,11 @@ public class CheckoutRefundLifecycleService {
         }
     }
 
+    @Transactional(readOnly = true)
     public void reconcileOneRefund(Long refundId) {
-        // First read WITHOUT a lock to check eligibility and get the merchant ORder ID
-        CheckoutRefund refundOpt = refundRepository.findById(refundId).orElse(null);
+        // Use JOIN FETCH to eagerly load the order — prevents LazyInitializationException
+        // when accessing refund.getOrder().getMerchantOrderId() outside a session.
+        CheckoutRefund refundOpt = refundRepository.findByIdWithOrder(refundId).orElse(null);
         if (refundOpt == null) return;
         
         if (refundOpt.getStatus() != CheckoutRefundRecordStatus.INITIATED
@@ -110,7 +112,7 @@ public class CheckoutRefundLifecycleService {
             return;
         }
 
-        // NO LOCK HELD: Make the slow gateway API call
+        // Order is eagerly loaded — safe to access outside the transaction
         String merchantOrderId = refundOpt.getOrder().getMerchantOrderId();
         Optional<JsonNode> statusJson = Optional.empty();
         try {
@@ -119,7 +121,7 @@ public class CheckoutRefundLifecycleService {
             log.warn("ccAvenueOrderStatusClient fetch failed for refund {}: {}", refundId, e.getMessage());
         }
 
-        // Apply state transitions under lock
+        // Apply state transitions under lock (separate REQUIRES_NEW transaction)
         self.applyReconciledStatus(refundId, statusJson);
     }
 

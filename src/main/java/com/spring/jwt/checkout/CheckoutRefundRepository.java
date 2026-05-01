@@ -15,9 +15,14 @@ public interface CheckoutRefundRepository extends JpaRepository<CheckoutRefund, 
     @Query("SELECT r FROM CheckoutRefund r WHERE r.status IN :statuses")
     List<CheckoutRefund> findByStatusIn(@Param("statuses") Collection<CheckoutRefundRecordStatus> statuses);
 
+    /** Eager-fetch order WITH pessimistic lock (for writes). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM CheckoutRefund r JOIN FETCH r.order WHERE r.id = :id")
     Optional<CheckoutRefund> findByIdForUpdateWithOrder(@Param("id") Long id);
+
+    /** Eager-fetch order WITHOUT lock (for reads / pre-check). */
+    @Query("SELECT r FROM CheckoutRefund r JOIN FETCH r.order WHERE r.id = :id")
+    Optional<CheckoutRefund> findByIdWithOrder(@Param("id") Long id);
 
     List<CheckoutRefund> findByOrder_IdAndStatus(Long orderId, CheckoutRefundRecordStatus status);
 
