@@ -680,7 +680,21 @@ public class CheckoutServiceImpl implements CheckoutService {
 
         if (changed) {
             order.setUpdatedAt(LocalDateTime.now());
-            orderRepository.save(order);
+            try {
+                orderRepository.saveAndFlush(order);
+            } catch (org.springframework.dao.DataAccessException dbEx) {
+                String msg = dbEx.getMostSpecificCause() != null ? dbEx.getMostSpecificCause().getMessage() : dbEx.getMessage();
+                if (msg != null && msg.contains("Data truncated") && msg.contains("fulfillment_status")) {
+                    log.error("DB schema mismatch: fulfillment_status column does not accept '{}'. " +
+                              "Run: ALTER TABLE checkout_order_lines MODIFY COLUMN fulfillment_status VARCHAR(30) NOT NULL DEFAULT 'PENDING';",
+                              targetStatus.name());
+                    throw new IllegalStateException(
+                            "Cannot update order status to " + targetStatus.name() +
+                            ". The database needs a schema update. Please contact the administrator to run the migration.",
+                            dbEx);
+                }
+                throw dbEx;
+            }
             appendEvent(order.getId(), order.getMerchantOrderId(), "ADMIN_UPDATE_FULFILLMENT", "Fulfillment changed to " + targetStatus.name() + " by admin_id=" + adminId);
         }
 

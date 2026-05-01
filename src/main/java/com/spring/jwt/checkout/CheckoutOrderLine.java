@@ -35,7 +35,7 @@ public class CheckoutOrderLine {
     private BigDecimal lineTotal;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "fulfillment_status", nullable = false, length = 30)
+    @Column(name = "fulfillment_status", nullable = false, length = 30, columnDefinition = "VARCHAR(30) DEFAULT 'PENDING'")
     @Builder.Default
     private CheckoutLineFulfillmentStatus fulfillmentStatus = CheckoutLineFulfillmentStatus.PENDING;
 
