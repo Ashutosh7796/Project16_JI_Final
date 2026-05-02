@@ -29,6 +29,10 @@ public interface CheckoutRefundRepository extends JpaRepository<CheckoutRefund, 
     @Query("SELECT COALESCE(SUM(r.amount), 0) FROM CheckoutRefund r WHERE r.order.id = :orderId AND r.status = 'SUCCESS'")
     java.math.BigDecimal sumSuccessfulAmountByOrderId(@Param("orderId") Long orderId);
 
+    /** EC-17 Fix: Sum of in-flight refund amounts (INITIATED + PENDING_GATEWAY) to prevent over-refund. */
+    @Query("SELECT COALESCE(SUM(r.amount), 0) FROM CheckoutRefund r WHERE r.order.id = :orderId AND r.status IN ('INITIATED', 'PENDING_GATEWAY')")
+    java.math.BigDecimal sumInFlightAmountByOrderId(@Param("orderId") Long orderId);
+
     Optional<CheckoutRefund> findFirstByOrder_IdOrderByIdDesc(Long orderId);
 
     List<CheckoutRefund> findByOrder_IdAndStatusIn(Long orderId, Collection<CheckoutRefundRecordStatus> statuses);

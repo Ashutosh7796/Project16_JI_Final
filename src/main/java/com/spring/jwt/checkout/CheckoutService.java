@@ -56,6 +56,9 @@ public interface CheckoutService {
 
     void expireDuePaymentPendingOrders();
 
+    /** EC-25: Expire PENDING orders older than 24h that were never initiated. */
+    void expireOrphanPendingOrders();
+
     /**
      * Emergency fail-fast: when the cancel-URL callback arrives with NO encrypted response
      * (e.g. 10002 merchant auth failed), fail the most recent PAYMENT_PENDING order immediately.

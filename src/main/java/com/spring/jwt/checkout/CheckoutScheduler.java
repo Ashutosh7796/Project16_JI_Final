@@ -40,4 +40,14 @@ public class CheckoutScheduler {
     public void reconcileRefunds() {
         checkoutRefundLifecycleService.reconcileOpenRefunds();
     }
+
+    /**
+     * EC-25: Cleans up PENDING orders that were never initiated (no payment attempt).
+     * Runs hourly. These orders have no reservation and no TTL, so they accumulate forever without this.
+     */
+    @Scheduled(cron = "${app.checkout.orphan-pending-cron:0 0 * * * *}")
+    @SchedulerLock(name = "checkoutOrphanPendingCleanup", lockAtLeastFor = "30s", lockAtMostFor = "5m")
+    public void expireOrphanPendingOrders() {
+        checkoutService.expireOrphanPendingOrders();
+    }
 }

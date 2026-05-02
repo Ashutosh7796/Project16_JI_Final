@@ -36,6 +36,10 @@ public interface CheckoutOrderRepository extends JpaRepository<CheckoutOrder, Lo
     @Query("SELECT o FROM CheckoutOrder o WHERE o.status = :status AND o.updatedAt IS NOT NULL AND o.updatedAt < :threshold")
     List<CheckoutOrder> findByStatusAndUpdatedAtBefore(@Param("status") CheckoutOrderStatus status, @Param("threshold") LocalDateTime threshold);
 
+    /** EC-25: Find orphan PENDING orders older than threshold for cleanup. */
+    @Query("SELECT o FROM CheckoutOrder o WHERE o.status = :status AND o.createdAt < :threshold")
+    List<CheckoutOrder> findByStatusAndCreatedAtBefore(@Param("status") CheckoutOrderStatus status, @Param("threshold") LocalDateTime threshold);
+
     Optional<CheckoutOrder> findTopByStatusOrderByCreatedAtDesc(CheckoutOrderStatus status);
 
     Page<CheckoutOrder> findAllByOrderByCreatedAtDesc(Pageable pageable);

@@ -66,8 +66,16 @@ public class CheckoutServiceImpl implements CheckoutService {
     public CheckoutOrderResponse createOrder(Long userId, CreateCheckoutOrderRequest request, String checkoutIdempotencyKey) {
         if (checkoutIdempotencyKey != null && !checkoutIdempotencyKey.isBlank()) {
             Optional<CheckoutOrder> existing = orderRepository.findByUserIdAndCheckoutIdempotencyKey(userId, checkoutIdempotencyKey.trim());
+            // EC-22 Fix: Skip terminal-state orders so user can re-checkout with same cart
             if (existing.isPresent()) {
-                return mapOrder(existing.get());
+                CheckoutOrderStatus existingStatus = existing.get().getStatus();
+                if (existingStatus != CheckoutOrderStatus.CANCELLED
+                        && existingStatus != CheckoutOrderStatus.FAILED
+                        && existingStatus != CheckoutOrderStatus.REFUNDED) {
+                    return mapOrder(existing.get());
+                }
+                log.info("Idempotency key {} matched terminal order {} (status={}) — creating fresh order",
+                        checkoutIdempotencyKey, existing.get().getId(), existingStatus);
             }
         }
 
@@ -466,6 +474,15 @@ public class CheckoutServiceImpl implements CheckoutService {
             return;
         }
         if (order.getStatus() == CheckoutOrderStatus.PAID) {
+            // EC-23 Guard: Block cancel if any line is SHIPPED or DELIVERED (product already dispatched)
+            for (CheckoutOrderLine line : order.getLines()) {
+                if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.SHIPPED
+                        || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.DELIVERED) {
+                    throw new IllegalStateException(
+                            "Cannot cancel order with dispatched items. Line " + line.getId()
+                            + " is " + line.getFulfillmentStatus().name() + ". Request a refund instead.");
+                }
+            }
             restoreConsumedStock(order);
             cancelOrderLines(order);
             order.setStatus(CheckoutOrderStatus.CANCELLED);
@@ -502,10 +519,14 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (!inFlight.isEmpty()) {
             throw new IllegalStateException("A refund is already in progress for this order");
         }
+        // EC-17 Fix: Include both successful AND in-flight refunds to prevent over-refund
         BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
                 .orElse(BigDecimal.ZERO)
                 .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(refunded);
+        BigDecimal inFlightAmount = Optional.ofNullable(refundRepository.sumInFlightAmountByOrderId(orderId))
+                .orElse(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(refunded).subtract(inFlightAmount);
         if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("Nothing left to refund");
         }
@@ -598,6 +619,35 @@ public class CheckoutServiceImpl implements CheckoutService {
                 orderRepository.save(order);
                 log.info("checkout order expired reservations id={}", order.getId());
             });
+        }
+    }
+
+    /**
+     * EC-25 Fix: Expire PENDING orders that were never initiated (no payment attempt).
+     * These accumulate forever since no reservation TTL applies. Clean up after 24h.
+     */
+    @Override
+    @Transactional
+    public void expireOrphanPendingOrders() {
+        LocalDateTime threshold = LocalDateTime.now().minusHours(24);
+        List<CheckoutOrder> orphans = orderRepository.findByStatusAndCreatedAtBefore(CheckoutOrderStatus.PENDING, threshold);
+        int count = 0;
+        for (CheckoutOrder snapshot : orphans) {
+            orderRepository.findByIdForUpdate(snapshot.getId()).ifPresent(order -> {
+                if (order.getStatus() != CheckoutOrderStatus.PENDING) {
+                    return; // status changed since snapshot query
+                }
+                cancelOrderLines(order);
+                order.setStatus(CheckoutOrderStatus.CANCELLED);
+                order.setCancelledAt(LocalDateTime.now());
+                order.setFailReason("Orphan order expired — no payment initiated within 24h");
+                order.setUpdatedAt(LocalDateTime.now());
+                orderRepository.save(order);
+            });
+            count++;
+        }
+        if (count > 0) {
+            log.info("EC-25: expired {} orphan PENDING orders older than 24h", count);
         }
     }
 
@@ -733,6 +783,15 @@ public class CheckoutServiceImpl implements CheckoutService {
                 log.info("admin cancelled order {} (was PAYMENT_PENDING) admin={}", orderId, adminId);
             }
             case PAID -> {
+                // EC-23 Guard: Block cancel if any line is SHIPPED or DELIVERED
+                for (CheckoutOrderLine line : order.getLines()) {
+                    if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.SHIPPED
+                            || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.DELIVERED) {
+                        throw new IllegalStateException(
+                                "Cannot cancel order with dispatched items. Line " + line.getId()
+                                + " is " + line.getFulfillmentStatus().name() + ". Request a refund instead.");
+                    }
+                }
                 restoreConsumedStock(order);
                 cancelOrderLines(order);
                 order.setStatus(CheckoutOrderStatus.CANCELLED);
@@ -743,9 +802,12 @@ public class CheckoutServiceImpl implements CheckoutService {
                 log.info("admin cancelled order {} (was PAID) admin={} — initiating refund", orderId, adminId);
                 try {
                     // Create refund record; the refund lifecycle service will handle gateway submission
+                    // EC-17 Fix: Include both successful AND in-flight refunds to prevent over-refund
                     BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
                             .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-                    BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(refunded);
+                    BigDecimal inFlightAmt = Optional.ofNullable(refundRepository.sumInFlightAmountByOrderId(orderId))
+                            .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(refunded).subtract(inFlightAmt);
                     if (remaining.compareTo(BigDecimal.ZERO) > 0) {
                         CheckoutRefund refund = CheckoutRefund.builder()
                                 .order(order)
@@ -814,23 +876,76 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
         if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {
-            log.warn("Late or orphan success for checkout order {} in status {} — recording payment only", order.getId(), order.getStatus());
-            persistGatewayPaymentOrIgnore(order, trackingId, amountStr, params, encResp, clientIp,
-                    CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
-            recordOrphanRefundSuggestion(order, amountStr);
+            // EC-04/05/06 Fix: Late Success callback arrived after order left PAYMENT_PENDING.
+            // Money IS captured by gateway — we must handle it properly.
+            log.warn("Late success for checkout order {} in status {} — attempting recovery", order.getId(), order.getStatus());
+            appendEvent(order.getId(), order.getMerchantOrderId(), "LATE_SUCCESS_RECOVERY_ATTEMPT", order.getStatus().name());
+
+            // Step 1: Validate amount (same tolerance as normal flow)
+            BigDecimal lateAmount = parseAmount(amountStr);
+            BigDecimal amtTolerance = new BigDecimal("0.01");
+            if (lateAmount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(lateAmount).abs().compareTo(amtTolerance) > 0) {
+                log.error("Late success amount mismatch for order {}: expected {} got {}", order.getId(), order.getTotalAmount(), amountStr);
+                persistGatewayPaymentOrIgnore(order, trackingId, amountStr, params, encResp, clientIp,
+                        CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
+                recordGuaranteedRefund(order, amountStr, "Late success with amount mismatch");
+                return;
+            }
+
+            // Step 2: Validate/generate tracking ID (same as EC-16)
+            if (trackingId == null || trackingId.isBlank()) {
+                trackingId = "SYNTH-" + order.getMerchantOrderId() + "-" + System.currentTimeMillis();
+                log.warn("Late success: synthetic tracking_id for order {}: {}", order.getId(), trackingId);
+            }
+
+            // Step 3: Record the gateway payment
+            try {
+                persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,
+                        CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
+            } catch (DataIntegrityViolationException dup) {
+                log.info("Late success: duplicate tracking for order {} — already processed", order.getId());
+                return;
+            }
+
+            // Step 4: Attempt inventory recovery (re-reserve + consume)
+            boolean inventoryRecovered = tryRecoverInventoryForLateSuccess(order);
+
+            if (inventoryRecovered) {
+                // Promote to PAID — inventory is available and consumed
+                order.setStatus(CheckoutOrderStatus.PAID);
+                order.setPaidAt(LocalDateTime.now());
+                order.setReservationExpiresAt(null);
+                order.setFailReason(null);
+                order.setFailureReason(null);
+                order.setUpdatedAt(LocalDateTime.now());
+                // Un-cancel lines that were successfully fulfilled
+                orderRepository.save(order);
+                log.info("Late success RECOVERY: checkout order {} promoted to PAID", order.getId());
+                appendEvent(order.getId(), order.getMerchantOrderId(), "LATE_SUCCESS_RECOVERED_TO_PAID", null);
+            } else {
+                // Inventory unavailable — money captured but can't fulfill. Refund is mandatory.
+                log.warn("Late success: inventory unavailable for order {} — creating guaranteed refund", order.getId());
+                recordGuaranteedRefund(order, amountStr, "Late payment success — inventory no longer available");
+                appendEvent(order.getId(), order.getMerchantOrderId(), "LATE_SUCCESS_REFUND_CREATED", amountStr);
+            }
             return;
         }
 
         BigDecimal amount = parseAmount(amountStr);
-        if (amount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).compareTo(amount) != 0) {
-            log.error("Amount mismatch for checkout order {}: expected {} got {}", order.getId(), order.getTotalAmount(), amountStr);
+        // EC-07 Fix: Use ₹0.01 tolerance instead of exact match to handle legitimate gateway rounding
+        BigDecimal amountTolerance = new BigDecimal("0.01");
+        if (amount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(amount).abs().compareTo(amountTolerance) > 0) {
+            log.error("Amount mismatch for checkout order {}: expected {} got {} (tolerance={})", order.getId(), order.getTotalAmount(), amountStr, amountTolerance);
             appendEvent(order.getId(), order.getMerchantOrderId(), "CALLBACK_AMOUNT_MISMATCH", amountStr);
             return;
         }
 
         if (trackingId == null || trackingId.isBlank()) {
-            log.error("Missing tracking_id for successful checkout order {}", order.getId());
-            return;
+            // EC-16 Fix: Generate synthetic tracking ID instead of silently returning.
+            // This prevents orders from getting stuck in PAYMENT_PENDING forever when gateway omits tracking_id.
+            trackingId = "SYNTH-" + order.getMerchantOrderId() + "-" + System.currentTimeMillis();
+            log.warn("Missing tracking_id for successful checkout order {} — using synthetic: {}", order.getId(), trackingId);
+            appendEvent(order.getId(), order.getMerchantOrderId(), "SYNTHETIC_TRACKING_ID", trackingId);
         }
 
         try {
@@ -953,6 +1068,100 @@ public class CheckoutServiceImpl implements CheckoutService {
         applicationEventPublisher.publishEvent(new RefundCreatedEvent(saved.getId()));
     }
 
+    /**
+     * EC-04/05/06: Try to re-reserve and consume inventory for a late-success order.
+     * Since reservations were already RELEASED, we attempt fresh atomic reserve+consume per line.
+     * Returns true if ALL lines recovered, false if any line failed (partial recovery is rolled back).
+     */
+    private boolean tryRecoverInventoryForLateSuccess(CheckoutOrder order) {
+        if (order.getLines() == null || order.getLines().isEmpty()) {
+            return true;
+        }
+        List<Long> reservedPids = new ArrayList<>();
+        try {
+            for (CheckoutOrderLine line : order.getLines()) {
+                if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.CANCELLED
+                        || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING) {
+                    int reserved = inventoryRepository.increaseReservedStock(line.getProductId(), line.getQuantity());
+                    if (reserved == 0) {
+                        log.warn("Late success recovery: insufficient stock for product {} qty {}",
+                                line.getProductId(), line.getQuantity());
+                        // Rollback any reservations we already made
+                        for (Long pid : reservedPids) {
+                            // Find the matching line to get quantity
+                            order.getLines().stream()
+                                    .filter(l -> l.getProductId().equals(pid))
+                                    .findFirst()
+                                    .ifPresent(l -> inventoryRepository.decreaseReservedStock(pid, l.getQuantity()));
+                        }
+                        return false;
+                    }
+                    reservedPids.add(line.getProductId());
+                }
+            }
+            // All reservations succeeded — now consume
+            for (CheckoutOrderLine line : order.getLines()) {
+                if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.CANCELLED
+                        || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING) {
+                    int consumed = inventoryRepository.consumeReservedAndDecreaseOnHand(line.getProductId(), line.getQuantity());
+                    if (consumed > 0) {
+                        line.setFulfillmentStatus(CheckoutLineFulfillmentStatus.FULFILLED);
+                    } else {
+                        line.setFulfillmentStatus(CheckoutLineFulfillmentStatus.OUT_OF_STOCK);
+                    }
+                }
+            }
+            return true;
+        } catch (Exception ex) {
+            log.error("Late success inventory recovery failed for order {}: {}", order.getId(), ex.getMessage());
+            // Best-effort rollback
+            for (Long pid : reservedPids) {
+                try {
+                    order.getLines().stream()
+                            .filter(l -> l.getProductId().equals(pid))
+                            .findFirst()
+                            .ifPresent(l -> inventoryRepository.decreaseReservedStock(pid, l.getQuantity()));
+                } catch (Exception rollbackEx) {
+                    log.error("Rollback failed for product {}: {}", pid, rollbackEx.getMessage());
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * EC-04/05/06: Hardened refund creation for late-success scenarios.
+     * Unlike recordOrphanRefundSuggestion, this wraps the event publish in try-catch
+     * and logs explicitly to ensure the refund record is ALWAYS persisted to DB
+     * even if the Spring event bus fails.
+     */
+    private void recordGuaranteedRefund(CheckoutOrder order, String amountStr, String reason) {
+        BigDecimal amt = parseAmount(amountStr);
+        if (amt == null) {
+            amt = order.getTotalAmount();
+        }
+        CheckoutRefund refund = CheckoutRefund.builder()
+                .order(order)
+                .amount(amt)
+                .reason(truncate(reason, 480))
+                .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)
+                .ccaTrackingId(resolveCcaTrackingId(order))
+                .build();
+        CheckoutRefund saved = refundRepository.save(refund);
+        order.setRefundNote(truncate(reason, 480));
+        order.setRefundTotalAmount(amt);
+        orderRepository.save(order);
+        log.info("Guaranteed refund created: orderId={} refundId={} amount={} reason={}",
+                order.getId(), saved.getId(), amt, reason);
+        try {
+            applicationEventPublisher.publishEvent(new RefundCreatedEvent(saved.getId()));
+        } catch (Exception ex) {
+            // Refund record is saved — reconciliation scheduler will pick it up even if event fails
+            log.error("RefundCreatedEvent publish failed for refund {} — reconciliation will handle it: {}",
+                    saved.getId(), ex.getMessage());
+        }
+    }
+
     private void fulfillInventoryAfterPayment(CheckoutOrder order) {
         List<CheckoutReservation> active = reservationRepository.findByOrderIdAndStatus(order.getId(), CheckoutReservationStatus.ACTIVE);
         for (CheckoutReservation r : active) {
@@ -1009,11 +1218,13 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
     }
 
-    /** Mark all PENDING line items as CANCELLED when the order dies. */
+    /** EC-26 Fix: Mark PENDING and FULFILLED line items as CANCELLED when the order dies.
+     *  SHIPPED/DELIVERED lines are left as-is (physically dispatched — handled by refund flow). */
     private void cancelOrderLines(CheckoutOrder order) {
         if (order.getLines() == null) return;
         for (CheckoutOrderLine line : order.getLines()) {
-            if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING) {
+            if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.PENDING
+                    || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.FULFILLED) {
                 line.setFulfillmentStatus(CheckoutLineFulfillmentStatus.CANCELLED);
             }
         }
