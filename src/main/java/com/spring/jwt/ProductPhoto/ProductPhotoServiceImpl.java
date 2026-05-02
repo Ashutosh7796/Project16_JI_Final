@@ -13,7 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +67,14 @@ public class ProductPhotoServiceImpl implements ProductPhotoService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Product photo not found with ID: " + imageId));
         return mapToResponse(image);
+    }
+
+    @Override
+    public ProductPhotoRawDTO getRawPhotoById(Long imageId) {
+        ProductImage image = productPhotoRepository.findById(imageId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Product photo not found with ID: " + imageId));
+        return new ProductPhotoRawDTO(image.getImageData(), image.getContentType());
     }
 
     @Override
@@ -262,9 +269,10 @@ public class ProductPhotoServiceImpl implements ProductPhotoService {
         ProductPhotoResponseDTO dto = new ProductPhotoResponseDTO();
         dto.setImageId(entity.getImageId());
         dto.setProductId(entity.getProduct().getProductId());
-        // Encode to Base64 only on response — DB stores raw bytes
+        // Return a URL to the download endpoint — browser fetches and caches the image independently.
+        // This keeps the JSON payload tiny (a short URL string instead of megabytes of Base64).
         if (entity.getImageData() != null) {
-            dto.setImageData(Base64.getEncoder().encodeToString(entity.getImageData()));
+            dto.setImageData("/api/v1/product-photo/download/" + entity.getImageId());
         }
         dto.setContentType(entity.getContentType());
         dto.setFileName(entity.getFileName());

@@ -4,13 +4,17 @@ import com.spring.jwt.EmployeeFarmerSurvey.BaseResponseDTO1;
 import com.spring.jwt.Enums.ImageType;
 import com.spring.jwt.Enums.PhotoType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -187,6 +191,33 @@ public class ProductPhotoController {
     }
 
     // ── Delete endpoints ──────────────────────────────────────────────────────
+
+    /**
+     * Serve raw image bytes for use in <img src="/api/v1/product-photo/download/{imageId}">
+     * - Returns proper Content-Type header (image/jpeg, image/png, etc.)
+     * - Sets browser Cache-Control to 7 days (immutable per imageId)
+     * - No auth required — already permitted in AppConfig
+     */
+    @GetMapping("/download/{imageId}")
+    public ResponseEntity<byte[]> download(@PathVariable Long imageId) {
+        ProductPhotoRawDTO raw = productPhotoService.getRawPhotoById(imageId);
+        if (raw == null || raw.imageData() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(
+                raw.contentType() != null ? raw.contentType() : "image/jpeg"
+            );
+        } catch (Exception e) {
+            mediaType = MediaType.IMAGE_JPEG;
+        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic().immutable())
+                .eTag(String.valueOf(imageId))
+                .body(raw.imageData());
+    }
 
     /**
      * Delete a specific photo by productId + imageId.

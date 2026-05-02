@@ -14,6 +14,9 @@ public interface ProductPhotoService {
 
     ProductPhotoResponseDTO getPhotoById(Long imageId);
 
+    /** Raw bytes only — used by the /download/{imageId} endpoint. Never serialises Base64. */
+    ProductPhotoRawDTO getRawPhotoById(Long imageId);
+
     ProductPhotoResponseDTO getPhotoByProductId(Long productId);
 
     List<ProductPhotoResponseDTO> getAllPhotosByProductId(Long productId);

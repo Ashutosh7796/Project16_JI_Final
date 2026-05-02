@@ -305,7 +305,8 @@ public class ProductServiceImpl implements ProductService {
 
         ProductPhotoDTO coverDTO = new ProductPhotoDTO();
         if (cover != null && cover.getImageData() != null) {
-            coverDTO.setImageUrl(java.util.Base64.getEncoder().encodeToString(cover.getImageData()));
+            // Return a URL — the browser fetches/caches the image independently of the JSON payload
+            coverDTO.setImageUrl("/api/v1/product-photo/download/" + cover.getImageId());
             coverDTO.setUploadedAt(cover.getUploadedAt());
             coverDTO.setMessage("Product Photo Found");
         } else {
@@ -317,7 +318,8 @@ public class ProductServiceImpl implements ProductService {
         dto.setPhotos(photos.stream().map(p -> {
             ProductPhotoDTO pd = new ProductPhotoDTO();
             if (p.getImageData() != null) {
-                pd.setImageUrl(java.util.Base64.getEncoder().encodeToString(p.getImageData()));
+                // URL instead of Base64 — keeps gallery payload lightweight
+                pd.setImageUrl("/api/v1/product-photo/download/" + p.getImageId());
             }
             pd.setUploadedAt(p.getUploadedAt());
             pd.setMessage(p.getImageType() != null ? p.getImageType().name() : "PHOTO");
