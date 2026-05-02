@@ -10,6 +10,9 @@ import com.spring.jwt.entity.Product;
 import com.spring.jwt.exception.ResourceNotFoundException;
 import com.spring.jwt.useraddress.UserSavedAddress;
 import com.spring.jwt.useraddress.UserSavedAddressRepository;
+import com.spring.jwt.ledger.LedgerEntryStatus;
+import com.spring.jwt.ledger.LedgerService;
+import com.spring.jwt.ledger.LedgerSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +63,7 @@ public class CheckoutServiceImpl implements CheckoutService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final CheckoutRefundLifecycleService checkoutRefundLifecycleService;
     private final UserSavedAddressRepository userSavedAddressRepository;
+    private final LedgerService ledgerService;
 
     @Override
     @Transactional
@@ -899,8 +903,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             }
 
             // Step 3: Record the gateway payment
+            CheckoutGatewayPayment payment = null;
             try {
-                persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,
+                payment = persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,
                         CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
             } catch (DataIntegrityViolationException dup) {
                 log.info("Late success: duplicate tracking for order {} — already processed", order.getId());
@@ -922,6 +927,9 @@ public class CheckoutServiceImpl implements CheckoutService {
                 orderRepository.save(order);
                 log.info("Late success RECOVERY: checkout order {} promoted to PAID", order.getId());
                 appendEvent(order.getId(), order.getMerchantOrderId(), "LATE_SUCCESS_RECOVERED_TO_PAID", null);
+
+                // Phase 2: Ledger Integration (Late Success)
+                ledgerService.recordPayment(order.getId(), payment != null ? payment.getId() : null, lateAmount, trackingId, LedgerSource.WEBHOOK, LedgerEntryStatus.SUCCESS, "Late success recovery");
             } else {
                 // Inventory unavailable — money captured but can't fulfill. Refund is mandatory.
                 log.warn("Late success: inventory unavailable for order {} — creating guaranteed refund", order.getId());
@@ -948,8 +956,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             appendEvent(order.getId(), order.getMerchantOrderId(), "SYNTHETIC_TRACKING_ID", trackingId);
         }
 
+        CheckoutGatewayPayment payment = null;
         try {
-            persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,
+            payment = persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp,
                     CheckoutGatewayPaymentRecordStatus.CAPTURED, paymentMode, statusMessage);
         } catch (DataIntegrityViolationException dup) {
             log.info("Duplicate tracking insert for order {} — treating as idempotent", order.getId());
@@ -963,6 +972,9 @@ public class CheckoutServiceImpl implements CheckoutService {
         order.setReservationExpiresAt(null);
         order.setUpdatedAt(LocalDateTime.now());
         orderRepository.save(order);
+
+        // Phase 2: Ledger Integration (Normal Success)
+        ledgerService.recordPayment(order.getId(), payment != null ? payment.getId() : null, amount, trackingId, LedgerSource.WEBHOOK, LedgerEntryStatus.SUCCESS, "Standard payment capture");
 
         log.info("checkout order {} marked PAID", order.getId());
     }
@@ -985,8 +997,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             return;
         }
 
+        CheckoutGatewayPayment payment = null;
         if (trackingId != null && !trackingId.isBlank()) {
-            persistGatewayPaymentOrIgnore(order, trackingId, amountStr, Map.of(), encResp, clientIp,
+            payment = persistGatewayPaymentOrIgnore(order, trackingId, amountStr, Map.of(), encResp, clientIp,
                     CheckoutGatewayPaymentRecordStatus.DECLINED, paymentMode, statusMessage);
         }
 
@@ -998,10 +1011,19 @@ public class CheckoutServiceImpl implements CheckoutService {
         order.setReservationExpiresAt(null);
         order.setUpdatedAt(LocalDateTime.now());
         orderRepository.save(order);
+
+        // Phase 2: Ledger Integration (Payment Failure)
+        if (amountStr != null && !amountStr.isBlank()) {
+            BigDecimal failedAmt = parseAmount(amountStr);
+            if (failedAmt != null) {
+                ledgerService.recordPayment(order.getId(), payment != null ? payment.getId() : null, failedAmt, trackingId, LedgerSource.WEBHOOK, LedgerEntryStatus.FAILED, "Payment failure: " + statusMessage);
+            }
+        }
+
         log.info("checkout order {} marked FAILED ({})", order.getId(), normalizedStatus);
     }
 
-    private void persistGatewayPaymentOrThrow(CheckoutOrder order,
+    private CheckoutGatewayPayment persistGatewayPaymentOrThrow(CheckoutOrder order,
                                               String trackingId,
                                               String amountStr,
                                               Map<String, String> params,
@@ -1023,10 +1045,10 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .rawResponseDec(safeJsonPreview(params))
                 .clientIp(clientIp)
                 .build();
-        gatewayPaymentRepository.save(row);
+        return gatewayPaymentRepository.save(row);
     }
 
-    private void persistGatewayPaymentOrIgnore(CheckoutOrder order,
+    private CheckoutGatewayPayment persistGatewayPaymentOrIgnore(CheckoutOrder order,
                                                String trackingId,
                                                String amountStr,
                                                Map<String, String> params,
@@ -1036,15 +1058,15 @@ public class CheckoutServiceImpl implements CheckoutService {
                                                String paymentMode,
                                                String statusMessage) {
         if (trackingId == null || trackingId.isBlank()) {
-            return;
+            return null;
         }
         if (gatewayPaymentRepository.existsByTrackingId(trackingId)) {
-            return;
+            return gatewayPaymentRepository.findByTrackingId(trackingId).orElse(null);
         }
         try {
-            persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp, status, paymentMode, statusMessage);
+            return persistGatewayPaymentOrThrow(order, trackingId, amountStr, params, encResp, clientIp, status, paymentMode, statusMessage);
         } catch (DataIntegrityViolationException ignored) {
-            // duplicate
+            return gatewayPaymentRepository.findByTrackingId(trackingId).orElse(null);
         }
     }
 

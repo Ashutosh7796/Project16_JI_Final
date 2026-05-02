@@ -3,6 +3,9 @@ package com.spring.jwt.checkout;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.spring.jwt.checkout.CcAvenueRefundClient.RefundApiResult;
 import com.spring.jwt.exception.ResourceNotFoundException;
+import com.spring.jwt.ledger.LedgerEntryStatus;
+import com.spring.jwt.ledger.LedgerService;
+import com.spring.jwt.ledger.LedgerSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +37,7 @@ public class CheckoutRefundLifecycleService {
     private final CcAvenueOrderStatusClient ccAvenueOrderStatusClient;
     private final CheckoutRefundAuditService refundAuditService;
     private final CheckoutProperties checkoutProperties;
+    private final LedgerService ledgerService;
 
     /**
      * First refund API attempt (also used for admin retry with {@code forceRetry = true}).
@@ -154,6 +158,9 @@ public class CheckoutRefundLifecycleService {
             refund.setStatus(CheckoutRefundRecordStatus.FAILED);
             refundRepository.save(refund);
             refundAuditService.log(refundId, null, "REFUND_RECONCILE_FAILED", statusJson.get().toString());
+            
+            // Phase 2: Ledger Integration (Refund Failure)
+            ledgerService.recordRefund(refund.getOrder().getId(), refund.getId(), refund.getAmount(), refund.getCcaTrackingId(), LedgerSource.RECONCILIATION, LedgerEntryStatus.FAILED, "Reconciliation marked refund as FAILED");
         } else {
             refundRepository.save(refund);
             refundAuditService.log(refundId, null, "REFUND_RECONCILE_UNKNOWN", statusJson.get().toString());
@@ -196,6 +203,9 @@ public class CheckoutRefundLifecycleService {
         refund.setIsManual(Boolean.TRUE);
         refundRepository.save(refund);
         refundAuditService.log(refundId, adminId, "REFUND_ADMIN_MARK_FAILED", notes);
+
+        // Phase 2: Ledger Integration (Refund Failure)
+        ledgerService.recordRefund(refund.getOrder().getId(), refund.getId(), refund.getAmount(), refund.getCcaTrackingId(), LedgerSource.ADMIN, LedgerEntryStatus.FAILED, notes != null ? notes : "Admin marked refund as FAILED");
     }
 
     @Transactional
@@ -233,6 +243,10 @@ public class CheckoutRefundLifecycleService {
         refundRepository.save(refund);
         refundRepository.flush();
         maybeMarkOrderFullyRefunded(refund.getOrder().getId());
+
+        // Phase 2: Ledger Integration (Refund Success)
+        LedgerSource source = manual ? LedgerSource.ADMIN : LedgerSource.SYSTEM;
+        ledgerService.recordRefund(refund.getOrder().getId(), refund.getId(), refund.getAmount(), refund.getCcaTrackingId(), source, LedgerEntryStatus.SUCCESS, notes != null ? notes : "Refund completed successfully");
     }
 
     private void maybeMarkOrderFullyRefunded(Long orderId) {
