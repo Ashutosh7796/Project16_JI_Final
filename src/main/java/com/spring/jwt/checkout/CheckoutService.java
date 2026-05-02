@@ -26,7 +26,7 @@ public interface CheckoutService {
     void syncPaymentStatusIfPending(Long userId, Long orderId);
 
     /** Recent checkout orders for the signed-in user (newest first). */
-    List<CheckoutOrderResponse> listMyCheckoutOrders(Long userId, int limit);
+    org.springframework.data.domain.Page<CheckoutOrderResponse> listMyCheckoutOrders(Long userId, org.springframework.data.domain.Pageable pageable);
 
     /**
      * Called when the frontend detects user abandonment (tab close, navigation away).

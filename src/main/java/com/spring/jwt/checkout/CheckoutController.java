@@ -38,9 +38,9 @@ public class CheckoutController {
     }
 
     @GetMapping("/orders")
-    public List<CheckoutOrderResponse> listMyCheckoutOrders(
-            @RequestParam(name = "limit", defaultValue = "50") int limit) {
-        return checkoutService.listMyCheckoutOrders(currentUserId(), limit);
+    public org.springframework.data.domain.Page<CheckoutOrderResponse> listMyCheckoutOrders(
+            @org.springframework.data.web.PageableDefault(size = 15, sort = "createdAt", direction = org.springframework.data.domain.Sort.Direction.DESC) org.springframework.data.domain.Pageable pageable) {
+        return checkoutService.listMyCheckoutOrders(currentUserId(), pageable);
     }
 
     @GetMapping("/orders/{orderId}")

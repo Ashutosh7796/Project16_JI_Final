@@ -353,15 +353,13 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     @Override
     @Transactional
-    public List<CheckoutOrderResponse> listMyCheckoutOrders(Long userId, int limit) {
-        int size = Math.min(limit <= 0 ? 50 : limit, 100);
-        List<CheckoutOrder> orders = orderRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, org.springframework.data.domain.PageRequest.of(0, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")))
-                .getContent();
+    public org.springframework.data.domain.Page<CheckoutOrderResponse> listMyCheckoutOrders(Long userId, org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<CheckoutOrder> orderPage = orderRepository
+                .findByUserIdOrderByCreatedAtDesc(userId, pageable);
 
         // Perform JIT sync for any pending orders before mapping them to output
         boolean synced = false;
-        for (CheckoutOrder o : orders) {
+        for (CheckoutOrder o : orderPage.getContent()) {
             if (o.getStatus() == CheckoutOrderStatus.PAYMENT_PENDING) {
                 try {
                     this.self.syncPaymentStatusIfPending(userId, o.getId());
@@ -373,15 +371,11 @@ public class CheckoutServiceImpl implements CheckoutService {
         if (synced) {
             // Clear L1 cache so refetch sees writes from REQUIRES_NEW child transactions
             orderRepository.flush();
+            // Refetch to get the updated status if any were modified via JIT sync
+            orderPage = orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
         }
 
-        // Refetch to get the updated status if any were modified via JIT sync
-        return orderRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, org.springframework.data.domain.PageRequest.of(0, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")))
-                .getContent()
-                .stream()
-                .map(this::mapOrder)
-                .toList();
+        return orderPage.map(this::mapOrder);
     }
 
     @Override
