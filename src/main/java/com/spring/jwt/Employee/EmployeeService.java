@@ -28,4 +28,9 @@ public interface EmployeeService {
     PagedResponse<EmployeeByRoleResponse> getSurveyors(int page, int size);
 
     PagedResponse<EmployeeByRoleResponse> getLabTechnicians(int page, int size);
+
+    /**
+     * Admin/manager sets a new password for a staff user (not an administrator account).
+     */
+    void adminResetStaffPassword(Long userId, String newPassword);
 }

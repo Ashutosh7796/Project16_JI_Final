@@ -3,6 +3,7 @@ package com.spring.jwt.Employee;
 import com.spring.jwt.dto.EmployeeByRoleResponse;
 import com.spring.jwt.dto.PagedResponse;
 import com.spring.jwt.entity.Employee;
+import com.spring.jwt.entity.Role;
 import com.spring.jwt.entity.User;
 import com.spring.jwt.exception.BaseException;
 import com.spring.jwt.exception.ResourceNotFoundException;
@@ -14,10 +15,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +30,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public EmployeeResponseDTO getEmployeeById(Long employeeId) {
@@ -217,6 +221,40 @@ public class EmployeeServiceImpl implements EmployeeService {
         return mapToResponse(employee);
     }
 
+
+    @Override
+    @Transactional
+    public void adminResetStaffPassword(Long userId, String newPassword) {
+        if (!StringUtils.hasText(newPassword)) {
+            throw new BaseException("400", "Password must not be empty");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException("404", "User not found with id: " + userId));
+
+        Set<String> roleNames = user.getRoles().stream()
+                .map(Role::getName)
+                .collect(Collectors.toSet());
+
+        if (roleNames.contains("ADMIN")) {
+            throw new BaseException("403", "Administrator passwords cannot be reset through this endpoint");
+        }
+
+        boolean isStaff = roleNames.stream().anyMatch(r ->
+                "SURVEYOR".equals(r) || "LAB_TECHNICIAN".equals(r) || "MANAGER".equals(r));
+        if (!isStaff) {
+            throw new BaseException("400", "Password reset is only available for staff accounts (surveyor, lab technician, or manager)");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpiry(null);
+        user.setFailedLoginAttempts(0);
+        user.setAccountLocked(false);
+        user.setAccountLockedUntil(null);
+
+        userRepository.save(user);
+    }
 
     @Override
     public Page<UserListResponseDTO> getUsers(String role, int page, int size) {

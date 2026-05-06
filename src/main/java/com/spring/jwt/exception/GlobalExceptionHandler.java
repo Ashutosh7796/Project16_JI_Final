@@ -167,6 +167,10 @@ public class GlobalExceptionHandler {
             return HttpStatus.CONFLICT;
         }
 
+        if ("403".equals(code)) {
+            return HttpStatus.FORBIDDEN;
+        }
+
         // Check for specific error patterns
         if (message.contains("already registered") || message.contains("already exists") || 
             code.contains("ALREADY_EXISTS") || code.contains("DUPLICATE")) {
