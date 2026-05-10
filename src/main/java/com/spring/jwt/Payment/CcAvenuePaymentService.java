@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.text.DecimalFormat;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +50,27 @@ public class CcAvenuePaymentService {
     }
 
     public String generatePaymentForm(CcAvenuePaymentRequest request) {
+        // P3.2: kept for back-compat with the legacy frontend path. New callers should consume
+        // {@link #buildPaymentFormFields(CcAvenuePaymentRequest)} and assemble the form via DOM
+        // APIs to eliminate the {@code innerHTML} XSS surface.
+        CcAvenuePaymentFormFields fields = buildPaymentFormFields(request);
+        StringBuilder html = new StringBuilder("<html><body onload='document.forms[0].submit()'>");
+        html.append("<form method='post' action='").append(escapeAttr(fields.getActionUrl())).append("'>");
+        for (Map.Entry<String, String> entry : fields.getFields().entrySet()) {
+            html.append("<input type='hidden' name='")
+                    .append(escapeAttr(entry.getKey()))
+                    .append("' value='")
+                    .append(escapeAttr(entry.getValue()))
+                    .append("'/>");
+        }
+        html.append("</form></body></html>");
+        return html.toString();
+    }
+
+    /**
+     * P3.2: structured form for the frontend to build with DOM APIs (no innerHTML).
+     */
+    public CcAvenuePaymentFormFields buildPaymentFormFields(CcAvenuePaymentRequest request) {
         String amount = AMOUNT_FORMAT.format(request.getAmount());
 
         String redirectUrl = request.getRedirectUrl() != null ? request.getRedirectUrl() : config.getRedirectUrl();
@@ -74,17 +96,26 @@ public class CcAvenuePaymentService {
             data.append("&billing_email=").append(sanitizeEmail(request.getBillingEmail()));
         }
 
-        String plainText = data.toString();
-
-        String encrypted = CcAvenueUtil.encrypt(plainText, workingKey);
+        String encrypted = CcAvenueUtil.encrypt(data.toString(), workingKey);
         log.debug("CCAvenue payment request prepared for orderId={}, amount={}",
                 sanitizeOrderId(request.getOrderId()), amount);
 
-        return "<html><body onload='document.forms[0].submit()'>"
-                + "<form method='post' action='" + config.getPaymentUrl() + "'>"
-                + "<input type='hidden' name='encRequest' value='" + encrypted + "'/>"
-                + "<input type='hidden' name='access_code' value='" + accessCode + "'/>"
-                + "</form></body></html>";
+        Map<String, String> fields = new java.util.LinkedHashMap<>();
+        fields.put("encRequest", encrypted);
+        fields.put("access_code", accessCode);
+        return CcAvenuePaymentFormFields.builder()
+                .actionUrl(config.getPaymentUrl())
+                .fields(fields)
+                .build();
+    }
+
+    private static String escapeAttr(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     /**

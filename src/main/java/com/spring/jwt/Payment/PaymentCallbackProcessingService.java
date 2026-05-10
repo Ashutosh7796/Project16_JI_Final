@@ -29,6 +29,19 @@ public class PaymentCallbackProcessingService {
 
     private static final int MAX_RETRY_ATTEMPTS = 5;
 
+    /**
+     * P2.4: dependency-free dead-letter counter. Each DEAD transition increments this and emits
+     * a SEV-1 log line with the running total so log-based alerts (Datadog / CloudWatch / Loki)
+     * can fire on either the marker string or a derivative metric. Read-only views accessible
+     * via {@link #deadLetterCount()} for an admin status endpoint.
+     */
+    private static final java.util.concurrent.atomic.AtomicLong DEAD_LETTER_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong(0);
+
+    public static long deadLetterCount() {
+        return DEAD_LETTER_COUNTER.get();
+    }
+
     private final PaymentCallbackQueueRepository queueRepository;
     private final CcAvenueConfig ccAvenueConfig;
     private final ProductBuyService productBuyService;
@@ -78,17 +91,23 @@ public class PaymentCallbackProcessingService {
 
             if (attempts >= MAX_RETRY_ATTEMPTS) {
                 item.setStatus("DEAD");
+                long total = DEAD_LETTER_COUNTER.incrementAndGet();
                 auditService.logEvent(
                         item.getPaymentType(),
                         null,
-                        null,
+                        item.getOrderId(),
                         "CALLBACK_DEAD_LETTER",
                         "RETRY",
                         "DEAD",
                         null,
                         item.getClientIp(),
-                        "queueId=" + item.getId() + ", error=" + truncate(ex.getMessage(), 500)
+                        "queueId=" + item.getId() + ", attempts=" + attempts
+                                + ", error=" + truncate(ex.getMessage(), 500)
                 );
+                // SEV-1 marker: ops should alert on this string.
+                log.error("ALERT PAYMENT-CALLBACK-DEAD-LETTER queueId={} paymentType={} callbackType={} orderId={} attempts={} totalDead={} error={}",
+                        item.getId(), item.getPaymentType(), item.getCallbackType(), item.getOrderId(),
+                        attempts, total, truncate(ex.getMessage(), 500));
             } else {
                 item.setStatus("RETRY");
                 item.setNextAttemptAt(LocalDateTime.now().plusMinutes(Math.min(15, attempts)));
@@ -217,20 +236,33 @@ public class PaymentCallbackProcessingService {
             return;
         }
 
-        // No encResp — CCAvenue sent the user back without any data.
-        // This is the 10002 (Merchant Authentication Failed) case.
-        // We must still fail the order so it doesn't stay stuck in PAYMENT_PENDING.
-        log.warn("Checkout cancel callback with NO encResp — synthesizing failure for latest pending order");
-        auditService.logEvent("CHECKOUT", null, null,
-                "CANCELLED_NO_DATA", null, "FAILED", null, item.getClientIp(),
-                "No encResp from gateway — merchant auth may have failed");
+        // No encResp — CCAvenue sent the user back without any data (10002 merchant auth, etc.).
+        // P1.1: only fail the order when the controller already verified an HMAC-signed
+        // merchantOrderId hint (cmref). Otherwise leave the order alone — TTL expiry cleans up.
+        String hintedMerchantOrderId = item.getOrderId();
+        auditService.logEvent("CHECKOUT", null, hintedMerchantOrderId,
+                hintedMerchantOrderId != null ? "CANCELLED_NO_DATA_SCOPED" : "CANCELLED_NO_DATA_UNSCOPED",
+                null,
+                hintedMerchantOrderId != null ? "FAILED" : "PENDING",
+                null,
+                item.getClientIp(),
+                hintedMerchantOrderId != null
+                        ? "scoped via verified cmref hint"
+                        : "No encResp and no verified cmref — relying on reservation TTL");
 
-        // Synthesize a minimal failure callback so handleCcAvenueDecryptedCallback can process it
-        // We look up the latest PAYMENT_PENDING order and fail it directly.
-        try {
-            checkoutService.failLatestPendingOrderOnGatewayCancel(item.getClientIp());
-        } catch (Exception ex) {
-            log.warn("failLatestPendingOrderOnGatewayCancel error: {}", ex.getMessage());
+        if (hintedMerchantOrderId != null) {
+            try {
+                checkoutService.failPaymentPendingByMerchantOrderId(
+                        hintedMerchantOrderId,
+                        "Gateway cancel callback (no response data; cmref-scoped)",
+                        item.getClientIp());
+            } catch (Exception ex) {
+                log.warn("failPaymentPendingByMerchantOrderId error for {}: {}",
+                        hintedMerchantOrderId, ex.getMessage());
+            }
+        } else {
+            log.warn("Checkout cancel callback with NO encResp and NO cmref hint — leaving PAYMENT_PENDING orders to TTL expiry (ip={})",
+                    item.getClientIp());
         }
         item.setResultStatus("CANCELLED");
     }

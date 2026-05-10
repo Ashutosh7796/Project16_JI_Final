@@ -101,14 +101,18 @@ public class FarmerPaymentServiceImpl implements FarmerPaymentService {
             throw new AccessDeniedException("You are not allowed to initiate payment for this survey");
         }
 
-        // Check if already paid
+        // P2.2: take a row-level lock on the survey BEFORE counting attempts. Without this,
+        // two concurrent initiate calls for the same survey both pass the threshold check and
+        // each insert a row, bypassing the fraud limit. The lock holds until tx commit.
+        surveyRepo.findByIdForUpdate(surveyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Survey not found for fraud-check lock: " + surveyId));
+
         Optional<FarmerPayment> successfulPayment =
                 farmerPaymentRepo.findBySurvey_SurveyIdAndPaymentStatus(surveyId, PaymentStatus.SUCCESS);
         if (successfulPayment.isPresent()) {
             throw PaymentException.duplicatePayment("Survey " + surveyId + " already paid");
         }
 
-        // Fraud checks
         performFraudChecks(surveyId, currentUserId, clientIp);
 
         User user = userRepo.findById(currentUserId)

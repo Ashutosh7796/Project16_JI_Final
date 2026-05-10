@@ -33,6 +33,19 @@ public class CheckoutProperties {
     private String ccavenueCancelUrl = "";
 
     /**
+     * Secret used to HMAC-sign the {@code cmref} hint appended to the CCAvenue cancel URL so the
+     * cancel callback can deterministically identify the order to fail without a cross-user race.
+     * MUST be configured in production. Hard-fail on initiate when blank.
+     */
+    private String cancelHintSecret = "";
+
+    /**
+     * Tolerance (in INR) used when comparing callback amount with the order total. Picked once
+     * here so webhook and callback paths cannot drift apart.
+     */
+    private java.math.BigDecimal amountTolerance = new java.math.BigDecimal("0.01");
+
+    /**
      * Automated refund reconciliation (order-status polling).
      */
     private RefundSettings refund = new RefundSettings();

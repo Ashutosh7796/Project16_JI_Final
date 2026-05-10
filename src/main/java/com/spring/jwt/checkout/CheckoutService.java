@@ -60,10 +60,28 @@ public interface CheckoutService {
     void expireOrphanPendingOrders();
 
     /**
-     * Emergency fail-fast: when the cancel-URL callback arrives with NO encrypted response
-     * (e.g. 10002 merchant auth failed), fail the most recent PAYMENT_PENDING order immediately.
+     * @deprecated Unsafe under concurrency (could fail the wrong user's order). Now a structured
+     * no-op kept only for binary compatibility. Use
+     * {@link #failPaymentPendingByMerchantOrderId(String, String, String)} with an HMAC-verified
+     * merchantOrderId taken from the {@code cmref} hint instead.
      */
+    @Deprecated
     void failLatestPendingOrderOnGatewayCancel(String clientIp);
+
+    /**
+     * Scoped fail-fast on a specific merchantOrderId after the cancel-URL callback arrived
+     * with no payload (CCAvenue 10002 merchant-auth failure). Caller MUST already have
+     * verified the merchantOrderId with {@link #verifyCancelHint(String)}. Idempotent —
+     * silently no-ops if the order is no longer PAYMENT_PENDING.
+     */
+    void failPaymentPendingByMerchantOrderId(String merchantOrderId, String reason, String clientIp);
+
+    /**
+     * Verify the {@code cmref} hint posted to the cancel callback. Returns the original
+     * merchantOrderId only on a valid, in-date HMAC. Encapsulates the secret-resolution chain
+     * (configured property → ephemeral per-JVM fallback) so controllers cannot drift apart.
+     */
+    java.util.Optional<String> verifyCancelHint(String token);
 
     void reconcileStalePaymentPendingOrders();
 

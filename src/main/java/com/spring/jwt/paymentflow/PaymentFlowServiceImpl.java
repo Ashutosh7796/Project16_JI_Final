@@ -190,7 +190,21 @@ public class PaymentFlowServiceImpl implements PaymentFlowService {
         }
 
         if (p.getAmount().compareTo(amount) != 0) {
-            throw new SecurityException("amount mismatch");
+            // P1.3: Webhook signature is valid (gateway-authentic), but the amount disagrees with
+            // the order. Throwing 5xx here triggers a CCAvenue retry storm and never resolves.
+            // Instead, persist the discrepancy as a terminal FAILED state, log a SEV-1 alert, and
+            // ACK the webhook (caller maps an HTTP 200 with no body). Manual reconciliation owns it.
+            log.error("PAYMENT-AMOUNT-MISMATCH paymentId={} expected={} got={} txn={} — marking FAILED for manual reconcile",
+                    paymentId, p.getAmount(), amount, gatewayTxn);
+            if (p.getStatus() != PaymentFlowStatus.SUCCESS) {
+                p.setStatus(PaymentFlowStatus.FAILED);
+                p.setErrorCode("AMOUNT_MISMATCH");
+                p.setErrorMessage(truncate(
+                        "Webhook amount " + amount + " differs from order amount " + p.getAmount(), 500));
+                p.setPendingGatewaySince(null);
+                paymentFlowRepository.save(p);
+            }
+            return;
         }
 
         if (p.getStatus() == PaymentFlowStatus.SUCCESS && gatewayTxn.equals(p.getGatewayTransactionId())) {

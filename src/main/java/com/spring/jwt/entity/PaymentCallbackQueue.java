@@ -12,9 +12,11 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "payment_callback_queue", indexes = {
         @Index(name = "idx_pay_cbq_status_next", columnList = "status,next_attempt_at"),
-        @Index(name = "idx_pay_cbq_created", columnList = "created_at")
+        @Index(name = "idx_pay_cbq_created", columnList = "created_at"),
+        @Index(name = "idx_pay_cbq_payload_hash", columnList = "payload_hash")
 }, uniqueConstraints = {
-        @UniqueConstraint(name = "uk_pay_cbq_status_token", columnNames = "status_token")
+        @UniqueConstraint(name = "uk_pay_cbq_status_token", columnNames = "status_token"),
+        @UniqueConstraint(name = "uk_pay_cbq_payload_hash", columnNames = "payload_hash")
 })
 @Builder
 @AllArgsConstructor
@@ -57,6 +59,14 @@ public class PaymentCallbackQueue {
 
     @Column(name = "result_status", length = 30)
     private String resultStatus;
+
+    /**
+     * SHA-256 hex of {@code paymentType|callbackType|encResp} (or a synthetic key when encResp is
+     * absent). Backed by a UNIQUE constraint so the same gateway POST replayed by CCAvenue or
+     * shoved twice through any path does not create a duplicate processing row.
+     */
+    @Column(name = "payload_hash", length = 64, updatable = false)
+    private String payloadHash;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

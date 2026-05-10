@@ -208,6 +208,32 @@ public class CheckoutRefundLifecycleService {
         ledgerService.recordRefund(refund.getOrder().getId(), refund.getId(), refund.getAmount(), refund.getCcaTrackingId(), LedgerSource.ADMIN, LedgerEntryStatus.FAILED, notes != null ? notes : "Admin marked refund as FAILED");
     }
 
+    /**
+     * Escalate a refund: stamps a support ticket id (auto-generated when blank), prefixes the
+     * admin notes with {@code [ESCALATED]}, and writes a {@code REFUND_ADMIN_ESCALATED} audit
+     * row. Does NOT change the refund {@code status} — the existing retry / mark-failed actions
+     * still own state transitions.
+     */
+    @Transactional
+    public String adminEscalate(Long refundId, Long adminId, String supportTicketId, String notes) {
+        CheckoutRefund refund = refundRepository.findByIdForUpdateWithOrder(refundId)
+                .orElseThrow(() -> new ResourceNotFoundException("Refund not found: " + refundId));
+        String ticketId = (supportTicketId != null && !supportTicketId.isBlank())
+                ? supportTicketId.trim()
+                : "ESC-" + refundId + "-" + System.currentTimeMillis();
+        refund.setSupportTicketId(ticketId);
+        refund.setAdminId(adminId);
+        String stamp = "[ESCALATED " + LocalDateTime.now() + "] ";
+        String body = (notes == null || notes.isBlank()) ? "Escalated by admin" : notes.trim();
+        String prior = refund.getAdminNotes();
+        String combined = (prior == null || prior.isBlank()) ? stamp + body : (prior + "\n" + stamp + body);
+        refund.setAdminNotes(truncate(combined, 4000));
+        refundRepository.save(refund);
+        refundAuditService.log(refundId, adminId, "REFUND_ADMIN_ESCALATED", ticketId + " | " + body);
+        log.warn("ALERT REFUND-ESCALATED refundId={} ticketId={} adminId={}", refundId, ticketId, adminId);
+        return ticketId;
+    }
+
     @Transactional
     public void adminAddEvidence(Long refundId, Long adminId, String supportTicketId, String bankReference, String adminNotes) {
         CheckoutRefund refund = refundRepository.findByIdForUpdateWithOrder(refundId)

@@ -16,6 +16,8 @@ public interface PaymentCallbackQueueRepository extends JpaRepository<PaymentCal
 
     Optional<PaymentCallbackQueue> findByStatusToken(String statusToken);
 
+    Optional<PaymentCallbackQueue> findByPayloadHash(String payloadHash);
+
     List<PaymentCallbackQueue> findByStatusInAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(
             Collection<String> statuses, LocalDateTime nextAttemptAt, Pageable pageable);
 

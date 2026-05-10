@@ -478,7 +478,7 @@ public class CheckoutServiceImpl implements CheckoutService {
             return;
         }
         if (order.getStatus() == CheckoutOrderStatus.PAID) {
-            // EC-23 Guard: Block cancel if any line is SHIPPED or DELIVERED (product already dispatched)
+            // No-cancel-after-shipped policy. Customer must use the refund flow once items left.
             for (CheckoutOrderLine line : order.getLines()) {
                 if (line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.SHIPPED
                         || line.getFulfillmentStatus() == CheckoutLineFulfillmentStatus.DELIVERED) {
@@ -487,6 +487,38 @@ public class CheckoutServiceImpl implements CheckoutService {
                             + " is " + line.getFulfillmentStatus().name() + ". Request a refund instead.");
                 }
             }
+
+            // P1.5 + P1.2 (customer path): block on unverified prior FAILED refund, then create
+            // refund row FIRST inside the SAME transaction so a refund-creation failure rolls
+            // back the status flip (no "CANCELLED with no money returned" silent loss).
+            if (refundRepository.countUnverifiedFailedRefundsForOrder(orderId) > 0) {
+                throw new IllegalStateException(
+                        "A previous refund attempt failed and has not been verified by support. " +
+                        "Please contact support to reconcile before cancelling this order.");
+            }
+
+            BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
+                    .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal inFlightAmt = Optional.ofNullable(refundRepository.sumInFlightAmountByOrderId(orderId))
+                    .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP)
+                    .subtract(refunded).subtract(inFlightAmt);
+
+            String refundReason = "Order cancelled by customer after payment";
+            Long pendingRefundId = null;
+            if (remaining.compareTo(BigDecimal.ZERO) > 0) {
+                CheckoutRefund refund = CheckoutRefund.builder()
+                        .order(order)
+                        .amount(remaining)
+                        .reason(truncate(refundReason, 480))
+                        .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)
+                        .ccaTrackingId(resolveCcaTrackingId(order))
+                        .build();
+                pendingRefundId = refundRepository.saveAndFlush(refund).getId();
+                order.setRefundNote(truncate(refundReason, 480));
+                order.setRefundTotalAmount(remaining);
+            }
+
             restoreConsumedStock(order);
             cancelOrderLines(order);
             order.setStatus(CheckoutOrderStatus.CANCELLED);
@@ -494,13 +526,26 @@ public class CheckoutServiceImpl implements CheckoutService {
             order.setFailReason(truncate("Customer cancelled paid order — refund initiated", 480));
             order.setUpdatedAt(LocalDateTime.now());
             orderRepository.save(order);
-            log.info("checkout order cancelled id={} (was PAID) user={} — initiating refund", orderId, userId);
-            // Auto-trigger refund to original payment method
-            try {
-                requestCustomerRefund(userId, orderId, "Order cancelled by customer after payment");
-            } catch (Exception e) {
-                log.warn("Auto-refund initiation failed for order {}: {}", orderId, e.getMessage());
+
+            if (pendingRefundId != null) {
+                final Long refundIdForEvent = pendingRefundId;
+                final Long orderIdForLog = orderId;
+                final BigDecimal amtForLog = remaining;
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            applicationEventPublisher.publishEvent(new RefundCreatedEvent(refundIdForEvent));
+                            log.info("customer cancel-with-refund orderId={} refundId={} amount={}",
+                                    orderIdForLog, refundIdForEvent, amtForLog);
+                        }
+                    });
+                } else {
+                    applicationEventPublisher.publishEvent(new RefundCreatedEvent(refundIdForEvent));
+                }
             }
+            log.info("checkout order cancelled id={} (was PAID) user={} refundQueued={}",
+                    orderId, userId, pendingRefundId != null);
             return;
         }
         throw new IllegalStateException("Order in status " + order.getStatus() + " cannot be cancelled");
@@ -522,6 +567,13 @@ public class CheckoutServiceImpl implements CheckoutService {
                 CheckoutRefundRecordStatus.PENDING_GATEWAY));
         if (!inFlight.isEmpty()) {
             throw new IllegalStateException("A refund is already in progress for this order");
+        }
+        // P1.5: Block when there are unverified FAILED refunds — gateway state is ambiguous,
+        // and silently retrying could double-refund. Force support to verify the prior attempt.
+        if (refundRepository.countUnverifiedFailedRefundsForOrder(orderId) > 0) {
+            throw new IllegalStateException(
+                    "A previous refund attempt failed and has not been verified by support. " +
+                    "Please contact support to reconcile before requesting a new refund.");
         }
         // EC-17 Fix: Include both successful AND in-flight refunds to prevent over-refund
         BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
@@ -658,46 +710,46 @@ public class CheckoutServiceImpl implements CheckoutService {
     @Override
     @Transactional
     public void failLatestPendingOrderOnGatewayCancel(String clientIp) {
-        // Find the most recent PAYMENT_PENDING order and fail it.
-        // This is the fail-fast path for when CCAvenue redirects to the cancel URL
-        // without any encrypted response (e.g. 10002 Merchant Authentication Failed).
-        //
-        // WARNING: This method operates WITHOUT order_id context (CCAvenue sent NO data).
-        // We pick the latest PAYMENT_PENDING order. In multi-user concurrent scenarios,
-        // there is a small risk of killing the wrong order — but leaving it PAYMENT_PENDING
-        // forever is worse (inventory locked, user stuck). The reservation TTL expiry
-        // serves as a safety net if this picks wrong.
-        List<CheckoutOrder> pending = orderRepository
-                .findByStatusAndUpdatedAtBefore(CheckoutOrderStatus.PAYMENT_PENDING, LocalDateTime.now().plusMinutes(1));
-        if (pending.isEmpty()) {
-            log.warn("FAIL-FAST: no PAYMENT_PENDING order found for cancel callback (ip={})", clientIp);
+        // P1.1: legacy "guess the latest PAYMENT_PENDING" path is unsafe under concurrency
+        // (User B's order can be killed when User A bounces). The new contract requires the
+        // caller to provide an HMAC-verified merchantOrderId via failPaymentPendingByMerchantOrderId.
+        // This method is retained for binary compatibility but is now a structured no-op so the
+        // reservation TTL safety net cleans up unattributed cancels.
+        log.warn("LEGACY-CANCEL-NOOP: cancel callback with no encResp and no signed cmref hint (ip={}); " +
+                "leaving PAYMENT_PENDING orders to TTL expiry", clientIp);
+    }
+
+    @Override
+    @Transactional
+    public void failPaymentPendingByMerchantOrderId(String merchantOrderId, String reason, String clientIp) {
+        if (merchantOrderId == null || merchantOrderId.isBlank()) {
+            log.warn("failPaymentPendingByMerchantOrderId: blank merchantOrderId (ip={})", clientIp);
             return;
         }
-        // Sort by createdAt DESC and pick the most recent — most likely the one that just bounced
-        pending.sort((a, b) -> {
-            if (a.getCreatedAt() == null || b.getCreatedAt() == null) return 0;
-            return b.getCreatedAt().compareTo(a.getCreatedAt());
-        });
-        CheckoutOrder snapshot = pending.get(0);
-        if (pending.size() > 1) {
-            log.warn("FAIL-FAST: {} PAYMENT_PENDING orders exist — failing most recent id={} (may affect wrong order!), ip={}",
-                    pending.size(), snapshot.getId(), clientIp);
+        Optional<CheckoutOrder> locked = orderRepository.findByMerchantOrderIdForUpdate(merchantOrderId);
+        if (locked.isEmpty()) {
+            log.warn("failPaymentPendingByMerchantOrderId: order not found merchantOrderId={} (ip={})",
+                    merchantOrderId, clientIp);
+            return;
         }
-        orderRepository.findByIdForUpdate(snapshot.getId()).ifPresent(order -> {
-            if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {
-                return; // already resolved by another thread
-            }
-            releaseActiveReservations(order);
-            cancelOrderLines(order);
-            order.setStatus(CheckoutOrderStatus.FAILED);
-            order.setFailReason("Gateway cancel callback (no response data — likely merchant authentication failure)");
-            order.setFailureReason(FailureReason.AUTH_FAILED);
-            order.setReservationExpiresAt(null);
-            order.setUpdatedAt(LocalDateTime.now());
-            orderRepository.save(order);
-            log.warn("FAIL-FAST: checkout order {} marked FAILED on cancel callback with no encResp (10002?), ip={}",
-                    order.getId(), clientIp);
-        });
+        CheckoutOrder order = locked.get();
+        if (order.getStatus() != CheckoutOrderStatus.PAYMENT_PENDING) {
+            log.info("failPaymentPendingByMerchantOrderId: order {} not PAYMENT_PENDING (status={}) — ignoring",
+                    order.getId(), order.getStatus());
+            return;
+        }
+        releaseActiveReservations(order);
+        cancelOrderLines(order);
+        order.setStatus(CheckoutOrderStatus.FAILED);
+        order.setFailReason(reason != null && !reason.isBlank()
+                ? reason
+                : "Gateway cancel callback (no response data — likely merchant authentication failure)");
+        order.setFailureReason(FailureReason.AUTH_FAILED);
+        order.setReservationExpiresAt(null);
+        order.setUpdatedAt(LocalDateTime.now());
+        orderRepository.save(order);
+        log.warn("FAIL-SCOPED: checkout order {} (merchantOrderId={}) marked FAILED on signed cancel hint, ip={}",
+                order.getId(), merchantOrderId, clientIp);
     }
 
     @Override
@@ -796,6 +848,42 @@ public class CheckoutServiceImpl implements CheckoutService {
                                 + " is " + line.getFulfillmentStatus().name() + ". Request a refund instead.");
                     }
                 }
+
+                // P1.5: Block PAID-cancel auto-refund when there are unverified FAILED refunds.
+                // Admin must first verify the prior attempt (existing admin refund endpoints
+                // accept adminId + notes), otherwise we risk double-refund.
+                if (refundRepository.countUnverifiedFailedRefundsForOrder(orderId) > 0) {
+                    throw new IllegalStateException(
+                            "A previous refund attempt is in FAILED state without admin verification. " +
+                            "Resolve the failed refund (mark SUCCESS or definitively FAILED with notes) " +
+                            "before cancelling this order to avoid double-refund.");
+                }
+                // P1.2: refund insert + status flip MUST be atomic. If anything below throws,
+                // the @Transactional rolls back the order status flip too. The refund event is
+                // published only AFTER_COMMIT so any consumer sees a consistent DB state.
+                BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
+                        .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+                BigDecimal inFlightAmt = Optional.ofNullable(refundRepository.sumInFlightAmountByOrderId(orderId))
+                        .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+                BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP)
+                        .subtract(refunded).subtract(inFlightAmt);
+
+                Long pendingRefundId = null;
+                if (remaining.compareTo(BigDecimal.ZERO) > 0) {
+                    // Insert refund FIRST so an event-publish or status-flip failure can't
+                    // leave the order CANCELLED with no refund row.
+                    CheckoutRefund refund = CheckoutRefund.builder()
+                            .order(order)
+                            .amount(remaining)
+                            .reason(cancelReason)
+                            .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)
+                            .ccaTrackingId(resolveCcaTrackingId(order))
+                            .build();
+                    pendingRefundId = refundRepository.saveAndFlush(refund).getId();
+                    order.setRefundNote(cancelReason);
+                    order.setRefundTotalAmount(remaining);
+                }
+
                 restoreConsumedStock(order);
                 cancelOrderLines(order);
                 order.setStatus(CheckoutOrderStatus.CANCELLED);
@@ -803,33 +891,27 @@ public class CheckoutServiceImpl implements CheckoutService {
                 order.setFailReason(cancelReason);
                 order.setUpdatedAt(LocalDateTime.now());
                 orderRepository.save(order);
-                log.info("admin cancelled order {} (was PAID) admin={} — initiating refund", orderId, adminId);
-                try {
-                    // Create refund record; the refund lifecycle service will handle gateway submission
-                    // EC-17 Fix: Include both successful AND in-flight refunds to prevent over-refund
-                    BigDecimal refunded = Optional.ofNullable(refundRepository.sumSuccessfulAmountByOrderId(orderId))
-                            .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-                    BigDecimal inFlightAmt = Optional.ofNullable(refundRepository.sumInFlightAmountByOrderId(orderId))
-                            .orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-                    BigDecimal remaining = order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(refunded).subtract(inFlightAmt);
-                    if (remaining.compareTo(BigDecimal.ZERO) > 0) {
-                        CheckoutRefund refund = CheckoutRefund.builder()
-                                .order(order)
-                                .amount(remaining)
-                                .reason(cancelReason)
-                                .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)
-                                .ccaTrackingId(resolveCcaTrackingId(order))
-                                .build();
-                        CheckoutRefund saved = refundRepository.save(refund);
-                        order.setRefundNote(cancelReason);
-                        order.setRefundTotalAmount(remaining);
-                        orderRepository.save(order);
-                        applicationEventPublisher.publishEvent(new RefundCreatedEvent(saved.getId()));
-                        log.info("admin refund initiated for order {} amount={}", orderId, remaining);
+
+                if (pendingRefundId != null) {
+                    final Long refundIdForEvent = pendingRefundId;
+                    final BigDecimal refundAmtForLog = remaining;
+                    final Long orderIdForLog = orderId;
+                    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                applicationEventPublisher.publishEvent(new RefundCreatedEvent(refundIdForEvent));
+                                log.info("admin refund initiated for order {} amount={} refundId={}",
+                                        orderIdForLog, refundAmtForLog, refundIdForEvent);
+                            }
+                        });
+                    } else {
+                        // Should not happen inside @Transactional, but keep a fallback.
+                        applicationEventPublisher.publishEvent(new RefundCreatedEvent(refundIdForEvent));
                     }
-                } catch (Exception e) {
-                    log.warn("Admin refund initiation failed for order {}: {}", orderId, e.getMessage());
                 }
+                log.info("admin cancelled order {} (was PAID) admin={} refundQueued={}",
+                        orderId, adminId, pendingRefundId != null);
             }
             default -> throw new IllegalStateException(
                     "Order in status " + order.getStatus() + " cannot be cancelled by admin");
@@ -885,9 +967,9 @@ public class CheckoutServiceImpl implements CheckoutService {
             log.warn("Late success for checkout order {} in status {} — attempting recovery", order.getId(), order.getStatus());
             appendEvent(order.getId(), order.getMerchantOrderId(), "LATE_SUCCESS_RECOVERY_ATTEMPT", order.getStatus().name());
 
-            // Step 1: Validate amount (same tolerance as normal flow)
+            // Step 1: Validate amount (single source of truth for tolerance: app.checkout.amount-tolerance)
             BigDecimal lateAmount = parseAmount(amountStr);
-            BigDecimal amtTolerance = new BigDecimal("0.01");
+            BigDecimal amtTolerance = checkoutProperties.getAmountTolerance();
             if (lateAmount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(lateAmount).abs().compareTo(amtTolerance) > 0) {
                 log.error("Late success amount mismatch for order {}: expected {} got {}", order.getId(), order.getTotalAmount(), amountStr);
                 persistGatewayPaymentOrIgnore(order, trackingId, amountStr, params, encResp, clientIp,
@@ -896,10 +978,21 @@ public class CheckoutServiceImpl implements CheckoutService {
                 return;
             }
 
-            // Step 2: Validate/generate tracking ID (same as EC-16)
+            // P1.4: Stop synthesizing tracking IDs. A synthetic ID lets a future REAL callback
+            // create a duplicate gateway-payment row for the same captured charge — corrupts the
+            // ledger. Money was captured but we cannot create a payment row without a real ID.
+            // Path forward: log SEV-1, write a guaranteed refund (PENDING_GATEWAY) without the
+            // ccaTrackingId so the lifecycle service / admin can reconcile manually, and DO NOT
+            // promote to PAID. Reconciliation polling will surface the real tracking_id later
+            // (it can then be backfilled by an admin endpoint, but never silently invented).
             if (trackingId == null || trackingId.isBlank()) {
-                trackingId = "SYNTH-" + order.getMerchantOrderId() + "-" + System.currentTimeMillis();
-                log.warn("Late success: synthetic tracking_id for order {}: {}", order.getId(), trackingId);
+                log.error("LATE-SUCCESS-MISSING-TRACKING orderId={} merchantOrderId={} amount={} — refund-only, awaiting reconcile",
+                        order.getId(), order.getMerchantOrderId(), amountStr);
+                appendEvent(order.getId(), order.getMerchantOrderId(),
+                        "LATE_SUCCESS_MISSING_TRACKING_REFUND", amountStr);
+                recordGuaranteedRefund(order, amountStr,
+                        "Late payment success without tracking_id — refund pending; manual reconcile required");
+                return;
             }
 
             // Step 3: Record the gateway payment
@@ -940,8 +1033,8 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
         BigDecimal amount = parseAmount(amountStr);
-        // EC-07 Fix: Use ₹0.01 tolerance instead of exact match to handle legitimate gateway rounding
-        BigDecimal amountTolerance = new BigDecimal("0.01");
+        // P3.3: tolerance pulled from CheckoutProperties so callback + late-success paths cannot drift.
+        BigDecimal amountTolerance = checkoutProperties.getAmountTolerance();
         if (amount == null || order.getTotalAmount().setScale(2, RoundingMode.HALF_UP).subtract(amount).abs().compareTo(amountTolerance) > 0) {
             log.error("Amount mismatch for checkout order {}: expected {} got {} (tolerance={})", order.getId(), order.getTotalAmount(), amountStr, amountTolerance);
             appendEvent(order.getId(), order.getMerchantOrderId(), "CALLBACK_AMOUNT_MISMATCH", amountStr);
@@ -949,11 +1042,22 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
 
         if (trackingId == null || trackingId.isBlank()) {
-            // EC-16 Fix: Generate synthetic tracking ID instead of silently returning.
-            // This prevents orders from getting stuck in PAYMENT_PENDING forever when gateway omits tracking_id.
-            trackingId = "SYNTH-" + order.getMerchantOrderId() + "-" + System.currentTimeMillis();
-            log.warn("Missing tracking_id for successful checkout order {} — using synthetic: {}", order.getId(), trackingId);
-            appendEvent(order.getId(), order.getMerchantOrderId(), "SYNTHETIC_TRACKING_ID", trackingId);
+            // P1.4: Do NOT synthesize tracking_id (would let a real later callback create a
+            // duplicate row for the same charge). Keep the order in PAYMENT_PENDING, append
+            // an event, and extend the reservation TTL by a grace window so the reconciliation
+            // poller (which calls CCAvenue's order-status API) can fetch the real tracking_id
+            // and re-enter this method via applyReconciliationOutcome.
+            log.error("MISSING-TRACKING-ID-AT-CALLBACK orderId={} merchantOrderId={} — staying PAYMENT_PENDING, awaiting reconcile",
+                    order.getId(), order.getMerchantOrderId());
+            appendEvent(order.getId(), order.getMerchantOrderId(), "CALLBACK_MISSING_TRACKING_ID", amountStr);
+            int graceMin = Math.max(checkoutProperties.getReconcileOrderAgeMinutes() * 3, 30);
+            LocalDateTime newExpiry = LocalDateTime.now().plusMinutes(graceMin);
+            if (order.getReservationExpiresAt() == null || order.getReservationExpiresAt().isBefore(newExpiry)) {
+                order.setReservationExpiresAt(newExpiry);
+            }
+            order.setUpdatedAt(LocalDateTime.now());
+            orderRepository.save(order);
+            return;
         }
 
         CheckoutGatewayPayment payment = null;
@@ -1070,26 +1174,6 @@ public class CheckoutServiceImpl implements CheckoutService {
         }
     }
 
-    private void recordOrphanRefundSuggestion(CheckoutOrder order, String amountStr) {
-        String reason = "Payment succeeded after order left PAYMENT_PENDING";
-        BigDecimal amt = parseAmount(amountStr);
-        if (amt == null) {
-            amt = order.getTotalAmount();
-        }
-        CheckoutRefund refund = CheckoutRefund.builder()
-                .order(order)
-                .amount(amt)
-                .reason(reason)
-                .status(CheckoutRefundRecordStatus.PENDING_GATEWAY)
-                .ccaTrackingId(resolveCcaTrackingId(order))
-                .build();
-        CheckoutRefund saved = refundRepository.save(refund);
-        order.setRefundNote(truncate(reason, 480));
-        order.setRefundTotalAmount(amt);
-        orderRepository.save(order);
-        applicationEventPublisher.publishEvent(new RefundCreatedEvent(saved.getId()));
-    }
-
     /**
      * EC-04/05/06: Try to re-reserve and consume inventory for a late-success order.
      * Since reservations were already RELEASED, we attempt fresh atomic reserve+consume per line.
@@ -1153,7 +1237,7 @@ public class CheckoutServiceImpl implements CheckoutService {
 
     /**
      * EC-04/05/06: Hardened refund creation for late-success scenarios.
-     * Unlike recordOrphanRefundSuggestion, this wraps the event publish in try-catch
+     * Hardened refund creation that wraps the event publish in try-catch
      * and logs explicitly to ensure the refund record is ALWAYS persisted to DB
      * even if the Spring event bus fails.
      */
@@ -1336,16 +1420,32 @@ public class CheckoutServiceImpl implements CheckoutService {
         return map;
     }
 
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
+
+    /**
+     * P3.1: Pure BigDecimal arithmetic — never round-trips through {@code double} (which silently
+     * loses the second decimal on values like 19.99 × 0.07). Discount is clamped to [0,100].
+     */
     private BigDecimal unitSellingPrice(Product p) {
-        double price = p.getPrice() != null ? p.getPrice() : 0.0;
-        double discount = p.getOffers() != null ? p.getOffers() : 0.0;
-        double finalPrice = price - (price * discount / 100.0);
-        return BigDecimal.valueOf(finalPrice).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal price = p.getPrice() != null
+                ? BigDecimal.valueOf(p.getPrice())
+                : BigDecimal.ZERO;
+        BigDecimal discountPct = p.getOffers() != null
+                ? BigDecimal.valueOf(p.getOffers())
+                : BigDecimal.ZERO;
+        if (discountPct.compareTo(BigDecimal.ZERO) < 0) {
+            discountPct = BigDecimal.ZERO;
+        } else if (discountPct.compareTo(HUNDRED) > 0) {
+            discountPct = HUNDRED;
+        }
+        BigDecimal discountAmount = price.multiply(discountPct).divide(HUNDRED, 4, RoundingMode.HALF_UP);
+        return price.subtract(discountAmount).setScale(2, RoundingMode.HALF_UP);
     }
 
     private InitiateCheckoutPaymentResponse buildInitiateResponse(CheckoutOrder order) {
         String redirect = firstNonBlank(checkoutProperties.getCcavenueRedirectUrl(), ccAvenueConfig.getRedirectUrl());
         String cancel = firstNonBlank(checkoutProperties.getCcavenueCancelUrl(), ccAvenueConfig.getCancelUrl());
+        cancel = appendSignedCancelHint(cancel, order.getMerchantOrderId());
         CcAvenuePaymentRequest paymentRequest = CcAvenuePaymentRequest.builder()
                 .orderId(order.getMerchantOrderId())
                 .amount(order.getTotalAmount())
@@ -1355,11 +1455,17 @@ public class CheckoutServiceImpl implements CheckoutService {
                 .billingAddress(order.getDeliveryAddress())
                 .billingTel(order.getContactNumber())
                 .build();
-        String form = ccAvenuePaymentService.generatePaymentForm(paymentRequest);
+        com.spring.jwt.Payment.CcAvenuePaymentFormFields formFields =
+                ccAvenuePaymentService.buildPaymentFormFields(paymentRequest);
+        String legacyHtml = ccAvenuePaymentService.generatePaymentForm(paymentRequest);
         return InitiateCheckoutPaymentResponse.builder()
                 .orderId(order.getId())
                 .merchantOrderId(order.getMerchantOrderId())
-                .paymentFormHtml(form)
+                .paymentFormHtml(legacyHtml)
+                .paymentForm(InitiateCheckoutPaymentResponse.PaymentForm.builder()
+                        .actionUrl(formFields.getActionUrl())
+                        .fields(formFields.getFields())
+                        .build())
                 .abandonToken(order.getAbandonToken())
                 .build();
     }
@@ -1517,5 +1623,58 @@ public class CheckoutServiceImpl implements CheckoutService {
             return a;
         }
         return b == null ? "" : b;
+    }
+
+    /**
+     * Per-JVM fallback secret used if {@code app.checkout.cancel-hint-secret} is not configured.
+     * Hints stay valid only for this JVM lifetime, which still beats the legacy global-pick
+     * behavior. Production deployments MUST configure the property to keep hints valid across
+     * rolling restarts. Value is generated once on first use using {@link java.security.SecureRandom}.
+     */
+    private static final java.util.concurrent.atomic.AtomicReference<String> EPHEMERAL_CANCEL_HINT_SECRET =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    /**
+     * Append an HMAC-signed {@code cmref} hint to the cancel URL so that an empty cancel
+     * callback (CCAvenue 10002) can deterministically identify the originating order. Falls back
+     * to an in-process secret with a loud warning when {@code app.checkout.cancel-hint-secret}
+     * is not configured — keeps existing deploys alive while making misconfiguration visible.
+     */
+    private String appendSignedCancelHint(String cancelUrl, String merchantOrderId) {
+        if (cancelUrl == null || cancelUrl.isBlank() || merchantOrderId == null || merchantOrderId.isBlank()) {
+            return cancelUrl;
+        }
+        String secret = resolveCancelHintSecret();
+        String token = CheckoutCancelHint.issue(merchantOrderId, secret);
+        char join = cancelUrl.indexOf('?') >= 0 ? '&' : '?';
+        return cancelUrl + join + "cmref=" + java.net.URLEncoder.encode(token, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    String resolveCancelHintSecret() {
+        String secret = checkoutProperties.getCancelHintSecret();
+        if (secret != null && !secret.isBlank()) {
+            return secret;
+        }
+        String existing = EPHEMERAL_CANCEL_HINT_SECRET.get();
+        if (existing != null) {
+            return existing;
+        }
+        byte[] buf = new byte[32];
+        new java.security.SecureRandom().nextBytes(buf);
+        String generated = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+        if (EPHEMERAL_CANCEL_HINT_SECRET.compareAndSet(null, generated)) {
+            log.error("CONFIG: app.checkout.cancel-hint-secret is not configured — using ephemeral per-JVM secret. " +
+                    "Configure a stable secret in application properties for production (cancel hints become invalid across restarts otherwise).");
+            return generated;
+        }
+        return EPHEMERAL_CANCEL_HINT_SECRET.get();
+    }
+
+    @Override
+    public java.util.Optional<String> verifyCancelHint(String token) {
+        if (token == null || token.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return CheckoutCancelHint.verify(token, resolveCancelHintSecret());
     }
 }

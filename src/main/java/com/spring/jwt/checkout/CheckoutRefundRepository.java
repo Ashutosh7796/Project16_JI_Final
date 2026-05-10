@@ -33,6 +33,16 @@ public interface CheckoutRefundRepository extends JpaRepository<CheckoutRefund, 
     @Query("SELECT COALESCE(SUM(r.amount), 0) FROM CheckoutRefund r WHERE r.order.id = :orderId AND r.status IN ('INITIATED', 'PENDING_GATEWAY')")
     java.math.BigDecimal sumInFlightAmountByOrderId(@Param("orderId") Long orderId);
 
+    /**
+     * P1.5: Refund rows in FAILED state where no admin has explicitly verified that the gateway
+     * never captured (adminId == null) MUST be treated as potentially-captured. We refuse to
+     * create a fresh refund automatically in this state to prevent paying the customer twice.
+     */
+    @Query("SELECT COUNT(r) FROM CheckoutRefund r WHERE r.order.id = :orderId " +
+            "AND r.status = com.spring.jwt.checkout.CheckoutRefundRecordStatus.FAILED " +
+            "AND r.adminId IS NULL")
+    long countUnverifiedFailedRefundsForOrder(@Param("orderId") Long orderId);
+
     Optional<CheckoutRefund> findFirstByOrder_IdOrderByIdDesc(Long orderId);
 
     List<CheckoutRefund> findByOrder_IdAndStatusIn(Long orderId, Collection<CheckoutRefundRecordStatus> statuses);
